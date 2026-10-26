@@ -27,14 +27,14 @@ permission behavior.
 
 ## Pinned inputs
 
-| Input | Value |
-| --- | --- |
-| Host binary | `/tmp/opencode/vvoc-seam-host-2.0.18/opencode` |
-| Host SHA-256 | `10d405161d8b9595f4a2ec31254e961969e6ca3f8239ac9bd55b6ff6431dc24f` |
-| Host source commit | `cd9a14a6b688d4021bee381dfd39d2cef9c0f862` |
-| Host version | `2.0.18` |
-| Evidence | `vvoc-e2e-evidence/core-evidence.json` under the scratch base (default `/tmp/opencode`), outside the workspace |
-| Parity inventory | `scripts/e2e-v2/parity.json` |
+| Input              | Value                                                                                                          |
+| ------------------ | -------------------------------------------------------------------------------------------------------------- |
+| Host binary        | `/tmp/opencode/vvoc-seam-host-2.0.18/opencode`                                                                 |
+| Host SHA-256       | `10d405161d8b9595f4a2ec31254e961969e6ca3f8239ac9bd55b6ff6431dc24f`                                             |
+| Host source commit | `cd9a14a6b688d4021bee381dfd39d2cef9c0f862`                                                                     |
+| Host version       | `2.0.18`                                                                                                       |
+| Evidence           | `vvoc-e2e-evidence/core-evidence.json` under the scratch base (default `/tmp/opencode`), outside the workspace |
+| Parity inventory   | `scripts/e2e-v2/parity.json`                                                                                   |
 
 Override the binary with `VVOC_E2E_V2_HOST`; override the scratch root with
 `VVOC_E2E_SCRATCH`. A binary whose SHA-256 does not match the pin is refused.
@@ -82,23 +82,22 @@ proves every loaded package/dependency path resolves inside that isolated projec
 and never inside the workspace. Evidence records the tarball SHA-256, resolved
 dependency versions, and loaded real paths.
 
-
 ## Core case matrix (`--core`)
 
-| Case | What is asserted | Negative control |
-| --- | --- | --- |
-| `activation` | Packed subpath + runtime import, real setup, mandatory http/model guards, same-instance client challenge, fresh sessions unbound/un-staged | A fresh session has no capture and no staged candidate |
-| `admission` | Rejected attachment preparation with zero dispatch then a later valid prompt dispatching exactly once and binding | The rejected preparation dispatches nothing and leaves the family unbound |
-| `payload-variants` | One model sends two distinct captured variants; the qualified variant is present in native `model.list` | A fabricated variant is absent from `model.list` |
-| `lineage-title` | Persistent parented auxiliary child, `vvocAuxiliary` metadata, shared capture; exactly one parent dispatch (native title suppressed) | An extra parent dispatch would be detected |
-| `config-mutation` | Changed config binds new work; the already-bound family keeps its variant | Old family variant is unchanged after the change |
-| `owned-generate-synthetic` | Real pre-admission publishes before native `session.generate`/`session.synthetic`, which dispatch the captured payload | Raw unbound generate/synthetic produce zero dispatch and no capture |
-| `explicit-selection` | Explicit-at-create and explicit switch are preserved and dispatched | Explicit selection wins over the configured default |
-| `fork-worktree` | Native fork (empty parentID + `fork.sessionID`) and worktree move keep the root family capture and dispatch its payload | Moved fork resolves the root family, not a new one |
-| `permission-guard` | Awaited guard runs zero effects on deny and one on allow, including a fast reply | Deny must run zero effects; fast reply must not lose the event |
-| `ordering-first-accepted` | The first-accepted input's policy binds over a first-staged differing policy | A fixture preparation delay (no admission logic) controls ordering |
-| `hook-probe` | Which native hooks register on the pinned host | Availability only; no parity claim |
-| `replay-restart` | Persisted root and auxiliary families re-bind their snapshot-qualified variants after a real host restart | Post-restart variants must equal the pre-restart variants |
+| Case                       | What is asserted                                                                                                                           | Negative control                                                          |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| `activation`               | Packed subpath + runtime import, real setup, mandatory http/model guards, same-instance client challenge, fresh sessions unbound/un-staged | A fresh session has no capture and no staged candidate                    |
+| `admission`                | Rejected attachment preparation with zero dispatch then a later valid prompt dispatching exactly once and binding                          | The rejected preparation dispatches nothing and leaves the family unbound |
+| `payload-variants`         | One model sends two distinct captured variants; the qualified variant is present in native `model.list`                                    | A fabricated variant is absent from `model.list`                          |
+| `lineage-title`            | Persistent parented auxiliary child, `vvocAuxiliary` metadata, shared capture; exactly one parent dispatch (native title suppressed)       | An extra parent dispatch would be detected                                |
+| `config-mutation`          | Changed config binds new work; the already-bound family keeps its variant                                                                  | Old family variant is unchanged after the change                          |
+| `owned-generate-synthetic` | Real pre-admission publishes before native `session.generate`/`session.synthetic`, which dispatch the captured payload                     | Raw unbound generate/synthetic produce zero dispatch and no capture       |
+| `explicit-selection`       | Explicit-at-create and explicit switch are preserved and dispatched                                                                        | Explicit selection wins over the configured default                       |
+| `fork-worktree`            | Native fork (empty parentID + `fork.sessionID`) and worktree move keep the root family capture and dispatch its payload                    | Moved fork resolves the root family, not a new one                        |
+| `permission-guard`         | Awaited guard runs zero effects on deny and one on allow, including a fast reply                                                           | Deny must run zero effects; fast reply must not lose the event            |
+| `ordering-first-accepted`  | The first-accepted input's policy binds over a first-staged differing policy                                                               | A fixture preparation delay (no admission logic) controls ordering        |
+| `hook-probe`               | Which native hooks register on the pinned host                                                                                             | Availability only; no parity claim                                        |
+| `replay-restart`           | Persisted root and auxiliary families re-bind their snapshot-qualified variants after a real host restart                                  | Post-restart variants must equal the pre-restart variants                 |
 
 ## Isolation and safety
 
@@ -149,7 +148,7 @@ Recorded residuals (see `parity.json` + `parity-evidence.json`):
   `core/session/execution.ts`: "Idle interruption is a no-op"), and a root
   interrupt in the fixture did not persist the partial assistant tool part, so
   the pinned `Subagent cancelled (sessionID:…)` / `Tool execution
-  interrupted (sessionID:…)` parent evidence is not observable through the
+interrupted (sessionID:…)` parent evidence is not observable through the
   offline HTTP-API fixture. Settlement and the remaining lifecycle sub-checks are
   proven by the accepted T-004 real-host suites
   (`workflow.delegated.integration.test.ts`, `workflow.execution.integration.test.ts`,
@@ -172,16 +171,16 @@ a precise reason and cross-references) and never promotes a pending row.
 
 ## Module map
 
-| File | Responsibility |
-| --- | --- |
-| `../e2e-v2.ts` | CLI modes, inventory listing, exit codes |
-| `host.ts` | Isolation, packing, packed install, owned PIDs, loopback guard, native API |
-| `provider.ts` | Loopback OpenAI-compatible provider and redacted request trace |
-| `fixtures/plugin.ts` | Real-context fixture plugin and bounded control plane |
-| `fixtures/model-catalog.json` | Deterministic loopback model catalog |
-| `cases.ts` | Core case descriptors and observable assertions |
-| `core.ts` | Core orchestration, driver, and evidence writer |
-| `full.ts` | Installed-artifact full runner: tiers, row resolution, evidence |
-| `full-cases.ts` | Parity-row/tier mapping and parity-evidence assembly |
-| `tui.ts` | Real-PTY TUI tier (actual built TUI, screen-buffer assertions) |
-| `parity.json` | Baseline surface inventory with phase and status |
+| File                          | Responsibility                                                             |
+| ----------------------------- | -------------------------------------------------------------------------- |
+| `../e2e-v2.ts`                | CLI modes, inventory listing, exit codes                                   |
+| `host.ts`                     | Isolation, packing, packed install, owned PIDs, loopback guard, native API |
+| `provider.ts`                 | Loopback OpenAI-compatible provider and redacted request trace             |
+| `fixtures/plugin.ts`          | Real-context fixture plugin and bounded control plane                      |
+| `fixtures/model-catalog.json` | Deterministic loopback model catalog                                       |
+| `cases.ts`                    | Core case descriptors and observable assertions                            |
+| `core.ts`                     | Core orchestration, driver, and evidence writer                            |
+| `full.ts`                     | Installed-artifact full runner: tiers, row resolution, evidence            |
+| `full-cases.ts`               | Parity-row/tier mapping and parity-evidence assembly                       |
+| `tui.ts`                      | Real-PTY TUI tier (actual built TUI, screen-buffer assertions)             |
+| `parity.json`                 | Baseline surface inventory with phase and status                           |

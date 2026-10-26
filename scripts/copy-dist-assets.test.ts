@@ -41,9 +41,7 @@ describe("asset rule", () => {
   });
 
   test("the real src tree mirrors exactly its non-TS assets", () => {
-    expect(listSourceAssetPaths(repoRoot)).toEqual([
-      "src/plugins/workflow/system-instruction.md",
-    ]);
+    expect(listSourceAssetPaths(repoRoot)).toEqual(["src/plugins/workflow/system-instruction.md"]);
   });
 });
 
@@ -93,6 +91,11 @@ describe("asset copying", () => {
   test("copying again is idempotent", () => {
     const targets = copySourceAssets(fixtureRoot);
     expect(targets).toEqual(["dist/lib/data.json", "dist/plugins/workflow/template.md"]);
-    expect(verifyAssetMirror(listSourceAssetPaths(fixtureRoot), listDirectoryFilePaths(fixtureRoot, "dist"))).toEqual([]);
+    expect(
+      verifyAssetMirror(
+        listSourceAssetPaths(fixtureRoot),
+        listDirectoryFilePaths(fixtureRoot, "dist"),
+      ),
+    ).toEqual([]);
   });
 });

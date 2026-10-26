@@ -29,7 +29,12 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { defaultEvidencePath, runCore, requireHostBinary, type CoreRunSummary } from "./e2e-v2/core.js";
+import {
+  defaultEvidencePath,
+  runCore,
+  requireHostBinary,
+  type CoreRunSummary,
+} from "./e2e-v2/core.js";
 import { runFull, type FullRunSummary } from "./e2e-v2/full.js";
 import { runTuiAcceptance, type TuiAcceptanceResult } from "./e2e-v2/tui.js";
 
@@ -47,19 +52,23 @@ export interface CliDeps {
     readonly evidencePath: string;
     readonly keepScratch?: boolean;
   }) => Promise<CoreRunSummary>;
-  readonly runTui?: ((options: {
-    readonly workspaceRoot: string;
-    readonly hostBinary?: string | undefined;
-    readonly scratchBase: string;
-    readonly keepScratch?: boolean;
-  }) => Promise<TuiAcceptanceResult>) | undefined;
-  readonly runFull?: ((options: {
-    readonly workspaceRoot: string;
-    readonly hostBinary: string;
-    readonly scratchBase: string;
-    readonly evidencePath: string;
-    readonly keepScratch?: boolean;
-  }) => Promise<FullRunSummary>) | undefined;
+  readonly runTui?:
+    | ((options: {
+        readonly workspaceRoot: string;
+        readonly hostBinary?: string | undefined;
+        readonly scratchBase: string;
+        readonly keepScratch?: boolean;
+      }) => Promise<TuiAcceptanceResult>)
+    | undefined;
+  readonly runFull?:
+    | ((options: {
+        readonly workspaceRoot: string;
+        readonly hostBinary: string;
+        readonly scratchBase: string;
+        readonly evidencePath: string;
+        readonly keepScratch?: boolean;
+      }) => Promise<FullRunSummary>)
+    | undefined;
   readonly hostBinary?: string | undefined;
   readonly requireHost?: (() => string) | undefined;
   readonly scratchBase?: string | undefined;
@@ -147,8 +156,7 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
     }
     const scratchBase = deps.scratchBase ?? process.env.VVOC_E2E_SCRATCH ?? "/tmp/opencode";
     const evidencePath =
-      deps.evidencePath ??
-      defaultEvidencePath(scratchBase, "parity-evidence.json");
+      deps.evidencePath ?? defaultEvidencePath(scratchBase, "parity-evidence.json");
     const runner =
       deps.runFull ??
       ((options: Parameters<NonNullable<CliDeps["runFull"]>>[0]) => runFull(options));
@@ -185,9 +193,7 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
     }
   }
   const scratchBase = deps.scratchBase ?? process.env.VVOC_E2E_SCRATCH ?? "/tmp/opencode";
-  const evidencePath =
-    deps.evidencePath ??
-    defaultEvidencePath(scratchBase, "core-evidence.json");
+  const evidencePath = deps.evidencePath ?? defaultEvidencePath(scratchBase, "core-evidence.json");
   const summary = await deps.runCore({
     workspaceRoot: deps.workspaceRoot,
     hostBinary,

@@ -157,8 +157,7 @@ export const ORDERING_DELAY_MARKER = "__vvoc_e2e_delay__";
  * Semver pattern the packed artifact version must match: same shape as the release
  * tooling's pattern, so stable and prerelease (rc) versions both pass.
  */
-export const PACKED_SEMVER_PATTERN =
-  /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+export const PACKED_SEMVER_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
 const delay = (ms: number) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
 let markerSeq = 0;

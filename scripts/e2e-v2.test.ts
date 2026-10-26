@@ -375,13 +375,22 @@ describe("isolation guards", () => {
     await mkdir(unmarked, { recursive: true });
     await writeFile(join(unmarked, ".vvoc-e2e-owner.json"), JSON.stringify({ tool: "foreign" }));
     await expect(
-      removeOwnedScratch({ dir: unmarked, base, markerPath: join(unmarked, ".vvoc-e2e-owner.json") }),
+      removeOwnedScratch({
+        dir: unmarked,
+        base,
+        markerPath: join(unmarked, ".vvoc-e2e-owner.json"),
+      }),
     ).rejects.toThrow(/foreign ownership marker/);
   });
 
   test("the host environment drops inherited credentials/proxies and redacts evidence", () => {
     const env = buildHostEnv(
-      { PATH: "/usr/bin", OPENAI_API_KEY: "secret", HTTPS_PROXY: "http://proxy", HOME: "/home/user" },
+      {
+        PATH: "/usr/bin",
+        OPENAI_API_KEY: "secret",
+        HTTPS_PROXY: "http://proxy",
+        HOME: "/home/user",
+      },
       { HOME: "/tmp/iso/home", LOOPBACK_API_KEY: "key" },
     );
     expect(env.OPENAI_API_KEY).toBeUndefined();
@@ -570,7 +579,10 @@ describe("fixture plugin forwarding", () => {
       allowedProviders: ["loopback"],
     });
     const cleanup = await plugin.setup(fakeCtx());
-    const info = JSON.parse(await readFile(controlFilePath, "utf8")) as { port: number; nonce: string };
+    const info = JSON.parse(await readFile(controlFilePath, "utf8")) as {
+      port: number;
+      nonce: string;
+    };
     const response = await fetch(`http://127.0.0.1:${info.port}/permission-guard`, {
       method: "POST",
       headers: { "x-e2e-nonce": info.nonce, "content-type": "application/json" },
@@ -586,11 +598,46 @@ describe("fixture plugin forwarding", () => {
 
 describe("full installed-artifact parity runner", () => {
   const rows: ParityRow[] = [
-    { id: "core.a", surface: "core", phase: "T", status: "implemented-core", acceptance: "x", command: "bun scripts/e2e-v2.ts --core" },
-    { id: "tui.a", surface: "tui", phase: "T", status: "pending", acceptance: "x", command: "bun scripts/e2e-v2.ts --tui" },
-    { id: "installed.a", surface: "installed", phase: "T", status: "pending", acceptance: "x", command: "bun scripts/e2e-v2.ts --installed" },
-    { id: "aggregate.a", surface: "aggregate", phase: "T", status: "pending", acceptance: "x", command: "bun scripts/e2e-v2.ts --aggregate" },
-    { id: "unit.a", surface: "unit", phase: "T", status: "pending", acceptance: "x", command: "bun test x" },
+    {
+      id: "core.a",
+      surface: "core",
+      phase: "T",
+      status: "implemented-core",
+      acceptance: "x",
+      command: "bun scripts/e2e-v2.ts --core",
+    },
+    {
+      id: "tui.a",
+      surface: "tui",
+      phase: "T",
+      status: "pending",
+      acceptance: "x",
+      command: "bun scripts/e2e-v2.ts --tui",
+    },
+    {
+      id: "installed.a",
+      surface: "installed",
+      phase: "T",
+      status: "pending",
+      acceptance: "x",
+      command: "bun scripts/e2e-v2.ts --installed",
+    },
+    {
+      id: "aggregate.a",
+      surface: "aggregate",
+      phase: "T",
+      status: "pending",
+      acceptance: "x",
+      command: "bun scripts/e2e-v2.ts --aggregate",
+    },
+    {
+      id: "unit.a",
+      surface: "unit",
+      phase: "T",
+      status: "pending",
+      acceptance: "x",
+      command: "bun test x",
+    },
   ];
 
   test("maps commands to installed tiers and never promotes a unit row", () => {
@@ -616,9 +663,17 @@ describe("full installed-artifact parity runner", () => {
     expect(failures.some((failure) => failure.startsWith("core.a"))).toBe(false);
     expect(failures.some((failure) => failure.startsWith("installed.a"))).toBe(false);
     // An installed row is unverified until the installed-surface tier reports.
-    const pendingInstalled = evaluateParityRows(rows, { coreOk: true, tuiOk: true, installedOk: undefined });
+    const pendingInstalled = evaluateParityRows(rows, {
+      coreOk: true,
+      tuiOk: true,
+      installedOk: undefined,
+    });
     expect(pendingInstalled.find((row) => row.id === "installed.a")?.outcome).toBe("unverified");
-    const pendingAggregate = evaluateParityRows(rows, { coreOk: true, tuiOk: true, installedOk: true });
+    const pendingAggregate = evaluateParityRows(rows, {
+      coreOk: true,
+      tuiOk: true,
+      installedOk: true,
+    });
     expect(pendingAggregate.find((row) => row.id === "aggregate.a")?.outcome).toBe("unverified");
   });
 
@@ -664,8 +719,17 @@ describe("full installed-artifact parity runner", () => {
   test("fails closed when the pinned host is unavailable", async () => {
     const dir = await scratch();
     const summary = await runFull(
-      { workspaceRoot: process.cwd(), hostBinary: "/missing", scratchBase: dir, evidencePath: join(dir, "e.json") },
-      { hostSha256: async () => { throw new Error("missing host"); } },
+      {
+        workspaceRoot: process.cwd(),
+        hostBinary: "/missing",
+        scratchBase: dir,
+        evidencePath: join(dir, "e.json"),
+      },
+      {
+        hostSha256: async () => {
+          throw new Error("missing host");
+        },
+      },
     );
     expect(summary.ok).toBe(false);
     expect(summary.error).toContain("pinned host is unavailable");
@@ -731,7 +795,13 @@ describe("full installed-artifact parity runner", () => {
       surface: "x",
     };
     const rows: ParityRow[] = [
-      { ...base, id: "ok-row", status: "implemented-full", acceptance: "x", command: "bun scripts/e2e-v2.ts --core" },
+      {
+        ...base,
+        id: "ok-row",
+        status: "implemented-full",
+        acceptance: "x",
+        command: "bun scripts/e2e-v2.ts --core",
+      },
       {
         ...base,
         id: "residual-row",
@@ -741,7 +811,13 @@ describe("full installed-artifact parity runner", () => {
         residual: { reason: "offline-infeasible", crossReferences: ["unit suite"] },
       },
       { ...base, id: "pending-row", status: "pending", acceptance: "x", command: "bun test y" },
-      { ...base, id: "parity.full", status: "pending", acceptance: "meta", command: "bun run e2e:v2" },
+      {
+        ...base,
+        id: "parity.full",
+        status: "pending",
+        acceptance: "meta",
+        command: "bun run e2e:v2",
+      },
     ];
     const input = { coreOk: true, tuiOk: true, installedOk: true };
     const results = evaluateParityRows(rows, input);
@@ -770,18 +846,48 @@ describe("full installed-artifact parity runner", () => {
         acceptance: "x",
         command: "bun scripts/e2e-v2.ts --core",
       },
-      { id: "bad-residual", surface: "x", phase: "T", status: "residual-accepted", acceptance: "x", command: "bun test x" },
-      { id: "thin-residual", surface: "x", phase: "T", status: "residual-accepted", acceptance: "x", command: "bun test x", residual: { reason: "  ", crossReferences: ["unit suite"] } },
-      { id: "empty-refs", surface: "x", phase: "T", status: "residual-accepted", acceptance: "x", command: "bun test x", residual: { reason: "precise", crossReferences: [] } },
-      { id: "parity.full", surface: "meta", phase: "T", status: "pending", acceptance: "meta", command: "bun run e2e:v2" },
+      {
+        id: "bad-residual",
+        surface: "x",
+        phase: "T",
+        status: "residual-accepted",
+        acceptance: "x",
+        command: "bun test x",
+      },
+      {
+        id: "thin-residual",
+        surface: "x",
+        phase: "T",
+        status: "residual-accepted",
+        acceptance: "x",
+        command: "bun test x",
+        residual: { reason: "  ", crossReferences: ["unit suite"] },
+      },
+      {
+        id: "empty-refs",
+        surface: "x",
+        phase: "T",
+        status: "residual-accepted",
+        acceptance: "x",
+        command: "bun test x",
+        residual: { reason: "precise", crossReferences: [] },
+      },
+      {
+        id: "parity.full",
+        surface: "meta",
+        phase: "T",
+        status: "pending",
+        acceptance: "meta",
+        command: "bun run e2e:v2",
+      },
     ];
     const results = evaluateParityRows(rows, { coreOk: true, tuiOk: true, installedOk: true });
     expect(results.find((row) => row.id === "bad-residual")?.outcome).toBe("unverified");
     expect(results.find((row) => row.id === "thin-residual")?.outcome).toBe("unverified");
     expect(results.find((row) => row.id === "empty-refs")?.outcome).toBe("unverified");
-    expect(
-      results.find((row) => row.id === "bad-residual")?.detail,
-    ).toContain("missing a precise reason");
+    expect(results.find((row) => row.id === "bad-residual")?.detail).toContain(
+      "missing a precise reason",
+    );
     const meta = results.find((row) => row.id === "parity.full");
     expect(meta?.outcome).toBe("unverified");
     expect(mandatoryRowFailures(results).length).toBeGreaterThanOrEqual(3);

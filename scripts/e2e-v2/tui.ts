@@ -288,13 +288,7 @@ export async function runTuiAcceptance(options: TuiOptions): Promise<TuiAcceptan
   }
 
   const workspaceTui = join(options.workspaceRoot, "dist", "tui.js");
-  const workspaceServer = join(
-    options.workspaceRoot,
-    "dist",
-    "plugins",
-    "model-roles",
-    "index.js",
-  );
+  const workspaceServer = join(options.workspaceRoot, "dist", "plugins", "model-roles", "index.js");
   try {
     await readFile(workspaceTui);
     await readFile(workspaceServer);
@@ -339,7 +333,11 @@ export async function runTuiAcceptance(options: TuiOptions): Promise<TuiAcceptan
     const installIssues = installedArtifactPathIssues(installed, options.workspaceRoot);
     if (installIssues.length > 0) {
       fail("installed-artifact", installIssues.join("; "));
-      return result(hostSha256, scenarios, "The installed artifact resolved outside the isolated project.");
+      return result(
+        hostSha256,
+        scenarios,
+        "The installed artifact resolved outside the isolated project.",
+      );
     }
     builtTui = join(installed.packageDir, "dist", "tui.js");
     builtServerPlugin = join(installed.packageDir, "dist", "plugins", "model-roles", "index.js");
@@ -352,7 +350,10 @@ export async function runTuiAcceptance(options: TuiOptions): Promise<TuiAcceptan
     provider = createUsageProvider({
       port: providerPort,
       catalog: JSON.parse(
-        await readFile(join(options.workspaceRoot, "scripts", "e2e-v2", "fixtures", "model-catalog.json"), "utf8"),
+        await readFile(
+          join(options.workspaceRoot, "scripts", "e2e-v2", "fixtures", "model-catalog.json"),
+          "utf8",
+        ),
       ),
     });
 
@@ -515,7 +516,10 @@ export async function runTuiAcceptance(options: TuiOptions): Promise<TuiAcceptan
       return result(hostSha256, scenarios, "The /context dialog did not open.");
     }
     pass("overview-open", "the /context dialog opened on Overview");
-    if (!view.screen.text().includes("Context usage") || !view.screen.text().includes("Approximate breakdown")) {
+    if (
+      !view.screen.text().includes("Context usage") ||
+      !view.screen.text().includes("Approximate breakdown")
+    ) {
       fail("overview-content", "Overview did not render its measured usage and breakdown");
     } else {
       pass("overview-content", "Overview rendered measured usage and the breakdown");
@@ -532,7 +536,11 @@ export async function runTuiAcceptance(options: TuiOptions): Promise<TuiAcceptan
 
     // Tab 3: MCP status content.
     terminal.write("3");
-    const mcp = await waitFor(view.screen, (text) => text.includes("[3 MCP]") && text.includes("MCP servers"), 8_000);
+    const mcp = await waitFor(
+      view.screen,
+      (text) => text.includes("[3 MCP]") && text.includes("MCP servers"),
+      8_000,
+    );
     if (!mcp) {
       fail("mcp-tab", "the MCP tab did not render native server status");
     } else {
@@ -546,9 +554,17 @@ export async function runTuiAcceptance(options: TuiOptions): Promise<TuiAcceptan
     await new Promise((resolve) => setTimeout(resolve, 400));
     terminal.write("3");
     const narrowed = await waitFor(view.screen, (text) => text.includes("[3 MCP]"), 8_000);
-    const widthOk = narrowed && view.screen.text().split("\n").every((line) => line.length <= 60);
+    const widthOk =
+      narrowed &&
+      view.screen
+        .text()
+        .split("\n")
+        .every((line) => line.length <= 60);
     if (!narrowed || !widthOk) {
-      fail("narrow-resize", `the dialog did not reflow within 60 columns: ${screenExcerpt(view.screen)}`);
+      fail(
+        "narrow-resize",
+        `the dialog did not reflow within 60 columns: ${screenExcerpt(view.screen)}`,
+      );
     } else {
       pass("narrow-resize", "the dialog reflowed within a 60-column terminal");
     }
@@ -559,8 +575,13 @@ export async function runTuiAcceptance(options: TuiOptions): Promise<TuiAcceptan
 
     // Escape closes the dialog.
     terminal.write("\u001b");
-    const closed = await waitFor(view.screen, (text) => !text.includes("[3 MCP]") && !text.includes("[1 Overview]"), 8_000);
-    if (!closed) fail("close", `Escape did not close the /context dialog: ${screenExcerpt(view.screen)}`);
+    const closed = await waitFor(
+      view.screen,
+      (text) => !text.includes("[3 MCP]") && !text.includes("[1 Overview]"),
+      8_000,
+    );
+    if (!closed)
+      fail("close", `Escape did not close the /context dialog: ${screenExcerpt(view.screen)}`);
     else pass("close", "Escape closed the /context dialog");
 
     // Reopen resets to Overview.
@@ -568,7 +589,8 @@ export async function runTuiAcceptance(options: TuiOptions): Promise<TuiAcceptan
     terminal.write("x");
     terminal.write("\u007f");
     const reopened = await openContextOverview(terminal, view.screen);
-    if (!reopened) fail("reopen", `reopening /context did not reset to Overview: ${screenExcerpt(view.screen)}`);
+    if (!reopened)
+      fail("reopen", `reopening /context did not reset to Overview: ${screenExcerpt(view.screen)}`);
     else pass("reopen", "reopening /context reset to Overview");
 
     // Scroll last, while the reopened dialog is open, so a failed scroll cannot
@@ -590,8 +612,7 @@ export async function runTuiAcceptance(options: TuiOptions): Promise<TuiAcceptan
       afterScroll = view.screen.text();
       // The narrow tab bar truncates "[2 Tools]"; the Overview/MCP labels and
       // the stable footer note prove the dialog is still open.
-      dialogOpen =
-        afterScroll.includes("1 Overview") || afterScroll.includes("Measured = latest");
+      dialogOpen = afterScroll.includes("1 Overview") || afterScroll.includes("Measured = latest");
       if (!dialogOpen || afterScroll !== beforeScroll) break;
     }
     if (!dialogOpen) {
@@ -626,7 +647,6 @@ export async function runTuiAcceptance(options: TuiOptions): Promise<TuiAcceptan
       env,
       builtTui,
       scenarios,
-      hostSha256,
     });
 
     // Explicit-disabled negative control: the captured policy disables context,
@@ -691,7 +711,10 @@ interface UsageProvider {
   stop(): void;
 }
 
-function createUsageProvider(input: { readonly port: number; readonly catalog: unknown }): UsageProvider {
+function createUsageProvider(input: {
+  readonly port: number;
+  readonly catalog: unknown;
+}): UsageProvider {
   assertLoopbackHttpUrl(`http://127.0.0.1:${input.port}`, "loopback provider");
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -730,7 +753,11 @@ function createUsageProvider(input: { readonly port: number; readonly catalog: u
       return new Response("not found", { status: 404 });
     },
   });
-  return { baseUrl: `http://127.0.0.1:${input.port}`, port: input.port, stop: () => server.stop(true) };
+  return {
+    baseUrl: `http://127.0.0.1:${input.port}`,
+    port: input.port,
+    stop: () => server.stop(true),
+  };
 }
 
 /**
@@ -824,7 +851,10 @@ async function runDisabledNegative(input: {
   const original = await readFile(vvocPath, "utf8");
   const builtModule = (await import(
     pathToFileURL(join(input.workspaceRoot, "dist", "lib", "vvoc-config.js")).href
-  )) as { createDefaultVvocConfig(): Record<string, unknown>; renderVvocConfig(config: Record<string, unknown>): string };
+  )) as {
+    createDefaultVvocConfig(): Record<string, unknown>;
+    renderVvocConfig(config: Record<string, unknown>): string;
+  };
   const config = builtModule.createDefaultVvocConfig() as {
     roles: Record<string, string>;
     plugins: Record<string, unknown>;
@@ -836,7 +866,10 @@ async function runDisabledNegative(input: {
     reviewer: "deepseek/seam-smart",
   };
   config.plugins = { context: false, analytics: false, "peak-hours": false };
-  await writeFile(vvocPath, builtModule.renderVvocConfig(config as unknown as Record<string, unknown>));
+  await writeFile(
+    vvocPath,
+    builtModule.renderVvocConfig(config as unknown as Record<string, unknown>),
+  );
   const sessionID = await seedSession({
     hostBinary: input.hostBinary,
     project: input.project,
@@ -855,10 +888,13 @@ async function runDisabledNegative(input: {
       view.screen.write(new TextDecoder().decode(data));
     },
   });
-  const child = Bun.spawn(
-    [input.hostBinary, "--standalone", "--auto", "--session", sessionID],
-    { cwd: input.project, env: input.env, terminal, stdout: "ignore", stderr: "ignore" },
-  );
+  const child = Bun.spawn([input.hostBinary, "--standalone", "--auto", "--session", sessionID], {
+    cwd: input.project,
+    env: input.env,
+    terminal,
+    stdout: "ignore",
+    stderr: "ignore",
+  });
   try {
     await new Promise((resolve) => setTimeout(resolve, 9_000));
     terminal.write("hi");
@@ -871,7 +907,10 @@ async function runDisabledNegative(input: {
     }
     const text = view.screen.text();
     if (text.includes("PEAK") || /cache \d+%/.test(text)) {
-      fail("disabled-effects", `disabled policy still rendered an effect: ${screenExcerpt(view.screen)}`);
+      fail(
+        "disabled-effects",
+        `disabled policy still rendered an effect: ${screenExcerpt(view.screen)}`,
+      );
       return;
     }
     pass("disabled-effects", "disabled analytics/peak-hours rendered no indicator or banner");
@@ -940,10 +979,13 @@ async function runControlledFailure(input: {
       view.screen.write(new TextDecoder().decode(data));
     },
   });
-  const child = Bun.spawn(
-    [input.hostBinary, "--standalone", "--auto", "--session", sessionID],
-    { cwd: input.project, env: input.env, terminal, stdout: "ignore", stderr: "ignore" },
-  );
+  const child = Bun.spawn([input.hostBinary, "--standalone", "--auto", "--session", sessionID], {
+    cwd: input.project,
+    env: input.env,
+    terminal,
+    stdout: "ignore",
+    stderr: "ignore",
+  });
   try {
     await new Promise((resolve) => setTimeout(resolve, 9_000));
     if (view.screen.text().includes("Plugin failed")) {
@@ -951,18 +993,27 @@ async function runControlledFailure(input: {
       return;
     }
     if (!(await openContextOverview(terminal, view.screen))) {
-      fail("failure-open", `the /context dialog did not open without the bridge: ${screenExcerpt(view.screen)}`);
+      fail(
+        "failure-open",
+        `the /context dialog did not open without the bridge: ${screenExcerpt(view.screen)}`,
+      );
       return;
     }
     if (!view.screen.text().includes("Provider usage is not available")) {
-      fail("failure-overview", `Overview did not report unavailable usage: ${screenExcerpt(view.screen)}`);
+      fail(
+        "failure-overview",
+        `Overview did not report unavailable usage: ${screenExcerpt(view.screen)}`,
+      );
       return;
     }
     terminal.write("2");
     await waitFor(view.screen, (text) => text.includes("[2 Tools]"), 8_000);
     const toolsText = view.screen.text();
     if (!toolsText.includes("Catalog status: unavailable") || !toolsText.includes("unavailable")) {
-      fail("failure-catalog", `Tools did not report an unavailable catalog: ${screenExcerpt(view.screen)}`);
+      fail(
+        "failure-catalog",
+        `Tools did not report an unavailable catalog: ${screenExcerpt(view.screen)}`,
+      );
       return;
     }
     pass("failure-catalog", "the /context dialog reported the unavailable catalog honestly");
@@ -1007,10 +1058,7 @@ function screenExcerpt(screen: ScreenBuffer): string {
 }
 
 /** Type /context and submit it, tolerating a completion list that consumes the first Enter. */
-async function openContextOverview(
-  terminal: Bun.Terminal,
-  screen: ScreenBuffer,
-): Promise<boolean> {
+async function openContextOverview(terminal: Bun.Terminal, screen: ScreenBuffer): Promise<boolean> {
   terminal.write("/context");
   await new Promise((resolve) => setTimeout(resolve, 600));
   terminal.write("\r");

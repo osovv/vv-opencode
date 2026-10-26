@@ -234,7 +234,7 @@ export async function removeOwnedScratch(scratch: OwnedScratch): Promise<void> {
 // START_BLOCK_ENV
 /** Build an allow-listed child environment from scratch. */
 export function buildHostEnv(
-  base: Readonly<Record<string, string>>,
+  base: Readonly<Record<string, string | undefined>>,
   extra: Readonly<Record<string, string | undefined>> = {},
 ): Record<string, string> {
   const env: Record<string, string> = {};

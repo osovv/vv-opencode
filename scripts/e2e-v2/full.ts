@@ -199,7 +199,9 @@ export async function runFull(
     aggregateDetails[check.id] = check.detail;
   }
   for (const [rowId, checkIds] of Object.entries(aggregateRowChecks)) {
-    const observed = checkIds.map((id) => coreSummary.aggregateChecks?.find((check) => check.id === id));
+    const observed = checkIds.map((id) =>
+      coreSummary.aggregateChecks?.find((check) => check.id === id),
+    );
     if (observed.some((check) => check !== undefined)) {
       aggregateOutcomes[rowId] = observed.every((check) => check?.ok === true);
       const firstFailed = observed.find((check) => check !== undefined && check.ok === false);
@@ -261,7 +263,13 @@ export async function runFull(
   });
 
   await writer(options.evidencePath, document);
-  return { ok: failures.length === 0 && coreSummary.error === undefined, rows: results, failures, evidencePath: options.evidencePath, error: coreSummary.error };
+  return {
+    ok: failures.length === 0 && coreSummary.error === undefined,
+    rows: results,
+    failures,
+    evidencePath: options.evidencePath,
+    error: coreSummary.error,
+  };
 }
 
 /** Resolve the pinned host binary or throw the shared configuration error. */

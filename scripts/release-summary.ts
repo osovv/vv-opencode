@@ -258,7 +258,9 @@ function renderCommitDiff(diff: string): string {
   return `\n${kept
     .split("\n")
     .map((diffLine) => `      ${diffLine}`)
-    .join("\n")}\n      (diff truncated: ${omitted} characters omitted to fit the summary model context)`;
+    .join(
+      "\n",
+    )}\n      (diff truncated: ${omitted} characters omitted to fit the summary model context)`;
 }
 
 export function buildReleaseSummaryPrompt(input: ReleaseSummaryPromptInput): string {

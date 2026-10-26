@@ -1146,11 +1146,7 @@ export async function runProbe(options?: { keep?: boolean; timeoutMs?: number })
 
     responder = await startLoopbackResponder();
     const configPath = join(paths.workspace, "opencode.json");
-    await writeFile(
-      configPath,
-      buildHostConfig({ port: responder.port, pluginDir }),
-      "utf8",
-    );
+    await writeFile(configPath, buildHostConfig({ port: responder.port, pluginDir }), "utf8");
 
     const childEnv = buildProbeEnv(process.env as Record<string, string | undefined>, {
       home: paths.home,
@@ -3595,7 +3591,7 @@ async function runNativeMatrix(
         "Execute the bounded native contract matrix.",
       ],
       { cwd: paths.harness, env: childEnv, timeoutMs: options.timeoutMs ?? 150_000 },
-   );
+    );
     check(run.code === 0, "host process exited 0");
 
     const stdoutParse = parseRunStdout(run.stdout);
@@ -3694,7 +3690,9 @@ async function runNativeMatrix(
       } else {
         if (observedStatus !== "error") fail(`expected error, observed ${observedStatus}`);
         if (step.expectDiagnostic?.path && !errorText.includes(step.expectDiagnostic.path)) {
-          fail(`diagnostic missing actionable path ${step.expectDiagnostic.path} (${errorText.slice(0, 400)})`);
+          fail(
+            `diagnostic missing actionable path ${step.expectDiagnostic.path} (${errorText.slice(0, 400)})`,
+          );
         }
         if (execByCall.has(callID)) fail("rejected call still executed");
       }

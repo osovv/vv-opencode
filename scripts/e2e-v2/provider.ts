@@ -93,7 +93,12 @@ function streamUsageChunk(model: string): string {
 }
 
 /** SSE response streaming one scripted function call so the host executes a tool. */
-function streamToolCallResponse(model: string, callID: string, tool: string, args: unknown): string {
+function streamToolCallResponse(
+  model: string,
+  callID: string,
+  tool: string,
+  args: unknown,
+): string {
   return `${streamChunk(
     model,
     {
@@ -154,7 +159,10 @@ export async function createLoopbackProvider(input: {
       try {
         body = await request.clone().json();
       } catch {
-        body = await request.clone().text().catch(() => undefined);
+        body = await request
+          .clone()
+          .text()
+          .catch(() => undefined);
       }
       const model = (body as { model?: string } | undefined)?.model ?? "unknown";
       // Authorization headers are never recorded, so even fixture credentials
@@ -170,7 +178,8 @@ export async function createLoopbackProvider(input: {
         return Response.json(input.catalog);
       }
       if (url.pathname.endsWith("/chat/completions")) {
-        const messages = (body as { messages?: Array<{ role?: string }> } | undefined)?.messages ?? [];
+        const messages =
+          (body as { messages?: Array<{ role?: string }> } | undefined)?.messages ?? [];
         const toolResults = messages.filter((message) => message.role === "tool").length;
         const plan = input.toolPlan;
         const planActive =
@@ -182,9 +191,12 @@ export async function createLoopbackProvider(input: {
           if (step !== undefined) {
             const args = step.argsFromRequest ? step.argsFromRequest(body) : step.args;
             if (step.before) await step.before();
-            return new Response(streamToolCallResponse(model, `call_${toolResults + 1}`, step.tool, args), {
-              headers: { "content-type": "text/event-stream" },
-            });
+            return new Response(
+              streamToolCallResponse(model, `call_${toolResults + 1}`, step.tool, args),
+              {
+                headers: { "content-type": "text/event-stream" },
+              },
+            );
           }
         }
         if ((body as { stream?: boolean } | undefined)?.stream === true) {
@@ -262,9 +274,14 @@ export async function createLoopbackProvider(input: {
     },
   });
   traceAppend(input.tracePath, { at: Date.now(), event: "provider.listen" });
+  const listeningPort = server.port;
+  if (listeningPort === undefined) {
+    server.stop(true);
+    throw new Error("loopback provider: server did not report a listening port");
+  }
   return {
-    baseUrl: `http://127.0.0.1:${server.port}`,
-    port: server.port,
+    baseUrl: `http://127.0.0.1:${listeningPort}`,
+    port: listeningPort,
     tracePath: input.tracePath,
     catalog: input.catalog,
     stop: () => server.stop(true),

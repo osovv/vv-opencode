@@ -223,10 +223,7 @@ export function verifyAssetMirror(
   const present = new Set(distEntries);
   return sourceAssets
     .filter((asset) => !present.has(distMirrorPath(asset)))
-    .map(
-      (asset) =>
-        `src asset ${asset} is not mirrored to dist at ${distMirrorPath(asset)}`,
-    );
+    .map((asset) => `src asset ${asset} is not mirrored to dist at ${distMirrorPath(asset)}`);
 }
 // END_BLOCK_ASSET_MIRROR
 
@@ -251,7 +248,8 @@ export async function runPackageCheck(
   failures.push(...(await verifyPackageExports(manifest, { importModule, distUrl })));
 
   const listSourceAssets = deps.listSourceAssets ?? (async () => listSourceAssetPaths(repoRoot));
-  const listDistAssets = deps.listDistAssets ?? (async () => listDirectoryFilePaths(repoRoot, "dist"));
+  const listDistAssets =
+    deps.listDistAssets ?? (async () => listDirectoryFilePaths(repoRoot, "dist"));
   failures.push(...verifyAssetMirror(await listSourceAssets(), await listDistAssets()));
 
   const scratch = mkdtempSync(join(tmpdir(), "vvoc-pack-check-"));

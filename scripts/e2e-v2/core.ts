@@ -99,6 +99,7 @@ import {
   createLoopbackProvider,
   readProviderTrace,
   type ProviderRequestRecord,
+  type ProviderToolStep,
 } from "./provider.js";
 
 /** Inputs controlling one core real-host run. */

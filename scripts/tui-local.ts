@@ -86,8 +86,7 @@ export function parseLocalTuiArguments(args: readonly string[]): LocalTuiArgumen
 export function renderLocalCliConfig(currentText: string | undefined, pluginSpec: string): string {
   const text = currentText !== undefined && currentText.trim().length > 0 ? currentText : "{}\n";
   const existing = parse(text) as unknown;
-  const plugins =
-    isRecord(existing) && Array.isArray(existing.plugins) ? existing.plugins : [];
+  const plugins = isRecord(existing) && Array.isArray(existing.plugins) ? existing.plugins : [];
   const filtered = plugins.filter((entry) => !isManagedVvocEntry(entry));
   const edits = modify(text, ["plugins"], [...filtered, pluginSpec], {
     formattingOptions: { insertSpaces: true, tabSize: 2 },

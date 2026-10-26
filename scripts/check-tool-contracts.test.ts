@@ -114,8 +114,7 @@ describe("registration census", () => {
       },
       {
         path: "src/plugins/typed/index.ts",
-        content:
-          "export const TypedPlugin = async () => ({ tool: { typed_tool: {} } });",
+        content: "export const TypedPlugin = async () => ({ tool: { typed_tool: {} } });",
         ids: ["typed_tool"],
       },
     ];
@@ -230,9 +229,7 @@ describe("fixture omissions and mutations", () => {
       ),
     };
     expect(
-      checkNegativeCoverage([withoutActionNegative]).some((failure) =>
-        failure.includes("action"),
-      ),
+      checkNegativeCoverage([withoutActionNegative]).some((failure) => failure.includes("action")),
     ).toBe(true);
   });
 
@@ -286,7 +283,8 @@ describe("fixture omissions and mutations", () => {
         ? {
             ...entry,
             operations: entry.operations.filter(
-              (operation) => !(operation.expect === "reject" && operation.input.action === "recover"),
+              (operation) =>
+                !(operation.expect === "reject" && operation.input.action === "recover"),
             ),
           }
         : entry,
@@ -464,9 +462,7 @@ describe("full runner", () => {
         "export const ExtraPlugin = async () => ({ tool: { extra_tool: {} } });\n",
       );
       const resolved = resolvePluginEntryPoints(dir);
-      expect(resolved).toEqual([
-        { subpath: "./plugins/extra", sourcePath: "src/extra/index.ts" },
-      ]);
+      expect(resolved).toEqual([{ subpath: "./plugins/extra", sourcePath: "src/extra/index.ts" }]);
       const census = extractToolRegistrations(loadPluginSources(dir));
       expect(census.toolIds).toContain("extra_tool");
       const failures = compareRegistrationCensus(census, AGENT_TOOL_CATALOG_TOOL_IDS);

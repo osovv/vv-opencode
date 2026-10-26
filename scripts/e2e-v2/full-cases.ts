@@ -110,14 +110,14 @@ export function evaluateParityRows(
       if (row.status === "residual-accepted") {
         const residual = row.residual;
         const reasonOk =
-          residual !== undefined && typeof residual.reason === "string" && residual.reason.trim().length > 0;
+          residual !== undefined &&
+          typeof residual.reason === "string" &&
+          residual.reason.trim().length > 0;
         const refsOk =
           residual !== undefined &&
           Array.isArray(residual.crossReferences) &&
           residual.crossReferences.length > 0 &&
-          residual.crossReferences.every(
-            (ref) => typeof ref === "string" && ref.trim().length > 0,
-          );
+          residual.crossReferences.every((ref) => typeof ref === "string" && ref.trim().length > 0);
         if (reasonOk && refsOk) {
           return {
             id: row.id,
@@ -243,7 +243,9 @@ export function evaluateParityRows(
   const unresolved = mapped
     .filter(
       (result) =>
-        result.outcome !== "pass" && result.outcome !== "residual" && result.status !== "unverified-paid",
+        result.outcome !== "pass" &&
+        result.outcome !== "residual" &&
+        result.status !== "unverified-paid",
     )
     .map((result) => `${result.id}:${result.outcome}`);
   return [
@@ -277,7 +279,9 @@ export function mandatoryRowFailures(results: readonly RowResult[]): string[] {
         result.outcome !== "residual" &&
         result.status !== "unverified-paid",
     )
-    .map((result) => `${result.id}: ${result.outcome}${result.detail ? ` (${result.detail})` : ""}`);
+    .map(
+      (result) => `${result.id}: ${result.outcome}${result.detail ? ` (${result.detail})` : ""}`,
+    );
 }
 
 /** Hex SHA-256 of a string. */
@@ -297,8 +301,12 @@ export interface ParityEvidenceInput {
   readonly packageVersion: string;
   readonly dependencyHashes: Readonly<Record<string, string>>;
   readonly installedPaths?: Readonly<Record<string, string>> | undefined;
-  readonly installedSurface?: readonly { readonly id: string; readonly ok: boolean; readonly detail: string }[] | undefined;
-  readonly aggregateChecks?: readonly { readonly id: string; readonly ok: boolean; readonly detail: string }[] | undefined;
+  readonly installedSurface?:
+    | readonly { readonly id: string; readonly ok: boolean; readonly detail: string }[]
+    | undefined;
+  readonly aggregateChecks?:
+    | readonly { readonly id: string; readonly ok: boolean; readonly detail: string }[]
+    | undefined;
   readonly coreSummary: { readonly cases: number; readonly failed: number } | undefined;
   readonly tuiSummary: { readonly scenarios: number; readonly failed: number } | undefined;
   readonly limits: readonly string[];

@@ -291,9 +291,9 @@ Bun test discovery covers both suffixes with no configuration.
 ```bash
 bun install                         # install dependencies
 bun test path/to/file.test.ts       # narrow test
-bun run typecheck                   # TypeScript only
-bun run lint                        # oxlint on src/
-bun run fmt:check                   # oxfmt check on src/
+bun run typecheck                   # TypeScript only (src/ and scripts/)
+bun run lint                        # oxlint on src/ and scripts/
+bun run fmt:check                   # oxfmt check on src/ and scripts/
 bun run check                       # typecheck + lint + fmt check + GRACE markup + tool-contract gate + all tests
 bun run build                       # regenerate dist/ from source
 bun run pack:check                  # build, import public exports, dry-run npm pack
