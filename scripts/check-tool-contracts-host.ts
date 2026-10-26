@@ -57,7 +57,8 @@
 //   runProbe - Full isolated live probe; returns a process exit code.
 //   symlinkSafe - Recreate a directory symlink (shares node_modules into the harness).
 //   CONTRACTS_HOST_EVIDENCE_VERSION - Version of the bounded compatibility-evidence document schema.
-//   HOST_EVIDENCE_RELATIVE_PATH - Repository-relative path observed host evidence is written to.
+//   HOST_EVIDENCE_DIR_NAME - Evidence directory name under the harness scratch base.
+//   HOST_EVIDENCE_FILE_NAME - Observed host evidence file name inside the scratch evidence directory.
 //   HOST_EVIDENCE_MAX_BYTES - Hard cap on the serialized evidence document so payloads stay bounded.
 //   SYNTHETIC_EXA_API_KEY - Synthetic Exa credential injected through the isolated project vvoc config.
 //   SYNTHETIC_PROVIDER_KEY - Synthetic provider key written into the isolated OpenCode config.
@@ -142,7 +143,7 @@
 //   runNativeMatrix - Run the bounded native contract matrix and return observed host evidence.
 //   NATIVE_MATRIX_STEPS - Deterministic native matrix calls including the generic work_item_open accept path.
 //   NATIVE_MATRIX_LIMITS - Declared native-matrix coverage limits recorded in compatibility evidence.
-//   resolveEvidenceTarget - Require the approved active bundle directory to already exist, reporting the exact creation command when missing.
+//   resolveEvidenceTarget - Resolve and create the evidence directory under the harness scratch base.
 //   invalidateEvidence - Remove prior owned passing evidence so a stale pass cannot mislead.
 //   writeEvidenceIfAllowed - Write evidence only on a valid target, no failures, and within cap.
 //   describeDefinition - Bounded per-tool projection/description digest summary.
@@ -152,13 +153,14 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [Direct fix - A missing active change bundle directory now fails closed with the exact repo-root-relative mkdir command in the resolveEvidenceTarget reason; the runner still never creates the directory itself, because a bundle directory without a spec.xml turns `grace lint` red (xml.missing-file).]
+//   LAST_CHANGE: [Direct fix - Host evidence now resolves under the harness scratch base (VVOC_E2E_SCRATCH, default /tmp/opencode) as vvoc-contracts-host-evidence/compatibility-evidence.json instead of the archived C-OPENCODE-V2-NATIVE active bundle, so contracts:host runs never leave files in the GRACE change tree.]
+//   PREVIOUS: [Direct fix - A missing active change bundle directory now fails closed with the exact repo-root-relative mkdir command in the resolveEvidenceTarget reason; the runner still never creates the directory itself, because a bundle directory without a spec.xml turns `grace lint` red (xml.missing-file).]
 //   PREVIOUS: [C-OPENCODE-V2-NATIVE T-009-SECRETS - Restored generic work_item_open accept coverage in the native matrix (the frozen-input defect was fixed in secrets-redaction deep.ts, not the workflow path) and removed the stale work_item_open nativeLimit workaround; limits are now the exported NATIVE_MATRIX_LIMITS constant.]
 //   PREVIOUS: [C-OPENCODE-V2-NATIVE T-009-HOST - Ported the live harness to native 2.0.18: pinned-binary SHA/version gating, native probe and composing-aggregate plugins (native tool domain + hooks), native cohorts/config/pins/provenance, current-bundle evidence, and a bounded native matrix that verifies the nine owned registrations, native projections, accept/reject diagnostics and side-effect isolation.]
 // END_CHANGE_SUMMARY
 
 import { mkdir, mkdtemp, readdir, rm, writeFile, readFile } from "node:fs/promises";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { spawn } from "node:child_process";
@@ -1146,11 +1148,7 @@ export async function runProbe(options?: { keep?: boolean; timeoutMs?: number })
 
     responder = await startLoopbackResponder();
     const configPath = join(paths.workspace, "opencode.json");
-    await writeFile(
-      configPath,
-      buildHostConfig({ port: responder.port, pluginDir }),
-      "utf8",
-    );
+    await writeFile(configPath, buildHostConfig({ port: responder.port, pluginDir }), "utf8");
 
     const childEnv = buildProbeEnv(process.env as Record<string, string | undefined>, {
       home: paths.home,
@@ -1233,9 +1231,10 @@ async function symlinkSafe(target: string, linkPath: string): Promise<void> {
 // START_BLOCK_FULL_MATRIX_CONSTANTS
 /** Version of the bounded compatibility-evidence document schema. */
 export const CONTRACTS_HOST_EVIDENCE_VERSION = 1;
-/** Repository-relative path observed host evidence is written to. */
-export const HOST_EVIDENCE_RELATIVE_PATH =
-  ".grace/changes/active/C-OPENCODE-V2-NATIVE/compatibility-evidence.json";
+/** Evidence directory name under the harness scratch base. */
+export const HOST_EVIDENCE_DIR_NAME = "vvoc-contracts-host-evidence";
+/** Observed host evidence file name inside the scratch evidence directory. */
+export const HOST_EVIDENCE_FILE_NAME = "compatibility-evidence.json";
 /** Hard cap on the serialized evidence document so payloads stay bounded. */
 export const HOST_EVIDENCE_MAX_BYTES = 512 * 1024;
 /** Synthetic Exa credential injected through the isolated project vvoc config (never a real key). */
@@ -3595,7 +3594,7 @@ async function runNativeMatrix(
         "Execute the bounded native contract matrix.",
       ],
       { cwd: paths.harness, env: childEnv, timeoutMs: options.timeoutMs ?? 150_000 },
-   );
+    );
     check(run.code === 0, "host process exited 0");
 
     const stdoutParse = parseRunStdout(run.stdout);
@@ -3694,7 +3693,9 @@ async function runNativeMatrix(
       } else {
         if (observedStatus !== "error") fail(`expected error, observed ${observedStatus}`);
         if (step.expectDiagnostic?.path && !errorText.includes(step.expectDiagnostic.path)) {
-          fail(`diagnostic missing actionable path ${step.expectDiagnostic.path} (${errorText.slice(0, 400)})`);
+          fail(
+            `diagnostic missing actionable path ${step.expectDiagnostic.path} (${errorText.slice(0, 400)})`,
+          );
         }
         if (execByCall.has(callID)) fail("rejected call still executed");
       }
@@ -4081,25 +4082,26 @@ export function checkPinnedManifests(
 }
 
 /**
- * Resolve the evidence target, requiring the approved active change bundle to
- * already exist. A missing bundle directory fails closed with the exact
- * repo-root-relative creation command in the reason; the runner never creates
- * the directory itself, because a directory inside `.grace/changes/active/`
- * without a spec.xml breaks `grace lint` (xml.missing-file).
+ * Resolve the evidence target under the harness scratch base, creating the
+ * evidence directory when missing. Evidence never lands inside the workspace,
+ * so a run leaves no files in the GRACE change tree and `grace lint` stays
+ * green right after a run.
  */
 export function resolveEvidenceTarget(
-  repoRoot: string,
+  scratchBase: string,
 ): { ok: true; path: string } | { ok: false; reason: string } {
-  const path = join(repoRoot, HOST_EVIDENCE_RELATIVE_PATH);
-  const parent = dirname(path);
-  if (!existsSync(parent)) {
-    const bundleDir = dirname(HOST_EVIDENCE_RELATIVE_PATH);
+  const dir = join(scratchBase, HOST_EVIDENCE_DIR_NAME);
+  try {
+    mkdirSync(dir, { recursive: true });
+  } catch (error) {
     return {
       ok: false,
-      reason: `active change bundle directory is missing: ${bundleDir} (the runner never creates it). From the repository root run: mkdir -p ${bundleDir}`,
+      reason: `cannot create evidence directory ${dir}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
     };
   }
-  return { ok: true, path };
+  return { ok: true, path: join(dir, HOST_EVIDENCE_FILE_NAME) };
 }
 
 /** Remove any prior owned passing evidence so a stale pass can never mislead. */
@@ -4109,7 +4111,8 @@ export async function invalidateEvidence(path: string): Promise<void> {
 
 /**
  * Write observed evidence only when the target was valid, no assertions failed,
- * and the bounded size cap holds. Never creates the change bundle directory.
+ * and the bounded size cap holds. Writes only the resolved evidence file and
+ * never creates anything else.
  */
 export async function writeEvidenceIfAllowed(
   target: { ok: true; path: string } | { ok: false; reason: string },
@@ -4366,14 +4369,16 @@ export async function loadBuiltContractContext(repoRoot: string): Promise<BuiltC
  * Run the full bounded live contract matrix against the built package on the
  * installed OpenCode host, then write observed compatibility evidence when (and
  * only when) every case passes. Prior owned passing evidence is invalidated at
- * the start and on any failure; the active change bundle is never recreated.
+ * the start and on any failure; evidence stays under the harness scratch base
+ * and never lands in the workspace GRACE change tree.
  */
 export async function runContractsHost(options?: {
   keep?: boolean;
   timeoutMs?: number;
 }): Promise<number> {
   const repoRoot = resolve(new URL("..", import.meta.url).pathname);
-  const target = resolveEvidenceTarget(repoRoot);
+  const evidenceBase = process.env.VVOC_E2E_SCRATCH ?? "/tmp/opencode";
+  const target = resolveEvidenceTarget(evidenceBase);
   if (!target.ok) {
     console.error(target.reason);
     return 1;
@@ -4527,9 +4532,7 @@ export async function runContractsHost(options?: {
       console.error(`contracts:host did not write evidence: ${result.reason}`);
       return 1;
     }
-    console.log(
-      `contracts:host passed; wrote ${HOST_EVIDENCE_RELATIVE_PATH} (${result.bytes} bytes)`,
-    );
+    console.log(`contracts:host passed; wrote ${target.path} (${result.bytes} bytes)`);
     return 0;
   } catch (error) {
     await invalidateEvidence(target.path);

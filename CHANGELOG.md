@@ -13,6 +13,7 @@ This release fixes the Telegram bridge so it stays bounded and observable. Topic
 This release fixes Telegram delivery so that final messages are actually routed through the rich markdown delivery path instead of bypassing it. Previously, finals could fall through to a plain path, so users could see formatting and markdown rendered incorrectly or inconsistently on Telegram; with this fix, completed responses consistently use the rich markdown renderer, ensuring the delivered message matches the intended formatting.
 
 * fix(telegram): actually route finals through the rich markdown delivery path ([ec2e1db](https://github.com/osovv/vv-opencode/commit/ec2e1db))
+* feat(skills): rework vv-reflect into an environment-reflection dispatcher with a read-only vv-reflector subagent on the new seeded reflector role and the bundled session-graph extractor over the OpenCode 2.x session and subagent tree, applied only after per-entry approval ([ec2e1db](https://github.com/osovv/vv-opencode/commit/ec2e1db))
 
 ## 2.3.0-rc.6 (2026-10-04)
 
