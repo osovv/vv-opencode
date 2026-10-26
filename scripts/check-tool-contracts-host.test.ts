@@ -27,7 +27,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [Direct fix - The evidence lifecycle test pins the exact mkdir remediation command in the missing-bundle failure reason, asserts the bundle directory is never recreated as a side effect, and checks the resolved evidence path on the ok branch.]
+//   LAST_CHANGE: [Direct fix - The evidence lifecycle test pins the scratch-base evidence path via the exported constants, asserts the evidence directory is created without the evidence file, never creates the GRACE change tree, and fails closed with a bounded reason when the directory cannot be created.]
+//   PREVIOUS: [Direct fix - The evidence lifecycle test pins the exact mkdir remediation command in the missing-bundle failure reason, asserts the bundle directory is never recreated as a side effect, and checks the resolved evidence path on the ok branch.]
 //   PREVIOUS: [C-OPENCODE-V2-NATIVE T-009-SECRETS - Added native-matrix coverage assertions: the matrix exercises the generic work_item_open accept path and no longer records the work_item_open readonly nativeLimit workaround. Prior C-AGENT-TOOL-CONTRACTS recovery: dependency-closure and pinned-manifest tests.]
 // END_CHANGE_SUMMARY
 
@@ -48,7 +49,8 @@ import {
   CONTRACTS_HOST_EVIDENCE_VERSION,
   EXTRA_FINGERPRINT_PATHS,
   HOST_COHORTS,
-  HOST_EVIDENCE_RELATIVE_PATH,
+  HOST_EVIDENCE_DIR_NAME,
+  HOST_EVIDENCE_FILE_NAME,
   MINIMUM_SUPPORTED_HOST_VERSION,
   NATIVE_MATRIX_LIMITS,
   NATIVE_MATRIX_STEPS,
@@ -1420,20 +1422,35 @@ describe("host harness generation and isolation", () => {
 });
 
 describe("evidence lifecycle", () => {
-  test("requires the existing active change bundle, never recreates it, and reports the exact creation command", async () => {
+  test("resolves and creates the evidence directory under the scratch base, never the GRACE tree", async () => {
     const base = await mkdtemp(join(await realpathSafe(tmpdir()), "vvoc-evidence-"));
-    const bundleDir = join(base, ".grace/changes/active/C-OPENCODE-V2-NATIVE");
+    const graceDir = join(base, ".grace", "changes", "active", "C-OPENCODE-V2-NATIVE");
     try {
-      const missing = resolveEvidenceTarget(base);
-      if (!missing.ok)
-        expect(missing.reason).toContain("mkdir -p .grace/changes/active/C-OPENCODE-V2-NATIVE");
-      expect(missing.ok).toBe(false);
-      // Fail-closed: the missing bundle directory is never recreated as a side effect.
-      expect(existsSync(bundleDir)).toBe(false);
-      await mkdir(bundleDir, { recursive: true });
       const target = resolveEvidenceTarget(base);
       expect(target.ok).toBe(true);
-      if (target.ok) expect(target.path).toBe(join(base, HOST_EVIDENCE_RELATIVE_PATH));
+      if (target.ok) {
+        expect(target.path).toBe(join(base, HOST_EVIDENCE_DIR_NAME, HOST_EVIDENCE_FILE_NAME));
+      }
+      // The scratch evidence directory is created; the evidence file is not.
+      expect(existsSync(join(base, HOST_EVIDENCE_DIR_NAME))).toBe(true);
+      expect(existsSync(join(base, HOST_EVIDENCE_DIR_NAME, HOST_EVIDENCE_FILE_NAME))).toBe(false);
+      // Evidence never lands inside the GRACE change tree.
+      expect(existsSync(graceDir)).toBe(false);
+    } finally {
+      await rm(base, { recursive: true, force: true });
+    }
+  });
+
+  test("fails closed when the evidence directory cannot be created", async () => {
+    const base = await mkdtemp(join(await realpathSafe(tmpdir()), "vvoc-evidence-blocked-"));
+    try {
+      // A regular file where the evidence directory should be blocks mkdir.
+      await writeFile(join(base, HOST_EVIDENCE_DIR_NAME), "not a directory", "utf8");
+      const blocked = resolveEvidenceTarget(base);
+      expect(blocked.ok).toBe(false);
+      if (!blocked.ok) {
+        expect(blocked.reason).toContain("cannot create evidence directory");
+      }
     } finally {
       await rm(base, { recursive: true, force: true });
     }
