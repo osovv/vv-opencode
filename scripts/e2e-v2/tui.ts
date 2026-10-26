@@ -34,7 +34,7 @@
 //   PREVIOUS: [C-OPENCODE-V2-NATIVE T-008 attempt 2 - Added scroll, visible surfaces, controlled collection failure, and explicit-disabled negative controls, plus a cache-usage loopback provider.]
 // END_CHANGE_SUMMARY
 
-import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { ChildProcess } from "node:child_process";
@@ -123,7 +123,9 @@ export class ScreenBuffer {
           continue;
         }
         if (rest.startsWith("\x1b[")) {
-          const match = /^\x1b\[([0-9;?<>!=]*)[ -/]*([@-~])/.exec(rest);
+          // Intentional ANSI CSI parser for the pinned TUI protocol; control character is the escape byte.
+          // eslint-disable-next-line no-control-regex
+          const match = /^\u001b\[([0-9;?<>!=]*)[ -/]*([@-~])/.exec(rest);
           if (match === null) {
             this.#pending = rest;
             return;

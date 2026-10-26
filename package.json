@@ -105,7 +105,7 @@
     "build": "rm -rf dist && tsc -p tsconfig.build.json && bun scripts/copy-dist-assets.ts",
     "prepublishOnly": "bun run build",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.scripts.json",
-    "lint": "oxlint --deny warnings src scripts",
+    "lint": "oxlint --deny-warnings src scripts",
     "fmt": "oxfmt --write src scripts",
     "fmt:check": "oxfmt --check src scripts",
     "grace:check": "bun scripts/check-grace-markup.ts",

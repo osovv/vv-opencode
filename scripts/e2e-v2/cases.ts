@@ -822,8 +822,6 @@ export const coreCases: readonly CoreCase[] = [
         .familyId as string;
       const rootSnapshot = (await driver.control(`/config?sessionID=${root}`)).body?.capture
         ?.snapshotId;
-      const rootVariant = rootInfo?.model?.variant as string | undefined;
-      const expectedVariantName = rootVariant?.replace(/.*\.seam-smart\./, "");
 
       const forked = await driver.fork(root);
       check.truthy(

@@ -112,13 +112,11 @@
 //   hostSessionSpecs - The four isolated sessions of the bounded live matrix.
 //   sessionCheck - Build a pass/fail accumulator closure.
 //   listWorkspaceFiles - Recursively list workspace files (bounded) for side-effect comparison.
-//   stateSummary - Summarize the isolated persisted workflow state for side-effect checks.
 //   firstDifference - First structural difference path between two JSON values.
 //   compareProjection - Exact observed-vs-built projection comparison with a bounded drift path.
 //   subsetMatch - Deep subset match for owned success semantics.
 //   TOOL_CONTRACT_REFERENCE_SUFFIX - Reference asset suffix the loaded identity must resolve within the package.
 //   evaluateHostSession - Evaluate one session against built descriptors/identity; failures stop the gate.
-//   runHostSession - Run one isolated session against a loopback responder; returns its observed result.
 //   stripDescriptions - Deep-clone a JSON value with description keys removed.
 //   NATIVE_PINNED_DEPENDENCIES - Exact native runtime pins the package manifest must declare.
 //   NATIVE_PINNED_DEV_DEPENDENCIES - Exact native TUI pins the package manifest must declare.
@@ -2823,35 +2821,6 @@ async function listWorkspaceFiles(root: string, prefix = "", depth = 0): Promise
   return out;
 }
 
-async function stateSummary(
-  xdgData: string,
-  sessionId: string | null,
-): Promise<{ exists: boolean; records: number; executions: number; itemStates: string[] }> {
-  const path = sessionId ? join(xdgData, "vvoc", "workflow", sessionId, "workflow-state.json") : "";
-  if (!path || !existsSync(path))
-    return { exists: false, records: 0, executions: 0, itemStates: [] };
-  try {
-    const parsed = JSON.parse(await readFile(path, "utf8")) as {
-      records?: unknown;
-      executions?: unknown;
-    };
-    const records = Array.isArray(parsed.records) ? parsed.records : [];
-    const itemStates: string[] = [];
-    for (const record of records) {
-      const state = (record as { state?: unknown })?.state;
-      if (typeof state === "string") itemStates.push(state);
-    }
-    return {
-      exists: true,
-      records: records.length,
-      executions: Array.isArray(parsed.executions) ? parsed.executions.length : 0,
-      itemStates,
-    };
-  } catch {
-    return { exists: true, records: -1, executions: -1, itemStates: [] };
-  }
-}
-
 /** First structural difference path between two JSON values, bounded to one path. */
 export function firstDifference(left: unknown, right: unknown, path = ""): string | undefined {
   if (left === right) return undefined;
@@ -3211,206 +3180,6 @@ export function evaluateHostSession(
   return { passed, failed, cases };
 }
 // END_BLOCK_FULL_MATRIX_EVALUATION
-
-// START_BLOCK_FULL_MATRIX_SESSION
-async function runHostSession(
-  spec: HostSessionSpec,
-  built: BuiltContractContext,
-  scratchParent: string,
-  options: { hostBinary: string; keep?: boolean; timeoutMs?: number },
-): Promise<HostSessionResult> {
-  const cohort = HOST_COHORTS.find((entry) => entry.id === spec.cohortId);
-  if (!cohort) throw new Error(`unknown cohort ${spec.cohortId}`);
-  const repoRoot = resolve(new URL("..", import.meta.url).pathname);
-  const root = await mkdtemp(join(scratchParent, `matrix-${spec.id}-`));
-  const paths = {
-    home: join(root, "home"),
-    xdgConfig: join(root, "xdg-config"),
-    xdgData: join(root, "xdg-data"),
-    xdgCache: join(root, "xdg-cache"),
-    tmp: join(root, "tmp"),
-    workspace: join(root, "workspace"),
-    harness: join(root, "harness"),
-  };
-  const context: HostSessionContext = { workspace: paths.workspace, port: 0 };
-  let responder: HostResponder | undefined;
-  try {
-    for (const directory of Object.values(paths)) await mkdir(directory, { recursive: true });
-    for (const [relative, content] of Object.entries(spec.workspaceFiles)) {
-      const absolute = join(paths.workspace, relative);
-      await mkdir(dirname(absolute), { recursive: true });
-      await writeFile(absolute, content, "utf8");
-    }
-    await mkdir(join(paths.workspace, ".vvoc"), { recursive: true });
-    await writeFile(join(paths.workspace, ".vvoc", "vvoc.json"), buildHostVvocConfig(), "utf8");
-    await symlinkSafe(join(repoRoot, "node_modules"), join(paths.harness, "node_modules"));
-
-    const filesBefore = await listWorkspaceFiles(paths.workspace);
-    const hashesBefore: Record<string, string> = {};
-    for (const file of spec.unchangedFiles) {
-      const absolute = join(paths.workspace, file);
-      hashesBefore[`before:${file}`] = existsSync(absolute)
-        ? sha256Text(await readFile(absolute, "utf8"))
-        : "";
-    }
-
-    const plan: HostPlan = {
-      steps: spec.steps,
-      childReport: (workItemId) => CHILD_REPORT(workItemId),
-      doneText: spec.doneText,
-    };
-    responder = await startHostResponder(cohort, plan, context);
-
-    const journalPath = join(root, "harness-journal.jsonl");
-    const pluginDir = join(paths.harness, "host-harness-plugin");
-    await mkdir(pluginDir, { recursive: true });
-    await writeFile(
-      join(pluginDir, "package.json"),
-      JSON.stringify({ name: "vvoc-host-harness-plugin", private: true, version: "0.0.0" }),
-      "utf8",
-    );
-    await writeFile(
-      join(pluginDir, "index.ts"),
-      generateHostHarnessPluginSource({
-        rootAggregateUrl: pathToFileURL(join(repoRoot, "dist/index.js")).href,
-        workflowResultsUrl: pathToFileURL(join(repoRoot, "dist/plugins/workflow/results.js")).href,
-        hashlineSchemasUrl: pathToFileURL(join(repoRoot, "dist/plugins/hashline-edit/schemas.js"))
-          .href,
-        webSchemasUrl: pathToFileURL(join(repoRoot, "dist/plugins/web-tools/schemas.js")).href,
-        journalPath,
-        loopbackOrigin: `http://127.0.0.1:${context.port}`,
-      }),
-      "utf8",
-    );
-    const configPath = join(paths.workspace, "opencode.json");
-    await writeFile(
-      configPath,
-      buildCohortHostConfig(cohort, { port: context.port, pluginDir }),
-      "utf8",
-    );
-
-    const childEnv = buildProbeEnv(process.env as Record<string, string | undefined>, {
-      home: paths.home,
-      xdgConfig: paths.xdgConfig,
-      xdgData: paths.xdgData,
-      xdgCache: paths.xdgCache,
-      opencodeConfig: configPath,
-      tmp: paths.tmp,
-    });
-
-    const isolationIssues: string[] = [];
-    const credentialPattern =
-      /^(OPENAI|ANTHROPIC|GROK|XAI|GEMINI|GOOGLE|EXA|BRAVE|ZAI)_.*KEY$|^OPENCODE_AUTH_CONTENT$/;
-    for (const key of Object.keys(childEnv)) {
-      if (credentialPattern.test(key))
-        isolationIssues.push(`credential key present in child env: ${key}`);
-    }
-    for (const key of [
-      "HOME",
-      "XDG_CONFIG_HOME",
-      "XDG_DATA_HOME",
-      "XDG_CACHE_HOME",
-      "TMPDIR",
-      "OPENCODE_CONFIG",
-    ]) {
-      const value = childEnv[key];
-      if (!value || !value.startsWith(`${root}${sep}`)) {
-        isolationIssues.push(`${key} is not inside the owned scratch root`);
-      }
-    }
-
-    const run = await runCommand(
-      options.hostBinary,
-      [
-        "run",
-        "--standalone",
-        "--auto",
-        "--format",
-        "json",
-        "--agent",
-        "vv-controller",
-        spec.prompt,
-      ],
-      {
-        cwd: paths.workspace,
-        env: childEnv,
-        timeoutMs: options.timeoutMs ?? 150_000,
-      },
-    );
-
-    const stdoutParse = parseRunStdout(run.stdout);
-    const journalParse = existsSync(journalPath)
-      ? parseHarnessJournalText(await readFile(journalPath, "utf8"))
-      : {
-          entries: [] as HarnessJournalEntry[],
-          errors: ["harness journal file missing after the run"],
-        };
-    const sessionId =
-      ((stdoutParse.events as { sessionID?: unknown }[]).find(
-        (event) => typeof event.sessionID === "string",
-      )?.sessionID as string | undefined) ?? null;
-    const state = await stateSummary(paths.xdgData, sessionId);
-    const filesAfter = await listWorkspaceFiles(paths.workspace);
-    const fileHashes: Record<string, string> = { ...hashesBefore };
-    for (const file of spec.unchangedFiles) {
-      const absolute = join(paths.workspace, file);
-      fileHashes[file] = existsSync(absolute) ? sha256Text(await readFile(absolute, "utf8")) : "";
-    }
-    const fileContents: Record<string, string> = {};
-    for (const file of Object.keys(spec.expectFileContent ?? {})) {
-      const absolute = join(paths.workspace, file);
-      fileContents[file] = existsSync(absolute) ? await readFile(absolute, "utf8") : "";
-    }
-
-    const partial = {
-      spec,
-      cohort,
-      exitCode: run.code,
-      sessionId,
-      definitions: responder.definitions,
-      provider: {
-        modelRequests: responder.modelRequests,
-        modelRequestsWithTools: responder.modelRequestsWithTools,
-        webSearchRequests: responder.webSearchRequests.length,
-        webFetchRequests: responder.webFetchRequests.length,
-      },
-      journal: {
-        exec: journalParse.entries.filter((entry) => entry.kind === "exec").length,
-        reject: journalParse.entries.filter((entry) => entry.kind === "reject").length,
-        pluginErrors: journalParse.entries
-          .filter(
-            (entry): entry is { kind: "plugin_error"; error: string } =>
-              entry.kind === "plugin_error",
-          )
-          .map((entry) => entry.error),
-      },
-      state,
-      workspaceFiles: filesAfter,
-      fileHashes,
-      fileContents,
-      toolParts: stdoutParse.events
-        .filter((event) => event.type === "tool_use" && event.part?.tool)
-        .map((event) => event.part!),
-      journalEntries: journalParse.entries,
-      webSearchBodies: responder.webSearchRequests.map((request) => request.body ?? ""),
-      childEnvKeys: Object.keys(childEnv),
-      isolationIssues,
-      stdoutErrors: [...stdoutParse.errors, ...journalParse.errors],
-      stderrTail: run.stderr.slice(-4000),
-      filesBefore,
-    } as Omit<HostSessionResult, "passed" | "failed" | "cases">;
-
-    const evaluation = evaluateHostSession(partial, built);
-    return { ...partial, ...evaluation, workspaceFiles: filesAfter };
-  } finally {
-    try {
-      if (responder) await responder.stop();
-    } finally {
-      await cleanupProbeRoot(root, scratchParent, options.keep);
-    }
-  }
-}
-// END_BLOCK_FULL_MATRIX_SESSION
 
 // START_BLOCK_NATIVE_MATRIX
 /**

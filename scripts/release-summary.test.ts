@@ -29,7 +29,6 @@ import {
   DEFAULT_RELEASE_SUMMARY_MODEL,
   DEFAULT_RELEASE_SUMMARY_TIMEOUT_MS,
   MAX_COMMIT_DIFF_CHARS,
-  RELEASE_SUMMARY_MAX_ATTEMPTS,
   buildReleaseSummaryAgentConfig,
   buildReleaseSummaryPrompt,
   collectReleaseCommitMetadata,

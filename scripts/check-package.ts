@@ -174,7 +174,7 @@ export async function verifyPackageExports(
 /** Package manifest identity/dependency failures. */
 export function manifestIssues(manifest: PackageManifest): string[] {
   const failures: string[] = [];
-  const declared = { ...(manifest.dependencies ?? {}), ...(manifest.devDependencies ?? {}) };
+  const declared = { ...manifest.dependencies, ...manifest.devDependencies };
   for (const name of Object.keys(declared)) {
     if (name.startsWith("@opencode-ai/")) {
       failures.push(`manifest still declares removed V1 dependency ${name}`);

@@ -28,7 +28,6 @@
 //   ReleaseSleeper - Injected retry sleep contract.
 //   ReleaseWorkflowDispatchInput - Inputs required to dispatch verified publication.
 //   PublishedReleaseFinalizationInput - Inputs required for authenticated release finalization.
-//   parseNpmVersionArgs - Validates supported npm version target arguments without shell interpolation.
 //   parseReleaseBumpArgs - Parses release:bump arguments into npm version args plus an optional explicit channel.
 //   deriveReleaseChannel - Deterministically derives the latest or rc publication channel from a version.
 //   resolveReleaseChannel - Derives the channel for a bumped version and rejects a contradicting explicit channel.
@@ -62,7 +61,6 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import {
-  buildReleaseSummaryAgentConfig,
   collectReleaseCommitMetadata,
   generateReleaseSummaryWithRetries,
   injectSummaryIntoChangelogEntry,
@@ -153,11 +151,6 @@ function gitStatus(): string {
     console.error(`✗ Failed to inspect git status: ${err}`);
     process.exit(1);
   }
-}
-
-function parseNpmVersionArgs(args: string[]): string[] {
-  const { versionArgs } = parseReleaseBumpArgs(args);
-  return versionArgs;
 }
 
 /** Parses release:bump arguments into npm version args plus an optional explicit channel. */

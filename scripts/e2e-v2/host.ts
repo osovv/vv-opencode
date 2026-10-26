@@ -599,11 +599,11 @@ export class OwnedProcesses {
   /** Terminate every live owned process, reap exited handles, and join exits. */
   async stopAll(signal: NodeJS.Signals = "SIGTERM", timeoutMs = 6_000): Promise<void> {
     const reap = (): void => {
-      for (const [pid, child] of [...this.#procs]) {
+      for (const [pid, child] of this.#procs) {
         if (child.exitCode !== null || child.signalCode !== null) this.#procs.delete(pid);
       }
     };
-    for (const [pid, child] of [...this.#procs]) {
+    for (const [pid, child] of this.#procs) {
       if (child.exitCode !== null || child.signalCode !== null) {
         this.#procs.delete(pid);
         continue;
@@ -619,7 +619,7 @@ export class OwnedProcesses {
       await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
       reap();
     }
-    for (const [pid, child] of [...this.#procs]) {
+    for (const [pid, child] of this.#procs) {
       if (child.exitCode === null && child.signalCode === null) {
         try {
           child.kill("SIGKILL");
