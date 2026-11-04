@@ -33,7 +33,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { ContractInputError } from "../lib/agent-tool-contract.js";
-import { loadVvocConfig } from "../lib/config-layers.js";
+import { loadVvocConfig, resetVvocConfigForTests } from "../lib/config-layers.js";
 import { createWorkflowPlugin } from "./workflow/index.js";
 import { getWorkflowSessionDir, hydrateWorkflowStateChecked } from "./workflow/persistence.js";
 import { createRecoverySupport } from "./workflow/recovery.js";
@@ -250,6 +250,9 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  // The contract tooling loads the runtime config under the temp XDG root; release
+  // the module-level binding so a later test file can load it from its own source.
+  resetVvocConfigForTests();
   rmSync(`/tmp/vvoc-contracts-config-${process.pid}`, { recursive: true, force: true });
   rmSync(`/tmp/vvoc-contracts-data-${process.pid}`, { recursive: true, force: true });
   if (previousConfigHome === undefined) delete process.env.XDG_CONFIG_HOME;
