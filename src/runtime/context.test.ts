@@ -33,7 +33,6 @@ import type { FamilyBindingRecord } from "./snapshot-store.js";
 import type { EffectiveRuntimeConfig } from "./types.js";
 import {
   RuntimeDisposedError,
-  SUPPORTED_SERVICE_VERSION,
   type RuntimeClient,
   type RuntimeContext,
   type RuntimeDeps,
@@ -61,7 +60,7 @@ class FakeNativeHost {
   disposeCalls = 0;
   discoverCalls = 0;
   makeClientCalls = 0;
-  readonly serviceVersion = SUPPORTED_SERVICE_VERSION;
+  readonly serviceVersion = "2.0.18";
   readonly endpoint = ENDPOINT;
 
   createContext(location: RuntimeLocation): RuntimeContext {

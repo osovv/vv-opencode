@@ -79,7 +79,7 @@ test("doctor reports unresolved role refs as problems and exits non-zero", async
 
     expect(stdout).toContain("Roles:");
     expect(stdout).toContain("OpenCode version:");
-    expect(stdout).toContain("OpenCode supported range: >=2.0.18 <2.0.19");
+    expect(stdout).toContain("OpenCode supported range: >=2.0.18 <3.0.0");
     expect(stdout).toContain("TUI package registered: yes");
     expect(stderr).toContain("Problems:");
     expect(stderr).toContain(

@@ -42,6 +42,7 @@ describe("asset rule", () => {
 
   test("the real src tree mirrors exactly its non-TS assets", () => {
     expect(listSourceAssetPaths(repoRoot)).toEqual([
+      "src/hosts.json",
       "src/plugins/workflow/system-instruction.md",
     ]);
   });

@@ -43,7 +43,7 @@ import { join } from "node:path";
 import { Agent } from "@opencode/schema/agent";
 import { Model } from "@opencode/schema/model";
 import { Provider } from "@opencode/schema/provider";
-import type { DeepMutable } from "@opencode/plugin/promise/types";
+import type { DeepMutable } from "../runtime/types.js";
 import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
 import { ModelRolesPlugin, registerModelRoles } from "./model-roles/index.js";
 import {

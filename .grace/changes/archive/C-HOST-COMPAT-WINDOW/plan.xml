@@ -1,0 +1,237 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-HOST-COMPAT-WINDOW>
+    <IntentSummary>Move host compatibility from an exact 2.0.18 patch pin to a major-bounded window with a data-driven verified list: new src/lib/host-compat.ts plus src/hosts.json become the single source, runtime discovery passes a predicate through Service.discover, the CLI reports verified/tolerated and warns once, build pins move to 2.2.5 with the matching effect and TUI peers, both live host gates accept the version under test, a drift reporter classifies upstream releases, and the update procedure is documented, with GRACE context, graph, and verification synchronized.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-CLI-CONFIG</Value>
+        <Value>M-NATIVE-RUNTIME</Value>
+        <Value>M-AGENT-TOOL-CONTRACT</Value>
+        <Value>M-E2E-V2-HARNESS</Value>
+        <Value>V-M-CLI-CONFIG</Value>
+        <Value>V-M-NATIVE-RUNTIME</Value>
+        <Value>src/lib/opencode/plugin-registration.ts</Value>
+        <Value>src/runtime/types.ts</Value>
+        <Value>src/runtime/client.ts</Value>
+        <Value>scripts/check-tool-contracts-host.ts</Value>
+        <Value>scripts/e2e-v2/host.ts</Value>
+        <Value>package.json</Value>
+        <Value>README.md</Value>
+      </MustExist>
+      <MustContain>
+        <File>src/runtime/types.ts</File>
+        <Text>SUPPORTED_SERVICE_VERSION</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/lib/opencode/plugin-registration.ts</File>
+        <Text>MAX_SUPPORTED_OPENCODE_VERSION_EXCLUSIVE = "2.0.19"</Text>
+      </MustContain>
+      <MustContain>
+        <File>scripts/check-tool-contracts-host.ts</File>
+        <Text>minor === 0 &amp;&amp; patch === 18</Text>
+      </MustContain>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-HOST-COMPAT</Module>
+        <Module>M-NATIVE-RUNTIME</Module>
+        <Module>M-CLI-CONFIG</Module>
+      </MustVerify>
+      <MustContain>
+        <File>src/lib/host-compat.ts</File>
+        <Text>openCodeHostSupport</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/hosts.json</File>
+        <Text>verified</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/runtime/types.ts</File>
+        <Text>isSupportedServiceVersion</Text>
+      </MustContain>
+      <MustContain>
+        <File>package.json</File>
+        <Text>"host:check"</Text>
+      </MustContain>
+      <MustContain>
+        <File>package.json</File>
+        <Text>"@opencode/plugin": "2.2.5"</Text>
+      </MustContain>
+      <MustContain>
+        <File>README.md</File>
+        <Text>docs/host-updates.md</Text>
+      </MustContain>
+      <MustNotContain>
+        <File>src/runtime/types.ts</File>
+        <Text>SUPPORTED_SERVICE_VERSION</Text>
+      </MustNotContain>
+      <MustPassCommand>
+        <Command>bun test src/lib/host-compat.test.ts scripts/host-check.test.ts</Command>
+        <Command>bun run check</Command>
+        <Command>bun run build</Command>
+        <Command>bun run pack:check</Command>
+        <Command>bun run release:check</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <DurableScope>
+      <GraphAnchors>
+        <M-HOST-COMPAT />
+        <M-NATIVE-RUNTIME />
+        <M-CLI-CONFIG />
+        <M-CLI-COMMANDS />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-HOST-COMPAT />
+        <V-M-NATIVE-RUNTIME />
+        <V-M-CLI-CONFIG />
+      </VerificationAnchors>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>src/hosts.json</File>
+      <File>src/lib/host-compat.ts</File>
+      <File>src/lib/host-compat.test.ts</File>
+      <File>src/lib/opencode/plugin-registration.ts</File>
+      <File>src/lib/opencode/inspection.ts</File>
+      <File>src/lib/opencode.test.ts</File>
+      <File>src/runtime/types.ts</File>
+      <File>src/runtime/client.ts</File>
+      <File>src/runtime/client.test.ts</File>
+      <File>src/runtime/context.test.ts</File>
+      <File>src/plugins/model-roles.integration.test.ts</File>
+      <File>src/commands/upgrade.ts</File>
+      <File>src/commands/upgrade.test.ts</File>
+      <File>src/commands/status.ts</File>
+      <File>src/commands/status.test.ts</File>
+      <File>src/commands/doctor.ts</File>
+      <File>src/commands/doctor.test.ts</File>
+      <File>scripts/check-tool-contracts-host.ts</File>
+      <File>scripts/check-tool-contracts-host.test.ts</File>
+      <File>scripts/e2e-v2/host.ts</File>
+      <File>scripts/e2e-v2/core.ts</File>
+      <File>scripts/e2e-v2/tui.ts</File>
+      <File>scripts/copy-dist-assets.test.ts</File>
+      <File>scripts/host-check.ts</File>
+      <File>scripts/host-check.test.ts</File>
+      <File>package.json</File>
+      <File>README.md</File>
+      <File>AGENTS.md</File>
+      <File>docs/host-updates.md</File>
+      <File>.grace/context/technology.xml</File>
+      <File>.grace/context/deployment.xml</File>
+      <File>.grace/context/principles.xml</File>
+      <File>.grace/context/requirements.xml</File>
+      <File>.grace/graph/index.xml</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/index.xml</File>
+      <File>.grace/verification/main.xml</File>
+      <File>.grace/changes/active/C-HOST-COMPAT-WINDOW/spec.xml</File>
+      <File>.grace/changes/active/C-HOST-COMPAT-WINDOW/plan.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Own the window and verified list in src/lib/host-compat.ts.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>host-compat exports MIN/MAX/RANGE, VERIFIED_HOST_VERSIONS/VERIFIED_HOST_VERSION from src/hosts.json, parseOpenCodeVersion, isSupportedOpenCodeVersion, isVerifiedOpenCodeVersion, and openCodeHostSupport.</Criterion>
+          <Criterion>Prereleases, 1.x, and 3.x are unsupported; 2.0.18 through 2.9.x are supported; verified versions classify as verified and other in-window versions as tolerated.</Criterion>
+          <Criterion>plugin-registration re-exports the same names so existing call sites and the public surface are unchanged.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/host-compat.test.ts src/lib/opencode.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Make runtime discovery window-based and relocate DeepMutable.</Title>
+        <DependsOn>
+          <Task>T-001</Task>
+        </DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>RuntimeDeps.serviceVersion and discoverService accept a string or predicate; nativeRuntimeDeps passes isSupportedServiceVersion.</Criterion>
+          <Criterion>DeepMutable is owned by runtime/types.ts because the host no longer ships @opencode/plugin/promise/types.</Criterion>
+          <Criterion>RuntimeUnavailableError names the supported window instead of an exact version.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/runtime/client.test.ts src/runtime/context.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Report support level in the CLI and guide upgrades to the verified host.</Title>
+        <DependsOn>
+          <Task>T-001</Task>
+        </DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>inspectOpenCodeRuntime returns support and verifiedHosts; status and doctor print both.</Criterion>
+          <Criterion>assertSupportedOpenCodeRuntime warns once on a tolerated host and still fails closed outside the window.</Criterion>
+          <Criterion>upgrade guidance names the window and installs the newest verified host version.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/opencode.test.ts src/commands/status.test.ts src/commands/doctor.test.ts src/commands/upgrade.test.ts</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Move build pins to 2.2.5 / effect 4.0.6 / @opentui 0.8.2.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>package.json declares the new exact pins and engines.opencode >=2.0.18 &lt;3.0.0.</Criterion>
+          <Criterion>typecheck and the full unit/integration suite pass on the new pins without source rewrites beyond the DeepMutable relocation.</Criterion>
+          <Criterion>The native pin manifest gate names the same versions.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run typecheck</Command>
+          <Command>bun test</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Parameterize both live host gates and the probe expectations.</Title>
+        <DependsOn>
+          <Task>T-004</Task>
+        </DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>PINNED_HOST_VERSION derives from VVOC_HOST_VERSION or the verified list; binary path, SHA, and source commit are overridable; both gates authorize exactly the selected version.</Criterion>
+          <Criterion>The probe records schemaArgumentDescriptions and hostArgNormalization, and asserts the safe invariant (reject or schema-valid normalization) instead of a host-specific forwarding shape.</Criterion>
+          <Criterion>The type-invalid call still must fail before execute with its exact path.</Criterion>
+          <Criterion>contracts:host --probe passes against 2.2.5.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test scripts/check-tool-contracts-host.test.ts</Command>
+          <Command>bun run contracts:host --probe</Command>
+        </Verification>
+      </T-005>
+      <T-006>
+        <Title>Add the upstream drift reporter.</Title>
+        <DependsOn>
+          <Task>T-001</Task>
+        </DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>bun run host:check prints the window, verified list, build pin, newest stable release and its classification, plus the next step with a nonzero exit outside verified.</Criterion>
+          <Criterion>host:check --download installs that exact @opencode/cli into the scratch root and prints the contracts:host environment command with the binary SHA-256.</Criterion>
+          <Criterion>Pure helpers are covered deterministically without network access.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test scripts/host-check.test.ts</Command>
+          <Command>bun run host:check</Command>
+        </Verification>
+      </T-006>
+      <T-007>
+        <Title>Document the process and synchronize GRACE projections.</Title>
+        <DependsOn>
+          <Task>T-003</Task>
+          <Task>T-005</Task>
+          <Task>T-006</Task>
+        </DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>docs/host-updates.md documents the window model, patch routine, bump train, and the measured 2.2.5 observations including the partial full matrix.</Criterion>
+          <Criterion>README, AGENTS, and the GRACE context files describe the window and the verified list instead of the exact patch pin.</Criterion>
+          <Criterion>M-HOST-COMPAT and V-M-HOST-COMPAT exist in the graph and verification projections with the new module paths and commands.</Criterion>
+          <Criterion>grace lint and status pass with only the expected lifecycle state.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run check</Command>
+          <Command>bun run build</Command>
+          <Command>grace lint --path .</Command>
+        </Verification>
+      </T-007>
+    </ImplementationPlan>
+  </C-HOST-COMPAT-WINDOW>
+</GraceChangePlan>

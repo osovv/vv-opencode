@@ -1,0 +1,56 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-HOST-COMPAT-WINDOW>
+    <Summary>Replace the exact 2.0.18 host pin with a major-bounded supported window plus a data-driven verified-host list, so upstream OpenCode patches never require a vvoc release while unverified in-window hosts stay explicitly separated from evidenced ones.</Summary>
+    <Problem>package.json engines.opencode, the plugin-registration window predicate, the runtime service handshake, both live host gates, and the native pin manifest all hardcoded OpenCode 2.0.18 or the exact >=2.0.18 &lt;2.0.19 window. Upstream ships several patches and a minor every few weeks (2.0.18 through 2.2.5 in six weeks), so every upstream release made install, init, sync, and launch fail closed and forced a vvoc release even when nothing in vvoc needed to change. Maintaining the same version in six places also drifted: the live probe still authorized only 2.0.18 and the native pin manifest duplicated the package.json versions.</Problem>
+    <Goals>
+      <Goal>Own the supported window and the verified-host evidence list in one runtime module backed by src/hosts.json, with verified/tolerated/unsupported classification.</Goal>
+      <Goal>Accept any stable 2.x host inside the major-bounded window at runtime and in the CLI, while refusing 1.x, 3.x, prereleases, and unparsable versions before any write.</Goal>
+      <Goal>Report a tolerated in-window host once with an explicit warning and in vvoc status/doctor, instead of failing closed.</Goal>
+      <Goal>Move build pins to the current verified host (2.2.5, effect 4.0.6, @opentui 0.8.2) and fix the host API break that removal of @opencode/plugin/promise/types causes.</Goal>
+      <Goal>Parameterize both live host gates by the host version under test so a version matrix is possible without editing gate code.</Goal>
+      <Goal>Add an upstream drift reporter that classifies the newest stable release and can fetch that exact host for the gates.</Goal>
+      <Goal>Document the update procedure, the bump train, and the measured 2.2.5 observations in docs/host-updates.md and README.</Goal>
+    </Goals>
+    <NonGoals>
+      <NonGoal>Do not automate publication: releases remain explicit release:bump runs.</NonGoal>
+      <NonGoal>Do not accept 3.x hosts implicitly; a future major still needs a migration change.</NonGoal>
+      <NonGoal>Do not change tool contracts, workflow semantics, config schema v3, or release automation behavior.</NonGoal>
+      <NonGoal>Do not weaken the type-invalid rejection path: a malformed value must still fail before execute.</NonGoal>
+    </NonGoals>
+    <Constraints>
+      <Constraint>Build pins stay exact; only host acceptance widens. The verified list is data, never duplicated constants.</Constraint>
+      <Constraint>Prerelease hosts remain outside the stable window and are refused.</Constraint>
+      <Constraint>Runtime discovery keeps using the native Service.discover contract; the predicate is passed through it rather than replacing it.</Constraint>
+      <Constraint>The live gates must authorize exactly the host version under test (VVOC_HOST_VERSION, defaulting to the newest verified host) and must keep verifying that binary's SHA-256.</Constraint>
+      <Constraint>Host-version refusals remain fail-closed before any config write; tolerated hosts warn but proceed.</Constraint>
+    </Constraints>
+    <AcceptanceCriteria>
+      <Criterion>src/lib/host-compat.ts and src/hosts.json are the single source of the window and verified list, re-exported by plugin-registration so existing call sites are unchanged.</Criterion>
+      <Criterion>isSupportedOpenCodeVersion accepts 2.0.18–2.9.x and refuses 2.0.17, 1.x, 3.x, prereleases, and malformed input; openCodeHostSupport separates verified, tolerated, and unsupported.</Criterion>
+      <Criterion>Runtime discovery passes a predicate instead of an exact version, and RuntimeUnavailableError reports the window.</Criterion>
+      <Criterion>vvoc status and doctor print the support level and verified hosts; install/init/sync/launch warn once on a tolerated host.</Criterion>
+      <Criterion>Package pins are 2.2.5 / effect 4.0.6 / @opentui 0.8.2 and the package compiles and tests green on them.</Criterion>
+      <Criterion>contracts:host and e2e:v2 derive the host version from VVOC_HOST_VERSION or the verified list, and the live probe passes against 2.2.5 with schema-description and argument-normalization observations recorded.</Criterion>
+      <Criterion>bun run host:check reports the newest stable release, its classification, and the next step, and can download that exact host.</Criterion>
+      <Criterion>docs/host-updates.md, README, AGENTS, and the GRACE context, graph, and verification projections describe the window model and the bump train.</Criterion>
+      <Criterion>bun run check, bun run build, bun run pack:check, and bun run release:check pass with fresh output.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-HOST-COMPAT />
+      <M-NATIVE-RUNTIME />
+      <M-CLI-CONFIG />
+      <M-CLI-COMMANDS />
+      <M-AGENT-TOOL-CONTRACT />
+      <M-E2E-V2-HARNESS />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/lib/host-compat.test.ts scripts/host-check.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>bun run contracts:host --probe</ExpectedCommand>
+      <ExpectedCommand>bun run pack:check</ExpectedCommand>
+      <ExpectedCommand>bun run release:check</ExpectedCommand>
+      <ExpectedEvidence>Fresh deterministic output proves window and classification semantics, predicate-based discovery, CLI support reporting, drift reporting, and that the live probe passes on 2.2.5 with recorded host capability observations, without claiming the full nine-tool matrix is green on that host.</ExpectedEvidence>
+    </VerificationIntent>
+  </C-HOST-COMPAT-WINDOW>
+</GraceChangeSpec>

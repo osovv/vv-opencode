@@ -55,6 +55,7 @@ import {
   NATIVE_MATRIX_LIMITS,
   NATIVE_MATRIX_STEPS,
   NATIVE_PINNED_DEPENDENCIES,
+  hostCapabilityObservations,
   NATIVE_PINNED_DEV_DEPENDENCIES,
   OWNED_TOOL_IDS,
   PROBE_CALL_SCRIPT,
@@ -456,7 +457,7 @@ describe("probe observation evaluation", () => {
     expect(evaluation.passed.length).toBeGreaterThan(15);
   });
 
-  test("fails when outbound definition loses enum, closed root, or label description", () => {
+  test("fails when outbound definition loses enum or closed root", () => {
     const obs = goodObservations();
     const entry = obs.outbound[0]?.tools?.[0];
     if (!entry?.function) throw new Error("fixture missing function tool");
@@ -464,17 +465,30 @@ describe("probe observation evaluation", () => {
     const properties = parameters.properties as Record<string, Record<string, unknown>>;
     delete properties.mode;
     parameters.additionalProperties = true;
-    if (properties.label) properties.label.description = "wrong";
     const evaluation = evaluateProbeObservations(obs);
     expect(evaluation.failed.some((item) => item.includes("enum"))).toBe(true);
     expect(evaluation.failed.some((item) => item.includes("closes unknown keys"))).toBe(true);
-    expect(evaluation.failed.some((item) => item.includes("published label description"))).toBe(
-      true,
+  });
+
+  test("records whether the host keeps argument descriptions and how it normalizes args", () => {
+    const retained = goodObservations();
+    expect(hostCapabilityObservations(retained)).toContain("schemaArgumentDescriptions=retained");
+    const dropped = goodObservations();
+    const droppedEntry = dropped.outbound[0]?.tools?.[0];
+    const droppedProperties = droppedEntry?.function?.parameters as
+      | { properties?: Record<string, Record<string, unknown>> }
+      | undefined;
+    if (droppedProperties?.properties?.label) delete droppedProperties.properties.label.description;
+    expect(hostCapabilityObservations(dropped)).toContain("schemaArgumentDescriptions=dropped");
+    expect(hostCapabilityObservations(goodObservations())).toContain(
+      "hostArgNormalization=guard-rejected",
     );
   });
 
-  test("fails when rejected calls still executed", () => {
+  test("fails when a host-normalized call still carries the unknown key", () => {
     const obs = goodObservations();
+    const part = obs.toolParts.find((entry) => entry.callID === "call_unknown_top");
+    if (part?.state) part.state.status = "completed";
     obs.journal = [
       ...obs.journal,
       {
@@ -486,36 +500,32 @@ describe("probe observation evaluation", () => {
     ];
     const evaluation = evaluateProbeObservations(obs);
     expect(
-      evaluation.failed.some(
-        (item) => item.includes("exactly one execution") || item.includes("no execute side effect"),
-      ),
+      evaluation.failed.some((item) => item.includes("executed without the unknown key")),
     ).toBe(true);
   });
 
-  test("fails when a mandatory diagnostic call does not error or lacks exact path", () => {
+  test("fails when the type-invalid call does not error or lacks its exact path", () => {
     const obs = goodObservations();
-    const nested = obs.toolParts.find((part) => part.callID === "call_nested_typo");
-    if (nested?.state) nested.state.status = "completed";
+    const malformed = obs.toolParts.find((part) => part.callID === "call_malformed_nested");
+    if (malformed?.state) malformed.state.status = "completed";
     const evaluation = evaluateProbeObservations(obs);
-    expect(evaluation.failed.some((item) => item.includes("call_nested_typo"))).toBe(true);
+    expect(evaluation.failed.some((item) => item.includes("call_malformed_nested"))).toBe(true);
 
     const obs2 = goodObservations();
-    const nested2 = obs2.toolParts.find((part) => part.callID === "call_nested_typo");
-    if (nested2?.state) nested2.state.error = "INVALID_INPUT: something else";
+    const malformed2 = obs2.toolParts.find((part) => part.callID === "call_malformed_nested");
+    if (malformed2?.state) malformed2.state.error = "INVALID_INPUT: something else";
     const evaluation2 = evaluateProbeObservations(obs2);
     expect(
-      evaluation2.failed.some((item) => item.includes("exact actionable path nested.tpyo")),
+      evaluation2.failed.some((item) => item.includes("exact actionable path nested.depth")),
     ).toBe(true);
   });
 
-  test("fails when default was injected into raw forwarded args", () => {
+  test("fails when the valid call executes more than once", () => {
     const obs = goodObservations();
     const exec = obs.journal.find((entry) => entry.kind === "exec");
-    if (exec && exec.kind === "exec") {
-      (exec.rawArgs as Record<string, unknown>).mode = "quiet";
-    }
+    if (exec && exec.kind === "exec") obs.journal = [...obs.journal, { ...exec }];
     const evaluation = evaluateProbeObservations(obs);
-    expect(evaluation.failed.some((item) => item.includes("original raw args"))).toBe(true);
+    expect(evaluation.failed.some((item) => item.includes("exactly one execution"))).toBe(true);
   });
 
   test("fails when provider credential keys leak or default plugins stay enabled", () => {
@@ -1565,8 +1575,8 @@ describe("fingerprint drift and manifest gates", () => {
       const expectations = readPinnedExpectations(base);
       expect(expectations.ok).toBe(true);
       if (!expectations.ok) return;
-      expect(expectations.pins["@opencode/plugin"]).toBe("2.0.18");
-      expect(expectations.pins["effect"]).toBe("4.0.0-rc.112");
+      expect(expectations.pins["@opencode/plugin"]).toBe("2.2.5");
+      expect(expectations.pins["effect"]).toBe("4.0.6");
       expect(checkPinnedManifests(base, expectations).ok).toBe(true);
 
       // A stale installed legacy manifest is a hard failure.

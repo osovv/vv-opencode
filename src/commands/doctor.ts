@@ -54,6 +54,9 @@ export default defineCommand({
     console.log(`OpenCode version: ${inspection.runtime.version ?? "unavailable"}`);
     console.log(`OpenCode supported range: ${inspection.runtime.supportedRange}`);
     console.log(
+      `OpenCode support: ${inspection.runtime.support ?? "unknown"} (verified hosts: ${inspection.runtime.verifiedHosts?.join(", ") || "none"})`,
+    );
+    console.log(
       `OpenCode supported: ${inspection.runtime.versionSupported === undefined ? "unknown" : inspection.runtime.versionSupported ? "yes" : "no"}`,
     );
     console.log(`OpenCode config: ${inspection.opencode.path}`);

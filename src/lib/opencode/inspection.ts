@@ -58,11 +58,20 @@ import {
   isSupportedOpenCodeVersion,
   SUPPORTED_OPENCODE_VERSION_RANGE,
 } from "./plugin-registration.js";
+import {
+  openCodeHostSupport,
+  VERIFIED_HOST_VERSIONS,
+  type OpenCodeHostSupport,
+} from "../host-compat.js";
 
 export type OpenCodeRuntimeInspection = {
   version?: string;
   supportedRange: string;
   versionSupported?: boolean;
+  /** verified when this exact host carries live-host evidence, tolerated when only in-window. */
+  support?: OpenCodeHostSupport;
+  /** Host versions with fresh evidence, newest first; absent in injected test fixtures. */
+  verifiedHosts?: readonly string[];
   error?: string;
 };
 
@@ -140,6 +149,7 @@ export async function inspectOpenCodeRuntime(
       const detail = result.stderr.trim() || result.stdout.trim() || `exit code ${result.exitCode}`;
       return {
         supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
+        verifiedHosts: VERIFIED_HOST_VERSIONS,
         error: `opencode --version failed: ${detail}`,
       };
     }
@@ -148,6 +158,7 @@ export async function inspectOpenCodeRuntime(
     if (!version) {
       return {
         supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
+        verifiedHosts: VERIFIED_HOST_VERSIONS,
         error: "opencode --version did not return a semantic version",
       };
     }
@@ -156,10 +167,13 @@ export async function inspectOpenCodeRuntime(
       version,
       supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
       versionSupported: isSupportedOpenCodeVersion(version),
+      support: openCodeHostSupport(version),
+      verifiedHosts: VERIFIED_HOST_VERSIONS,
     };
   } catch (error) {
     return {
       supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
+      verifiedHosts: VERIFIED_HOST_VERSIONS,
       error: error instanceof Error ? error.message : String(error),
     };
   }
@@ -168,7 +182,7 @@ export async function inspectOpenCodeRuntime(
 // END_BLOCK_INSPECT_OPENCODE_RUNTIME
 
 // START_CONTRACT: assertSupportedOpenCodeRuntime
-//   PURPOSE: Fail closed on an unverifiable or out-of-window OpenCode host before any runtime/TUI/vvoc/agent/skill write.
+//   PURPOSE: Fail closed on an unverifiable or out-of-window OpenCode host before any runtime/TUI/vvoc/agent/skill write, and disclose a tolerated in-window host that lacks live-host evidence.
 //   INPUTS: { inspect: () => Promise<OpenCodeRuntimeInspection> - Injectable runtime inspector for tests. }
 //   OUTPUTS: { OpenCodeRuntimeInspection - The verified runtime snapshot when the host is in the supported window. }
 //   SIDE_EFFECTS: Runs `opencode --version` through the default inspector; throws on failure or unsupported version.
@@ -186,6 +200,12 @@ export async function assertSupportedOpenCodeRuntime(
   if (runtime.versionSupported !== true) {
     throw new Error(
       `OpenCode ${runtime.version ?? "unknown"} is not supported. vvoc requires ${SUPPORTED_OPENCODE_VERSION_RANGE}.`,
+    );
+  }
+  if (runtime.support === "tolerated") {
+    // In-window but without live-host evidence: keep working, disclose the gap once.
+    console.error(
+      `warning: OpenCode ${runtime.version ?? "unknown"} is inside the supported window but not in the verified list (${runtime.verifiedHosts?.join(", ") || "none"}); config writes are best-effort.`,
     );
   }
   return runtime;

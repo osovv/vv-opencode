@@ -270,7 +270,7 @@ export async function runTuiAcceptance(options: TuiOptions): Promise<TuiAcceptan
       implemented: true,
       sourceCommit: PINNED_SOURCE_COMMIT,
       scenarios,
-      error: "no pinned OpenCode 2.0.18 host binary; set VVOC_E2E_V2_HOST",
+      error: `no OpenCode ${PINNED_HOST_VERSION} host binary; set VVOC_E2E_V2_HOST`,
       note: "TUI acceptance requires the pinned host binary.",
     };
   }

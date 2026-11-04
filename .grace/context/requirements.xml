@@ -242,7 +242,7 @@
     <Constraint>vvoc-managed config may be global under $XDG_CONFIG_HOME/vvoc/ or project-local under .vvoc/, depending on selected scope and command semantics.</Constraint>
     <Constraint>Project-scope writes must stay inside project-local .opencode/ and .vvoc/ paths.</Constraint>
     <Constraint>Native OpenCode config uses the plugins array of package strings or {package, options} objects plus agents, skills, and providers; V1 plugin/agent/provider/command/small_model/tools shapes are refused before mutation, and no dedicated tui.json(c) surface is written.</Constraint>
-    <Constraint>The supported host window is &gt;=2.0.18 &lt;2.0.19; install, init, sync, and launch fail closed outside it, the pinned combined base package registered once in the native plugins array carries both the ./server and ./tui exports, and role intent lives in the vvoc plugins options.modelIntent envelope.</Constraint>
+    <Constraint>The supported host window is &gt;=2.0.18 &lt;3.0.0; install, init, sync, and launch fail closed outside it, the pinned combined base package registered once in the native plugins array carries both the ./server and ./tui exports, and role intent lives in the vvoc plugins options.modelIntent envelope.</Constraint>
     <Constraint>Persisted vvoc data must live under $XDG_DATA_HOME/vvoc/.</Constraint>
     <Constraint>Config writes must be conservative, idempotent, and strict about current schema validity before mutation.</Constraint>
     <Constraint>Role resolution must fail loudly for unknown or invalid semantic role references.</Constraint>

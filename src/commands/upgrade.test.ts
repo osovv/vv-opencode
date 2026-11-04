@@ -398,15 +398,15 @@ test("describeHostUpgradeGuidance - prints a single method-specific command for 
   );
   const joined = lines.join("\n");
   expect(joined).toContain("outside the supported window");
-  expect(joined).toContain("bun add -g @opencode/cli@2.0.18");
-  expect(joined).not.toContain("official OpenCode 2.0.18 binary distribution");
+  expect(joined).toContain("bun add -g @opencode/cli@2.2.5");
+  expect(joined).not.toContain("official OpenCode 2.2.5 binary distribution");
 });
 
 test("describeHostUpgradeGuidance - falls back to both documented paths when the method is unknown", () => {
   const lines = describeHostUpgradeGuidance("1.18.2", null);
   const joined = lines.join("\n");
-  expect(joined).toContain("bun add -g @opencode/cli@2.0.18");
-  expect(joined).toContain("official OpenCode 2.0.18 binary distribution");
+  expect(joined).toContain("bun add -g @opencode/cli@2.2.5");
+  expect(joined).toContain("official OpenCode 2.2.5 binary distribution");
 });
 
 test("runUpgradeFlow - guides the user and exits non-zero when the host is out of window", async () => {
