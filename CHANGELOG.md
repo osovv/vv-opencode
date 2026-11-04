@@ -1,3 +1,11 @@
+## <small>2.3.3 (2026-11-04)</small>
+
+### Summary
+
+Analytics now records the OpenCode host version from the native app identity, so usage records stay correctly attributed on 2.2 hosts that no longer deliver session lifecycle events, and session titles are recovered lazily from the native session record with bounded retries while a failed read never blocks a usage record. The isolated host contract matrix was also made self-consistent on OpenCode 2.2.5 by pinning every vvoc role to the cohort model and keeping the isolated vvoc config at the host child's working directory, and a nonzero host exit now prints bounded stderr and stdout tails so matrix failures are diagnosable.
+
+* fix(analytics): attribute host version from the native app and recover titles lazily ([39ab5ac](https://github.com/osovv/vv-opencode/commit/39ab5ac))
+
 ## <small>2.3.2 (2026-11-04)</small>
 
 ### Summary
