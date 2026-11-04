@@ -1,3 +1,11 @@
+## <small>2.3.1 (2026-11-04)</small>
+
+### Summary
+
+Version 2.3.1 widens OpenCode host compatibility from an exact 2.0.18 pin to a major-bounded supported window of >=2.0.18 <3.0.0, backed by a data-driven verified-host list, so routine upstream patch and minor releases no longer block vvoc install, init, sync, or launch. In-window hosts without live-host evidence are now classified as tolerated and reported with a single warning, while versions outside the window still fail closed before any config write. The release also reports the support level and verified hosts in vvoc status and doctor, moves build pins to 2.2.5 with matching effect and TUI peers, parameterizes the live host gates by the host version under test, and adds a host:check drift reporter plus documented host-update procedure so maintainers can classify new upstream releases and refresh verified evidence without ad-hoc changes.
+
+* feat(host-compat): major-bounded host window with verified list ([65a7eda](https://github.com/osovv/vv-opencode/commit/65a7eda))
+
 ## 2.3.0-rc.9 (2026-10-26)
 
 ### Summary
