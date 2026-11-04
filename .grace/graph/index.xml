@@ -8,6 +8,7 @@
         <M-MODEL-ROLES />
         <M-CONFIG-LAYERS />
         <M-CLI-CONFIG />
+        <M-HOST-COMPAT />
         <M-RELEASE-AUTOMATION />
         <M-CLI-MANAGED-AGENTS />
         <M-CLI-MANAGED-SKILLS />

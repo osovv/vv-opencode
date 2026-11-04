@@ -62,7 +62,7 @@ Every managed skill can also be invoked explicitly when you want to drive the pr
 ## Quick start
 
 ```bash
-bun add -g @opencode/cli@2.0.18   # native OpenCode host, pinned to the supported window
+bun add -g @opencode/cli@2.2.5   # native OpenCode host; >=2.0.18 <3.0.0 is supported
 bun add -g @osovv/vv-opencode
 vvoc install
 ```
@@ -74,7 +74,7 @@ vvoc install
 - writes the canonical `vvoc.json` config;
 - sets `vv-controller` as your default OpenCode agent (`default_agent`), with the spec, planning, review, reflection, and handoff skills auto-triggering by request type.
 
-vv-opencode supports OpenCode `>=2.0.18 <2.0.19` only — V1 hosts and 2.0.19 or newer are outside the supported window, and `vvoc install`/`init`/`sync`/`launch` fail closed with the exact window when the installed host does not match. `vvoc status` and `vvoc doctor` report the installed host version next to that window (`OpenCode supported range: >=2.0.18 <2.0.19`) without changing any files. Install the host from npm as `@opencode/cli` (its `opencode` binary) or from the matching official binary distribution; do not install the legacy `opencode-ai` V1 host.
+vv-opencode supports the OpenCode 2.x line from `>=2.0.18 <3.0.0`. Inside that window a host is either **verified** (listed in `src/hosts.json`, currently `2.2.5`, with live-host evidence) or **tolerated** (any other stable 2.x: vvoc works, warns once, and marks the host in `vvoc status`). Hosts outside the window — 1.x, 3.x, and prereleases — are refused before any write by `vvoc install`/`init`/`sync`/`launch`. `vvoc status` and `vvoc doctor` report the installed version, the window (`OpenCode supported range: >=2.0.18 <3.0.0`), and the verified list without changing any files. See [docs/host-updates.md](docs/host-updates.md) for the upgrade procedure. Install the host from npm as `@opencode/cli` (its `opencode` binary) or from the matching official binary distribution; do not install the legacy `opencode-ai` V1 host.
 
 **Want to try it without touching your global setup?** Scope everything to one project:
 
@@ -89,7 +89,7 @@ Project scope writes only to `./.opencode/` and `./.vvoc/`. A plain `opencode` l
 
 ### Upgrading from vvoc 1.x with a V1 OpenCode host
 
-`vvoc 2.x` is native-only and requires the OpenCode 2.0.18 host. On a machine still running a V1 OpenCode host, `vvoc upgrade` installs `vvoc 2.x`, detects the unsupported host, prints a best-effort method-aware install command, and exits non-zero; it never installs or replaces OpenCode itself. After you install the supported host, the next `vvoc sync` materializes the legacy `opencode.json(c)` into the native V2 shape, validates the result, and writes a timestamped `*.vvoc-backup-<timestamp>` sibling before replacing the file. V1 fields that need a manual decision (provider filters, accepted-but-unsupported fields, `lsp`, or ambiguous provider/model shapes) abort the migration without writing and print a checklist. A legacy `tui.json(c)` is reported, never deleted; OpenCode migrates its own terminal client settings to `cli.json`.
+`vvoc 2.x` is native-only and requires an OpenCode 2.x host inside `>=2.0.18 <3.0.0`. On a machine still running a V1 OpenCode host, `vvoc upgrade` installs `vvoc 2.x`, detects the unsupported host, prints a best-effort method-aware install command, and exits non-zero; it never installs or replaces OpenCode itself. After you install the supported host, the next `vvoc sync` materializes the legacy `opencode.json(c)` into the native V2 shape, validates the result, and writes a timestamped `*.vvoc-backup-<timestamp>` sibling before replacing the file. V1 fields that need a manual decision (provider filters, accepted-but-unsupported fields, `lsp`, or ambiguous provider/model shapes) abort the migration without writing and print a checklist. A legacy `tui.json(c)` is reported, never deleted; OpenCode migrates its own terminal client settings to `cli.json`.
 
 ---
 
@@ -328,9 +328,9 @@ The optional schema-v3 `web` section follows the same layer precedence and is om
 
 ### Diagnostics never mutate
 
-`vvoc status` and `vvoc doctor` report the installed OpenCode version, the exact supported window (`OpenCode supported range: >=2.0.18 <2.0.19`), selected runtime/vvoc config paths, plugin registration, and validation problems without normalizing or rewriting files. `vvoc upgrade` can still finish the package installation when the follow-up `vvoc sync` fails; it then reports a partial upgrade, leaves config unchanged, and tells you to fix the invalid config before rerunning `vvoc sync`.
+`vvoc status` and `vvoc doctor` report the installed OpenCode version, the supported window (`OpenCode supported range: >=2.0.18 <3.0.0`) and the verified host list, selected runtime/vvoc config paths, plugin registration, and validation problems without normalizing or rewriting files. `vvoc upgrade` can still finish the package installation when the follow-up `vvoc sync` fails; it then reports a partial upgrade, leaves config unchanged, and tells you to fix the invalid config before rerunning `vvoc sync`.
 
-Runtime compatibility is window-pinned: install, init, sync, and launch refuse a host outside `>=2.0.18 <2.0.19` before touching config, Guardian evaluates permissions through the native `permission.evaluate` hook, hashline edit refs must use current hash/context anchors, and sync writes current managed agents without deleting old pre-rename user or command entries.
+Runtime compatibility is window-bounded: install, init, sync, and launch refuse a host outside `>=2.0.18 <3.0.0` before touching config, Guardian evaluates permissions through the native `permission.evaluate` hook, hashline edit refs must use current hash/context anchors, and sync writes current managed agents without deleting old pre-rename user or command entries.
 
 ### Release channels
 
@@ -357,7 +357,7 @@ An explicit `--channel latest|rc` argument may only confirm the derived channel;
 
 ### Stability and compatibility
 
-Since 1.0, vv-opencode treats the daily-driver surface as stable. The compatibility surfaces are: `vvoc install` / `vvoc sync` / `vvoc launch`, the supported host window (`>=2.0.18 <2.0.19`), the managed skill names (`vv-spec`, `vv-plan`, `vv-execute`, `vv-review`, `vv-reflect`, `vv-handoff`), the published package exports, canonical vvoc schema v3, and the date-prefixed `.vvoc/specs/YYYY-MM-DD-<slug>/` artifact layout. Breaking workflow or config changes are documented in release notes. The project still prefers conservative, explicit changes over hidden migration magic: user-owned config is never silently clobbered, and invalid current config fails loudly.
+Since 1.0, vv-opencode treats the daily-driver surface as stable. The compatibility surfaces are: `vvoc install` / `vvoc sync` / `vvoc launch`, the supported host window (`>=2.0.18 <3.0.0`), the managed skill names (`vv-spec`, `vv-plan`, `vv-execute`, `vv-review`, `vv-reflect`, `vv-handoff`), the published package exports, canonical vvoc schema v3, and the date-prefixed `.vvoc/specs/YYYY-MM-DD-<slug>/` artifact layout. Breaking workflow or config changes are documented in release notes. The project still prefers conservative, explicit changes over hidden migration magic: user-owned config is never silently clobbered, and invalid current config fails loudly.
 
 ### Deterministic local launch
 

@@ -11,7 +11,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   PINNED_HOST_VERSION - Pinned OpenCode host version accepted by the harness.
+//   PINNED_HOST_VERSION - OpenCode host version under test (VVOC_HOST_VERSION or the newest verified host).
 //   PINNED_HOST_SHA256 - SHA-256 of the pinned host binary.
 //   PINNED_SOURCE_COMMIT - Pinned native host source commit recorded in evidence.
 //   DEFAULT_HOST_BINARY - Default pinned host binary location for local acceptance.
@@ -74,16 +74,21 @@ import {
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, parse, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { VERIFIED_HOST_VERSION } from "../../src/lib/host-compat.ts";
 
-/** Pinned OpenCode host version accepted by the harness. */
-export const PINNED_HOST_VERSION = "2.0.18";
-/** SHA-256 of the pinned host binary. */
+/** OpenCode host version under test: VVOC_HOST_VERSION, else the newest verified host. */
+export const PINNED_HOST_VERSION = process.env.VVOC_HOST_VERSION ?? VERIFIED_HOST_VERSION;
+/** SHA-256 of the host binary under test; override with VVOC_E2E_V2_HOST_SHA256. */
 export const PINNED_HOST_SHA256 =
+  process.env.VVOC_E2E_V2_HOST_SHA256 ??
   "10d405161d8b9595f4a2ec31254e961969e6ca3f8239ac9bd55b6ff6431dc24f";
-/** Pinned native host source commit recorded in evidence. */
-export const PINNED_SOURCE_COMMIT = "cd9a14a6b688d4021bee381dfd39d2cef9c0f862";
-/** Default pinned host binary location for local acceptance. */
-export const DEFAULT_HOST_BINARY = "/tmp/opencode/vvoc-seam-host-2.0.18/opencode";
+/** Native host source commit recorded in evidence; override with VVOC_E2E_V2_SOURCE_COMMIT. */
+export const PINNED_SOURCE_COMMIT =
+  process.env.VVOC_E2E_V2_SOURCE_COMMIT ?? "cd9a14a6b688d4021bee381dfd39d2cef9c0f862";
+/** Host binary under test: VVOC_E2E_V2_HOST, else the version-pinned seam host location. */
+export const DEFAULT_HOST_BINARY =
+  process.env.VVOC_E2E_V2_HOST ??
+  `/tmp/opencode/vvoc-seam-host-${PINNED_HOST_VERSION}/opencode`;
 /** Marker file proving the harness created a scratch directory. */
 export const OWNERSHIP_MARKER = ".vvoc-e2e-owner.json";
 

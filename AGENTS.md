@@ -84,11 +84,15 @@ the conflict rather than guessing.
 - Package: `@osovv/vv-opencode`.
 - Tests: Bun test files colocated under `src/` and `scripts/`.
 - Quality tools: TypeScript, `oxlint`, `oxfmt`, and `lefthook`.
-- Supported host window: OpenCode `>=2.0.18 <2.0.19` (declared in `package.json`
-  `engines.opencode`; install/init/sync/launch fail closed outside it).
-- Native dependency pins: `@opencode/{plugin,client,schema,ai,protocol}` `2.0.18`,
-  `effect` `4.0.0-rc.112` (schema-owned peer used by `@opencode/schema` codecs),
-  `zod` `4.1.8`, `@opentui/{core,keymap,solid}` `0.5.12`, `solid-js` `1.9.15`.
+- Supported host window: OpenCode `>=2.0.18 <3.0.0` (declared in `package.json`
+  `engines.opencode` and owned by `src/lib/host-compat.ts`; install/init/sync/launch
+  fail closed outside it, and in-window hosts without live-host evidence are reported
+  as tolerated instead of refused). Verified hosts live in `src/hosts.json`; the
+  update procedure is `docs/host-updates.md` and the drift reporter is
+  `bun run host:check`.
+- Native dependency pins: `@opencode/{plugin,client,schema,ai,protocol}` `2.2.5`,
+  `effect` `4.0.6` (schema-owned peer used by `@opencode/schema` codecs),
+  `zod` `4.1.8`, `@opentui/{core,keymap,solid}` `0.8.2`, `solid-js` `1.9.15`.
   There is no `@opencode-ai/*` dependency.
 - Public plugins: eleven native server plugins (Guardian, Hashline Edit, Model
   Roles, System Context Injection, Workflow, Secrets Redaction, Web Tools, Tool

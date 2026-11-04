@@ -29,7 +29,8 @@
 // END_CHANGE_SUMMARY
 import { realpathSync } from "node:fs";
 import { defineCommand } from "citty";
-import { inspectOpenCodeRuntime } from "../lib/opencode.js";
+import { inspectOpenCodeRuntime, SUPPORTED_OPENCODE_VERSION_RANGE } from "../lib/opencode.js";
+import { VERIFIED_HOST_VERSION } from "../lib/host-compat.js";
 import { getPackageVersion, PACKAGE_NAME } from "../lib/package.js";
 
 const NPM_REGISTRY = "https://registry.npmjs.org";
@@ -247,17 +248,17 @@ export function describeHostUpgradeGuidance(
 ): string[] {
   const method = resolveHostInstallMethod(commandPath);
   const lines = [
-    `OpenCode ${installedVersion} is outside the supported window; vvoc 2.x requires OpenCode 2.0.18.`,
+    `OpenCode ${installedVersion} is outside the supported window; vvoc 2.x supports ${SUPPORTED_OPENCODE_VERSION_RANGE}.`,
   ];
   if (method === "bun-global" || method === "npm-global") {
     lines.push("Install the supported host, then run `vvoc sync` to materialize your config:");
-    lines.push("  bun add -g @opencode/cli@2.0.18");
+    lines.push(`  bun add -g @opencode/cli@${VERIFIED_HOST_VERSION}`);
   } else {
     lines.push(
       "Install the supported host from one of the documented paths, then run `vvoc sync`:",
     );
-    lines.push("  bun add -g @opencode/cli@2.0.18");
-    lines.push("  or the matching official OpenCode 2.0.18 binary distribution");
+    lines.push(`  bun add -g @opencode/cli@${VERIFIED_HOST_VERSION}`);
+    lines.push(`  or the matching official OpenCode ${VERIFIED_HOST_VERSION} binary distribution`);
   }
   return lines;
 }

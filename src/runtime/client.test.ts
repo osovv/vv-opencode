@@ -1,7 +1,7 @@
 // FILE: src/runtime/client.test.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify native same-instance full-client authentication: exact-version discovery, native registration headers, random RPC challenge, fail-closed mismatch handling, and credential-safe diagnostics.
+//   PURPOSE: Verify native same-instance full-client authentication: predicate-based discovery, native registration headers, random RPC challenge, fail-closed mismatch handling, and credential-safe diagnostics.
 //   SCOPE: Deterministic fixture-host assertions for client.ts; no real host, network, or V1 client.
 //   DEPENDS: [bun:test, src/runtime/client.js, src/runtime/types.js]
 //   LINKS: [M-NATIVE-RUNTIME, V-M-NATIVE-RUNTIME]
@@ -10,6 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
+//   TEST_HOST_VERSION - Host version the fake discovery records in these tests.
 //   AUTH_PASSWORD - Fixture runtime password the client must encode.
 //   AUTH_HEADER - Expected Basic authorization header for the fixture password.
 //   makeLocation - Builds a runtime location fixture.
@@ -19,7 +20,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-001 - Covered per-instance challenge channels, mismatch fail-closed behavior, and credential-safe diagnostics.]
+//   LAST_CHANGE: [C-HOST-COMPAT-WINDOW T-002 - Discovery now records the string-or-predicate service version; the fake host accepts both.]
+//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-001 - Covered per-instance challenge channels, mismatch fail-closed behavior, and credential-safe diagnostics.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -27,7 +29,6 @@ import { acquireNativeClient, nativeRuntimeChallengeID } from "./client.js";
 import {
   RuntimeChallengeError,
   RuntimeUnavailableError,
-  SUPPORTED_SERVICE_VERSION,
   type RuntimeClient,
   type RuntimeContext,
   type RuntimeDeps,
@@ -36,6 +37,9 @@ import {
   type RuntimeRpcCallOptions,
   type RuntimeRpcMethods,
 } from "./types.js";
+
+/** Host version the fake discovery records; the production predicate is covered in host-compat.test.ts. */
+const TEST_HOST_VERSION = "2.0.18";
 
 const AUTH_PASSWORD = "runtime-secret";
 const AUTH_HEADER = "Basic b3BlbmNvZGU6cnVudGltZS1zZWNyZXQ=";
@@ -53,7 +57,7 @@ class FakeNativeClientHost {
   disposeCalls = 0;
   discoverCalls = 0;
   makeClientCalls = 0;
-  discoveredVersion: string | undefined;
+  discoveredVersion: string | ((version: string) => boolean) | undefined;
   lastHeaders: Record<string, string> | undefined;
   discovery: RuntimeEndpoint | undefined = {
     url: "http://127.0.0.1:41234",
@@ -86,7 +90,7 @@ class FakeNativeClientHost {
 
   createDeps(): RuntimeDeps<RuntimeClient> {
     return {
-      serviceVersion: SUPPORTED_SERVICE_VERSION,
+      serviceVersion: TEST_HOST_VERSION,
       discoverService: async (options) => {
         this.discoverCalls += 1;
         this.discoveredVersion = options.version;
@@ -157,7 +161,7 @@ describe("acquireNativeClient", () => {
     expect(acquisition.client).toBeDefined();
     expect(host.registerCalls).toBe(1);
     expect(host.discoverCalls).toBe(1);
-    expect(host.discoveredVersion).toBe(SUPPORTED_SERVICE_VERSION);
+    expect(host.discoveredVersion).toBe(TEST_HOST_VERSION);
     expect(host.makeClientCalls).toBe(1);
 
     const handler = host.probeHandler(nativeRuntimeChallengeID("instance-a"));

@@ -1,16 +1,18 @@
 // FILE: src/runtime/types.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Define the shared native runtime vocabulary: the exact supported host version, structural plugin-context seams, resource-permission contracts, and durable family-binding/materialized-policy/auxiliary contracts consumed by native plugins.
+//   PURPOSE: Define the shared native runtime vocabulary: the supported host window and service-compatibility predicate, structural plugin-context seams, resource-permission contracts, and durable family-binding/materialized-policy/auxiliary contracts consumed by native plugins.
 //   SCOPE: Type-only native contracts plus pure location/identity/key helpers and error constructors. Durable family bindings are credential-free projections; consumers receive a live-credential materialization. No service discovery, authentication, RPC registration, permission flow, snapshot persistence, filesystem, or network I/O.
-//   DEPENDS: [@opencode/plugin, @opencode/client, @opencode/schema/agent, @opencode/schema/location, @opencode/schema/permission, @opencode/schema/rpc, @opencode/schema/session]
+//   DEPENDS: [@opencode/plugin, @opencode/client, @opencode/schema/agent, @opencode/schema/location, @opencode/schema/permission, @opencode/schema/rpc, @opencode/schema/session, src/lib/host-compat.ts]
 //   LINKS: [M-NATIVE-RUNTIME, V-M-NATIVE-RUNTIME]
 //   ROLE: TYPES
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   SUPPORTED_SERVICE_VERSION - Exact native OpenCode service version this runtime is compatible with.
+//   SUPPORTED_SERVICE_RANGE - Human-readable native OpenCode host window this runtime accepts.
+//   isSupportedServiceVersion - Native service-version predicate handed to discovery.
+//   DeepMutable - Local recursive mutable projection of a readonly native schema type.
 //   RuntimeLocation - Structural subset of Location.Info the runtime needs for identity and routing.
 //   RuntimeIdentity - Stable per-location identity used to share one runtime inside a host.
 //   RuntimeRpcRegistration - Releasable native RPC registration handle.
@@ -77,7 +79,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SNAPSHOT-ANCHORING-REDESIGN T-004/T-005 - Replaced runtime staged-admission contracts with durable credential-free family bindings, explicit rebind, and deletion cleanup while retaining accept/admitOwned compatibility entry points for plugins.]
+//   LAST_CHANGE: [C-HOST-COMPAT-WINDOW T-002 - Replaced the exact SUPPORTED_SERVICE_VERSION string with the host-compat window predicate: discovery now accepts any stable host inside the supported major-bounded window, and DeepMutable is owned locally because the host package no longer ships @opencode/plugin/promise/types.]
+//   PREVIOUS: [C-SNAPSHOT-ANCHORING-REDESIGN T-004/T-005 - Replaced runtime staged-admission contracts with durable credential-free family bindings, explicit rebind, and deletion cleanup while retaining accept/admitOwned compatibility entry points for plugins.]
 //   PREVIOUS: [C-OPENCODE-V2-NATIVE T-009 - Added the immutable caller-supplied admission config to SnapshotAdmissionRequest and the native app coordination identity to RuntimeContext.]
 // END_CHANGE_SUMMARY
 
@@ -90,7 +93,10 @@ import type {
 } from "@opencode/client";
 import type { Rpc } from "@opencode/schema/rpc";
 import type { RpcHandlers } from "@opencode/plugin/promise/rpc";
-import type { DeepMutable } from "@opencode/plugin/promise/types";
+import {
+  isSupportedOpenCodeVersion,
+  SUPPORTED_OPENCODE_VERSION_RANGE,
+} from "../lib/host-compat.js";
 import type { RawOpenCodeModelIntent } from "../lib/config-layers.js";
 import type { VvocConfig } from "../lib/vvoc-config.js";
 import type { Agent } from "@opencode/schema/agent";
@@ -98,8 +104,24 @@ import type { Model } from "@opencode/schema/model";
 import type { Permission } from "@opencode/schema/permission";
 import type { Session } from "@opencode/schema/session";
 
-/** Exact native host version this runtime authenticates against; the pinned host is 2.0.18. */
-export const SUPPORTED_SERVICE_VERSION = "2.0.18";
+/** Human-readable native host window this runtime accepts. */
+export const SUPPORTED_SERVICE_RANGE = SUPPORTED_OPENCODE_VERSION_RANGE;
+
+/** Native service-version predicate handed to discovery; accepts any stable host inside the window. */
+export function isSupportedServiceVersion(version: string): boolean {
+  return isSupportedOpenCodeVersion(version);
+}
+
+/**
+ * Recursive mutable projection of a readonly native schema type. Owned here
+ * because the native host package no longer exports a shared helper module for
+ * it; the projection is structural and carries no host runtime behavior.
+ */
+export type DeepMutable<T> = T extends readonly (infer Element)[]
+  ? DeepMutable<Element>[]
+  : T extends object
+    ? { -readonly [Key in keyof T]: DeepMutable<T[Key]> }
+    : T;
 
 /** Native event type carrying a terminal permission reply. */
 export const PERMISSION_REPLIED_EVENT = "permission.replied";
@@ -249,10 +271,12 @@ export interface RuntimeEndpoint {
  * in-memory implementations.
  */
 export interface RuntimeDeps<Client extends RuntimeClient = OpenCodeClient> {
-  /** Exact version required from the already-running service. */
-  readonly serviceVersion: string;
+  /** Required service version: an exact string or a compatibility predicate. */
+  readonly serviceVersion: string | ((version: string) => boolean);
   /** Discover a healthy, compatible already-running service; never starts one. */
-  discoverService(options: { readonly version: string }): Promise<RuntimeEndpoint | undefined>;
+  discoverService(options: {
+    readonly version: string | ((version: string) => boolean);
+  }): Promise<RuntimeEndpoint | undefined>;
   /** Create native basic-auth headers from the service registration. */
   serviceHeaders(endpoint: RuntimeEndpoint): Record<string, string> | undefined;
   /** Build the full native client for the discovered endpoint. */
@@ -349,7 +373,7 @@ export class RuntimeUnavailableError extends Error {
 
   constructor() {
     super(
-      `No compatible OpenCode ${SUPPORTED_SERVICE_VERSION} service is registered for this plugin instance.`,
+      `No compatible OpenCode ${SUPPORTED_SERVICE_RANGE} service is registered for this plugin instance.`,
     );
     this.name = "RuntimeUnavailableError";
   }

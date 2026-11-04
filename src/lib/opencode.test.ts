@@ -154,28 +154,32 @@ describe("ensurePackageConfigText native plugins", () => {
 });
 
 describe("OpenCode runtime compatibility", () => {
-  test("accepts only the exact supported host window", () => {
+  test("exports the major-bounded supported window", () => {
     expect(MIN_SUPPORTED_OPENCODE_VERSION).toBe("2.0.18");
-    expect(MAX_SUPPORTED_OPENCODE_VERSION_EXCLUSIVE).toBe("2.0.19");
-    expect(SUPPORTED_OPENCODE_VERSION_RANGE).toBe(">=2.0.18 <2.0.19");
+    expect(MAX_SUPPORTED_OPENCODE_VERSION_EXCLUSIVE).toBe("3.0.0");
+    expect(SUPPORTED_OPENCODE_VERSION_RANGE).toBe(">=2.0.18 <3.0.0");
     expect(isSupportedOpenCodeVersion("2.0.18")).toBe(true);
-    expect(isSupportedOpenCodeVersion("v2.0.18")).toBe(true);
+    expect(isSupportedOpenCodeVersion("v2.2.5")).toBe(true);
   });
 
-  test("rejects older, newer, prerelease, and malformed versions", () => {
+  test("rejects older, next-major, prerelease, and malformed versions", () => {
     expect(isSupportedOpenCodeVersion("2.0.17")).toBe(false);
-    expect(isSupportedOpenCodeVersion("2.0.19")).toBe(false);
-    expect(isSupportedOpenCodeVersion("2.1.0")).toBe(false);
     expect(isSupportedOpenCodeVersion("1.18.33")).toBe(false);
+    expect(isSupportedOpenCodeVersion("3.0.0")).toBe(false);
     expect(isSupportedOpenCodeVersion("2.0.18-beta.1")).toBe(false);
     expect(isSupportedOpenCodeVersion("2.0.18-rc.1")).toBe(false);
     expect(isSupportedOpenCodeVersion("latest")).toBe(false);
   });
 
-  test("inspects supported and unsupported command output deterministically", async () => {
-    const supported = await inspectOpenCodeRuntime(async () => ({
+  test("inspects supported, tolerated, and unsupported command output deterministically", async () => {
+    const verified = await inspectOpenCodeRuntime(async () => ({
       exitCode: 0,
-      stdout: "v2.0.18\n",
+      stdout: "v2.2.5\n",
+      stderr: "",
+    }));
+    const tolerated = await inspectOpenCodeRuntime(async () => ({
+      exitCode: 0,
+      stdout: "2.2.6\n",
       stderr: "",
     }));
     const older = await inspectOpenCodeRuntime(async () => ({
@@ -183,9 +187,9 @@ describe("OpenCode runtime compatibility", () => {
       stdout: "1.18.33\n",
       stderr: "",
     }));
-    const newer = await inspectOpenCodeRuntime(async () => ({
+    const nextMajor = await inspectOpenCodeRuntime(async () => ({
       exitCode: 0,
-      stdout: "2.0.19\n",
+      stdout: "3.0.0\n",
       stderr: "",
     }));
     const prerelease = await inspectOpenCodeRuntime(async () => ({
@@ -194,41 +198,49 @@ describe("OpenCode runtime compatibility", () => {
       stderr: "",
     }));
 
-    expect(supported).toEqual({
-      version: "2.0.18",
-      supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
-      versionSupported: true,
-    });
+    expect(verified.versionSupported).toBe(true);
+    expect(verified.support).toBe("verified");
+    expect(verified.verifiedHosts).toContain("2.2.5");
+    expect(tolerated.versionSupported).toBe(true);
+    expect(tolerated.support).toBe("tolerated");
     expect(older.versionSupported).toBe(false);
-    expect(newer.versionSupported).toBe(false);
+    expect(older.support).toBe("unsupported");
+    expect(nextMajor.versionSupported).toBe(false);
     expect(prerelease.versionSupported).toBe(false);
   });
 
   test("assertSupportedOpenCodeRuntime refuses out-of-window and unavailable hosts", async () => {
     const supported = await assertSupportedOpenCodeRuntime(async () => ({
-      version: "2.0.18",
+      version: "2.2.5",
       supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
       versionSupported: true,
+      support: "verified",
+      verifiedHosts: ["2.2.5"],
     }));
-    expect(supported.version).toBe("2.0.18");
+    expect(supported.version).toBe("2.2.5");
 
     await expect(
       assertSupportedOpenCodeRuntime(async () => ({
         version: "1.18.33",
         supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
         versionSupported: false,
+        support: "unsupported",
+        verifiedHosts: ["2.2.5"],
       })),
     ).rejects.toThrow("OpenCode 1.18.33 is not supported");
     await expect(
       assertSupportedOpenCodeRuntime(async () => ({
-        version: "2.0.19",
+        version: "3.0.0",
         supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
         versionSupported: false,
+        support: "unsupported",
+        verifiedHosts: ["2.2.5"],
       })),
-    ).rejects.toThrow("OpenCode 2.0.19 is not supported");
+    ).rejects.toThrow("OpenCode 3.0.0 is not supported");
     await expect(
       assertSupportedOpenCodeRuntime(async () => ({
         supportedRange: SUPPORTED_OPENCODE_VERSION_RANGE,
+        verifiedHosts: ["2.2.5"],
         error: "opencode --version failed: ENOENT",
       })),
     ).rejects.toThrow("OpenCode host is not verifiable");
@@ -1302,7 +1314,7 @@ describe("inspectInstallation", () => {
         },
       });
       expect(incompatible.problems).toContain(
-        "OpenCode 1.18.33 is not supported; vvoc requires >=2.0.18 <2.0.19",
+        "OpenCode 1.18.33 is not supported; vvoc requires >=2.0.18 <3.0.0",
       );
     } finally {
       await rm(configHome, { recursive: true, force: true });

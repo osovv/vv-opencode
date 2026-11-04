@@ -1123,7 +1123,7 @@ export function requireHostBinary(env: NodeJS.ProcessEnv = process.env): string 
   const binary = discoverHostBinary(env);
   if (binary === undefined) {
     throw new Error(
-      "no pinned OpenCode 2.0.18 host binary; set VVOC_E2E_V2_HOST or install to /tmp/opencode/vvoc-seam-host-2.0.18/opencode",
+      `no OpenCode ${PINNED_HOST_VERSION} host binary; set VVOC_E2E_V2_HOST or install to /tmp/opencode/vvoc-seam-host-${PINNED_HOST_VERSION}/opencode`,
     );
   }
   return binary;

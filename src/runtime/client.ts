@@ -36,7 +36,7 @@ import { Rpc } from "@opencode/plugin";
 import {
   RuntimeChallengeError,
   RuntimeUnavailableError,
-  SUPPORTED_SERVICE_VERSION,
+  isSupportedServiceVersion,
   type RuntimeClient,
   type RuntimeContext,
   type RuntimeDeps,
@@ -138,7 +138,7 @@ export async function disposeQuietly(
 // START_BLOCK_NATIVE_DEPS
 /** Default native discovery/header/client implementation. */
 export const nativeRuntimeDeps: RuntimeDeps<OpenCodeClient> = {
-  serviceVersion: SUPPORTED_SERVICE_VERSION,
+  serviceVersion: isSupportedServiceVersion,
   discoverService: (options) => Service.discover({ version: options.version }),
   serviceHeaders: (endpoint: Endpoint) => Service.headers(endpoint),
   makeClient: ({ baseUrl, headers }) => OpenCode.make({ baseUrl, headers }),

@@ -61,7 +61,7 @@ test("status prints built-in role inventory after init-style seeding", async () 
     expect(stdout).toContain("Roles:");
     expect(stdout).toContain("OpenCode source: project");
     expect(stdout).toContain("OpenCode version:");
-    expect(stdout).toContain("OpenCode supported range: >=2.0.18 <2.0.19");
+    expect(stdout).toContain("OpenCode supported range: >=2.0.18 <3.0.0");
     expect(stdout).toContain("TUI package registered: yes");
     expect(stdout).toContain("vvoc source: project");
     expect(stdout).toContain("Orchestration profile: balanced");

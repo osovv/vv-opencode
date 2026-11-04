@@ -25,7 +25,7 @@
     <Global>vvoc install and vvoc sync may write native OpenCode config (plugins, agents, skills) under $XDG_CONFIG_HOME/opencode and vvoc config under $XDG_CONFIG_HOME/vvoc after verifying the exact supported host window.</Global>
     <Project>Project scope writes native OpenCode files only inside .opencode and vvoc files only inside .vvoc under the selected project root.</Project>
     <Launch>vvoc launch preflights the supported native host window, pins OPENCODE_CONFIG and VVOC_CONFIG, conditionally pins the native OPENCODE_CONFIG_DIR discovery root, and forwards passthrough args for deterministic sandboxed OpenCode startup.</Launch>
-    <HostWindow>The supported native host window is &gt;=2.0.18 &lt;2.0.19; install, init, sync, and launch fail closed outside it, and vvoc status/doctor report the installed version against that window without mutating files.</HostWindow>
+    <HostWindow>The supported native host window is &gt;=2.0.18 &lt;3.0.0; install, init, sync, and launch fail closed outside it, in-window hosts without live-host evidence are reported as tolerated, and vvoc status/doctor report the installed version, the window, and the verified host list without mutating files.</HostWindow>
   </InstallAndSync>
   <ReleaseGates>
     <Command>bun run typecheck</Command>
