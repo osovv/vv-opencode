@@ -84,6 +84,13 @@ describe("verified host list", () => {
     expect(isVerifiedOpenCodeVersion(`v${VERIFIED_HOST_VERSION}`)).toBe(true);
   });
 
+  test("package.json engines declares the same supported window", async () => {
+    const pkg = (await Bun.file(new URL("../../package.json", import.meta.url)).json()) as {
+      engines?: Record<string, string>;
+    };
+    expect(pkg.engines?.opencode).toBe(SUPPORTED_OPENCODE_VERSION_RANGE);
+  });
+
   test("hosts.json records the verified versions it ships", () => {
     expect(Array.isArray(hosts.verified)).toBe(true);
     expect(hosts.verified.length).toBeGreaterThan(0);
