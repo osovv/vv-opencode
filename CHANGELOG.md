@@ -1,3 +1,11 @@
+## <small>2.3.2 (2026-11-04)</small>
+
+### Summary
+
+Version 2.3.2 fixes a mismatch between the published package manifest and the runtime host-compatibility range. The previous release declared engines.opencode as >=2.0.18 <2.0.19 even though the runtime already supported >=2.0.18 <3.0.0, which could cause installs to be rejected on otherwise supported OpenCode hosts. The manifest now declares the same widened window as the runtime, and a regression test pins engines.opencode to the host-compat range so the two cannot drift apart again. Users on supported newer hosts should now be able to install and use the package without a false compatibility failure.
+
+* fix(host-compat): declare the widened host window in engines.opencode ([8dc3117](https://github.com/osovv/vv-opencode/commit/8dc3117))
+
 ## <small>2.3.1 (2026-11-04)</small>
 
 ### Summary
