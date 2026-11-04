@@ -1,0 +1,123 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-HOST-RELEASE-FOLLOWUPS>
+    <IntentSummary>Read the host version from the native app identity, recover session titles lazily from the native session record with bounded retries, and make the isolated nine-tool matrix pass on 2.2.5 by pinning vvoc roles to the cohort model, placing the vvoc config at the host child's working directory, and printing host stderr/stdout tails on a nonzero exit.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-PLUGIN-ANALYTICS</Value>
+        <Value>M-E2E-V2-HARNESS</Value>
+        <Value>src/plugins/analytics/index.ts</Value>
+        <Value>src/plugins/analytics/index.test.ts</Value>
+        <Value>scripts/check-tool-contracts-host.ts</Value>
+        <Value>scripts/check-tool-contracts-host.test.ts</Value>
+      </MustExist>
+      <MustContain>
+        <File>src/plugins/analytics/index.ts</File>
+        <Text>sessionMetadata.get(input.sessionID)?.version</Text>
+      </MustContain>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-PLUGIN-ANALYTICS</Module>
+        <Module>M-E2E-V2-HARNESS</Module>
+      </MustVerify>
+      <MustContain>
+        <File>src/plugins/analytics/index.ts</File>
+        <Text>ensureSessionMetadata</Text>
+      </MustContain>
+      <MustContain>
+        <File>src/plugins/analytics/index.ts</File>
+        <Text>app?.version</Text>
+      </MustContain>
+      <MustContain>
+        <File>scripts/check-tool-contracts-host.ts</File>
+        <Text>buildHostVvocConfig(model: string)</Text>
+      </MustContain>
+      <MustNotContain>
+        <File>src/plugins/analytics/index.ts</File>
+        <Text>sessionMetadata.get(input.sessionID)?.version</Text>
+      </MustNotContain>
+      <MustPassCommand>
+        <Command>bun test src/plugins/analytics/index.test.ts scripts/check-tool-contracts-host.test.ts</Command>
+        <Command>bun run check</Command>
+        <Command>bun run contracts:host</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <DurableScope>
+      <GraphAnchors>
+        <M-PLUGIN-ANALYTICS />
+        <M-E2E-V2-HARNESS />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-PLUGIN-ANALYTICS />
+        <V-M-E2E-V2-HARNESS />
+      </VerificationAnchors>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>src/plugins/analytics/index.ts</File>
+      <File>src/plugins/analytics/index.test.ts</File>
+      <File>src/runtime/context.ts</File>
+      <File>scripts/check-tool-contracts-host.ts</File>
+      <File>scripts/check-tool-contracts-host.test.ts</File>
+      <File>docs/host-updates.md</File>
+      <File>.grace/context/technology.xml</File>
+      <File>.grace/changes/archive/C-HOST-RELEASE-FOLLOWUPS/spec.xml</File>
+      <File>.grace/changes/archive/C-HOST-RELEASE-FOLLOWUPS/plan.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Attribute the host version from the native app identity.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Analytics reads ctx.app.version once at setup and writes it into every usage record.</Criterion>
+          <Criterion>Existing 2.0.x behavior is preserved; the record schema is unchanged.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/analytics/index.test.ts</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Recover session titles lazily with bounded retries.</Title>
+        <DependsOn>
+          <Task>T-001</Task>
+        </DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>First activity on a session without session.created reads the native session record, caches the title, and emits the session record.</Criterion>
+          <Criterion>While the title is empty, at most three refreshes are attempted, including at the terminal execution boundary.</Criterion>
+          <Criterion>A failed session read never blocks the usage record and emits no session record.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/analytics/index.test.ts</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Make the isolated nine-tool matrix self-consistent on 2.2.5.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>buildHostVvocConfig pins every role to the cohort model and the file is written to the host child's working directory as well as the workspace.</Criterion>
+          <Criterion>The matrix registers all nine owned tools and passes every row on 2.2.5.</Criterion>
+          <Criterion>A nonzero host exit prints bounded stderr and stdout tails.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test scripts/check-tool-contracts-host.test.ts</Command>
+          <Command>bun run contracts:host</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Document the observations and run the final gates.</Title>
+        <DependsOn>
+          <Task>T-002</Task>
+          <Task>T-003</Task>
+        </DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>docs/host-updates.md records the green matrix and the harness requirements.</Criterion>
+          <Criterion>bun run check, build, pack:check, release:check, and contracts:host pass.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run check</Command>
+          <Command>bun run pack:check</Command>
+          <Command>bun run release:check</Command>
+        </Verification>
+      </T-004>
+    </ImplementationPlan>
+  </C-HOST-RELEASE-FOLLOWUPS>
+</GraceChangePlan>

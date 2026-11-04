@@ -1401,12 +1401,15 @@ describe("host harness generation and isolation", () => {
     expect(source).not.toContain("src/plugins/workflow/index.ts");
   });
 
-  test("builds an isolated project vvoc config with only a synthetic Exa credential", () => {
-    const text = buildHostVvocConfig();
+  test("builds an isolated project vvoc config with a synthetic Exa credential and cohort roles", () => {
+    const text = buildHostVvocConfig("vvoc-probe-openai/vvoc-deepseek-probe");
     const parsed = parseVvocConfigText(text, "host vvoc");
     expect(parsed.web?.search?.provider).toBe("exa");
     expect(parsed.web?.search?.apiKey).toBe(SYNTHETIC_EXA_API_KEY);
     expect(text).not.toContain("ANTHROPIC_API_KEY");
+    expect(Object.values(parsed.roles)).toEqual(
+      Array.from({ length: Object.keys(parsed.roles).length }, () => "vvoc-probe-openai/vvoc-deepseek-probe"),
+    );
   });
 
   test("builds a native cohort config with synthetic primary and child agents only", () => {

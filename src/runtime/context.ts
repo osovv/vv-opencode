@@ -1332,8 +1332,12 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
             ) {
               return;
             }
+            const describeSelection = (selection: ModelSelection | undefined): string =>
+              selection === undefined
+                ? "unresolved"
+                : `${selection.providerID}/${selection.modelID}${selection.variant === undefined ? "" : `#${selection.variant}`}`;
             throw new SnapshotAdmissionError(
-              `Resolved ${kind} model ${actual?.providerID ?? "?"}/${actual?.modelID ?? "?"} does not match the captured family selection for ${familyId}.`,
+              `Resolved ${kind} model ${describeSelection(actual)} does not match the captured family selection ${describeSelection(expected)} for ${familyId}.`,
             );
           }
           return;

@@ -1,0 +1,40 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-HOST-RELEASE-FOLLOWUPS>
+    <Summary>Restore analytics attribution on OpenCode 2.2 hosts and make the full nine-tool live matrix pass on 2.2.5, closing the two gaps observed after the host-window release.</Summary>
+    <Problem>After moving to the 2.2.5 host, analytics stopped recording the host version and session titles: the 2.2 event stream no longer delivers session.created/renamed to plugins, and the plugin read the version from that event. The full contracts matrix also failed on 2.2.5 because the isolated harness wrote its vvoc config outside the host child's working directory, so the runtime fell back to the built-in role defaults (openai/gpt-5.6-sol#xhigh) and admission rejected the probe model; the failing host exit was not diagnosable because the gate discarded stderr.</Problem>
+    <Goals>
+      <Goal>Attribute the host version from the native app identity, which is available on every supported host.</Goal>
+      <Goal>Recover session titles on hosts without session.created by reading the native session record lazily, with a bounded retry while the title is still empty.</Goal>
+      <Goal>Make the isolated live matrix self-consistent: pin every vvoc role to the cohort model and place the vvoc config at the host child's working directory.</Goal>
+      <Goal>Surface the host stderr/stdout tail when the matrix host exits nonzero.</Goal>
+    </Goals>
+    <NonGoals>
+      <NonGoal>Do not change the analytics record schema, storage paths, dedupe identity, or family gating.</NonGoal>
+      <NonGoal>Do not weaken the matrix assertions or skip failing rows.</NonGoal>
+    </NonGoals>
+    <Constraints>
+      <Constraint>Tolerated hosts keep working: the fix must not require a 2.2-only code path for version attribution.</Constraint>
+      <Constraint>Session reads stay bounded (at most three title attempts per session) and never block a usage record.</Constraint>
+    </Constraints>
+    <AcceptanceCriteria>
+      <Criterion>Usage records carry the host version from ctx.app.version on both the 2.0.x and 2.2.x event streams.</Criterion>
+      <Criterion>On a host without session.created, the first activity still produces a session record, and a late title is recorded on a later refresh.</Criterion>
+      <Criterion>A failed session read leaves the usage record intact and emits no session record.</Criterion>
+      <Criterion>The isolated matrix pins roles to the cohort model, keeps the vvoc config in the host child cwd, and passes on 2.2.5 with all nine owned tools registered.</Criterion>
+      <Criterion>A nonzero host exit prints the bounded stderr and stdout tails.</Criterion>
+      <Criterion>bun run check, bun run build, bun run pack:check, bun run release:check, and contracts:host pass with fresh output.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-PLUGIN-ANALYTICS />
+      <M-NATIVE-RUNTIME />
+      <M-E2E-V2-HARNESS />
+      <M-HOST-COMPAT />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/plugins/analytics/index.test.ts scripts/check-tool-contracts-host.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run contracts:host</ExpectedCommand>
+      <ExpectedEvidence>Fresh output proves host-version attribution, lazy title recovery with bounded retries, fail-soft session reads, and a fully green nine-tool matrix on the verified host.</ExpectedEvidence>
+    </VerificationIntent>
+  </C-HOST-RELEASE-FOLLOWUPS>
+</GraceChangeSpec>

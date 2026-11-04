@@ -28,7 +28,7 @@ import { describe, expect, test } from "bun:test";
 import { createAnalyticsPlugin } from "./index.js";
 import { PACKAGE_VERSION } from "../../lib/package.js";
 import { createDefaultVvocConfig, type VvocConfig } from "../../lib/vvoc-config.js";
-import type { AnalyticsRecord, UsageRecord } from "../../lib/analytics/types.js";
+import type { AnalyticsRecord, SessionRecord, UsageRecord } from "../../lib/analytics/types.js";
 
 interface NativeEvent {
   id?: string;
@@ -79,6 +79,10 @@ async function makeHarness(
     append?: (record: AnalyticsRecord) => Promise<void>;
     resolve?: (sessionID: string) => { familyId: string; vvoc: VvocConfig } | undefined;
     configForThrows?: number;
+    hostVersion?: string;
+    sessionTitle?: string;
+    sessionTitles?: string[];
+    sessionGetThrows?: boolean;
   } = {},
 ) {
   const policy = options.policy ?? "enabled";
@@ -106,6 +110,16 @@ async function makeHarness(
     },
   };
   const fakeContext = {
+    app: { name: "opencode", version: options.hostVersion ?? "2.2.5", channel: "stable" },
+    session: {
+      get: async ({ sessionID }: { sessionID: string }) => {
+        if (options.sessionGetThrows === true) throw new Error("session unavailable");
+        const titles = options.sessionTitles;
+        const title =
+          titles !== undefined ? (titles.shift() ?? "") : (options.sessionTitle ?? "Lazy title");
+        return { id: sessionID, projectID: "proj_1", title };
+      },
+    },
     location: {
       directory: "/home/al/dev/project",
       project: {
@@ -234,7 +248,7 @@ describe("AnalyticsPlugin", () => {
     expect(usage.projectDirectory).toBe("/home/al/dev/project");
     expect(usage.projectID).toBe("proj_1");
     expect(usage.vvocVersion).toBe(PACKAGE_VERSION);
-    expect(usage.opencodeVersion).toBe("2.0.18");
+    expect(usage.opencodeVersion).toBe("2.2.5");
     expect(usage.sessionID).toBe("ses_1");
     expect(usage.messageID).toBe("msg_1");
     // Stable native step-observation identity is the event envelope id.
@@ -256,14 +270,48 @@ describe("AnalyticsPlugin", () => {
     expect(sessionRecords[0]).toMatchObject({ sessionID: "ses_1", title: "Session title" });
   });
 
-  test("a step ending before its start falls back to empty attribution and unknown version", async () => {
+  test("a step ending before its start falls back to empty attribution but keeps the host version", async () => {
     const harness = await makeHarness();
     await harness.emit(stepEnded());
     const usage = harness.records.find((record) => record.kind === "usage") as UsageRecord;
     expect(usage.providerID).toBe("");
     expect(usage.modelID).toBe("");
     expect(usage.agent).toBe("");
-    expect(usage.opencodeVersion).toBe("unknown");
+    expect(usage.opencodeVersion).toBe("2.2.5");
+  });
+
+  test("hosts without session.created attribute titles lazily from the native session record", async () => {
+    const harness = await makeHarness({ sessionTitle: "Lazy session title" });
+    await harness.emit(stepStarted());
+    await harness.emit(stepEnded());
+
+    const usage = harness.records.find((record) => record.kind === "usage") as UsageRecord;
+    expect(usage.opencodeVersion).toBe("2.2.5");
+    const sessionRecords = harness.records.filter((record) => record.kind === "session");
+    expect(sessionRecords).toHaveLength(1);
+    expect(sessionRecords[0]).toMatchObject({ sessionID: "ses_1", title: "Lazy session title" });
+  });
+
+  test("a title that appears after the first step is recorded on a later refresh", async () => {
+    const harness = await makeHarness({ sessionTitles: ["", "Late title"] });
+    await harness.emit(stepStarted());
+    await harness.emit(stepEnded({ id: "evt_first" }));
+    await harness.emit(stepEnded({ id: "evt_second" }));
+
+    const sessionRecords = harness.records.filter(
+      (record): record is SessionRecord => record.kind === "session",
+    );
+    expect(sessionRecords.map((record) => record.title)).toContain("Late title");
+  });
+
+  test("an unavailable session read keeps the usage record and emits no session record", async () => {
+    const harness = await makeHarness({ sessionGetThrows: true });
+    await harness.emit(stepStarted());
+    await harness.emit(stepEnded());
+
+    const usage = harness.records.find((record) => record.kind === "usage") as UsageRecord;
+    expect(usage.opencodeVersion).toBe("2.2.5");
+    expect(harness.records.filter((record) => record.kind === "session")).toHaveLength(0);
   });
 
   test("session.created then session.renamed each append a session record with the latest title", async () => {
@@ -403,19 +451,21 @@ describe("AnalyticsPlugin", () => {
   });
 
   test("a transient append failure is contained and later events still record", async () => {
-    let calls = 0;
+    let usageCalls = 0;
     const captured: AnalyticsRecord[] = [];
     const harness = await makeHarness({
       append: async (record) => {
-        calls += 1;
-        if (calls === 1) throw new Error("disk full");
+        if (record.kind === "usage") {
+          usageCalls += 1;
+          if (usageCalls === 1) throw new Error("disk full");
+        }
         captured.push(record);
       },
     });
     await harness.emit(stepStarted());
     await harness.emit(stepEnded({ id: "evt_first" }));
     await harness.emit(stepEnded({ id: "evt_second" }));
-    expect(calls).toBeGreaterThanOrEqual(2);
+    expect(usageCalls).toBeGreaterThanOrEqual(2);
     expect(captured.filter((record) => record.kind === "usage")).toHaveLength(1);
   });
 

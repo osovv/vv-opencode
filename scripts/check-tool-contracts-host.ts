@@ -105,7 +105,7 @@
 //   startHostResponder - Start the cohort loopback responder (model + Exa + web fetch).
 //   generateHostHarnessPluginSource - Emit the composing wrapper importing built dist plugins.
 //   buildCohortHostConfig - Build the isolated cohort OpenCode config with synthetic agents.
-//   buildHostVvocConfig - Build the isolated project vvoc config with a synthetic Exa credential.
+//   buildHostVvocConfig - Build the isolated project vvoc config with a synthetic Exa credential and cohort-pinned roles.
 //   CHILD_REPORT - Synthetic tracked child result body bound to an assigned work-item id.
 //   openAIPositiveSpec - The positive OpenAI-compatible cohort session spec.
 //   openAINegativeSpec - The negative OpenAI-compatible cohort session spec.
@@ -2373,13 +2373,19 @@ export function buildCohortHostConfig(
   )}\n`;
 }
 
-/** Build the isolated project vvoc config carrying only a synthetic Exa credential. */
-export function buildHostVvocConfig(): string {
+/**
+ * Build the isolated project vvoc config: a synthetic Exa credential plus every
+ * model role pinned to the cohort model. Without the role pinning the shipped
+ * defaults (openai/gpt-5.6-*) capture a family selection the isolated harness
+ * provider cannot resolve, and admission rejects the first dispatch.
+ */
+export function buildHostVvocConfig(model: string): string {
   const config = createDefaultVvocConfig();
   config.web = {
     search: { provider: "exa", apiKey: SYNTHETIC_EXA_API_KEY },
     fetch: { provider: "native" },
   };
+  config.roles = Object.fromEntries(Object.keys(config.roles).map((role) => [role, model]));
   return renderVvocConfig(config);
 }
 // END_BLOCK_FULL_MATRIX_WRAPPER
@@ -3300,7 +3306,12 @@ async function runHostSession(
       await writeFile(absolute, content, "utf8");
     }
     await mkdir(join(paths.workspace, ".vvoc"), { recursive: true });
-    await writeFile(join(paths.workspace, ".vvoc", "vvoc.json"), buildHostVvocConfig(), "utf8");
+    // Config discovery walks up from the host child's cwd (the harness dir), so the
+    // isolated vvoc config must live there; the workspace copy keeps tool paths honest.
+    const vvocText = buildHostVvocConfig(`${cohort.providerId}/${cohort.modelId}`);
+    await mkdir(join(paths.harness, ".vvoc"), { recursive: true });
+    await writeFile(join(paths.harness, ".vvoc", "vvoc.json"), vvocText, "utf8");
+    await writeFile(join(paths.workspace, ".vvoc", "vvoc.json"), vvocText, "utf8");
     await symlinkSafe(join(repoRoot, "node_modules"), join(paths.harness, "node_modules"));
 
     const filesBefore = await listWorkspaceFiles(paths.workspace);
@@ -3581,7 +3592,12 @@ async function runNativeMatrix(
     await mkdir(join(paths.workspace, "src"), { recursive: true });
     await writeFile(join(paths.workspace, "src/impl.ts"), "export const impl = 0;\n", "utf8");
     await mkdir(join(paths.workspace, ".vvoc"), { recursive: true });
-    await writeFile(join(paths.workspace, ".vvoc", "vvoc.json"), buildHostVvocConfig(), "utf8");
+    // Config discovery walks up from the host child's cwd (the harness dir), so the
+    // isolated vvoc config must live there; the workspace copy keeps tool paths honest.
+    const vvocText = buildHostVvocConfig(`${cohort.providerId}/${cohort.modelId}`);
+    await mkdir(join(paths.harness, ".vvoc"), { recursive: true });
+    await writeFile(join(paths.harness, ".vvoc", "vvoc.json"), vvocText, "utf8");
+    await writeFile(join(paths.workspace, ".vvoc", "vvoc.json"), vvocText, "utf8");
     await symlinkSafe(join(repoRoot, "node_modules"), join(paths.harness, "node_modules"));
     const filesBefore = await listWorkspaceFiles(paths.workspace);
 
@@ -3651,6 +3667,14 @@ async function runNativeMatrix(
       { cwd: paths.harness, env: childEnv, timeoutMs: options.timeoutMs ?? 150_000 },
     );
     check(run.code === 0, "host process exited 0");
+    if (run.code !== 0) {
+      // A nonzero host exit is the root cause behind every missing tool result;
+      // surface the bounded tail so the failure is diagnosable from the report.
+      console.error("--- host stderr tail ---");
+      console.error(run.stderr.slice(-3000) || "<empty>");
+      console.error("--- host stdout tail ---");
+      console.error(run.stdout.slice(-2000) || "<empty>");
+    }
 
     const stdoutParse = parseRunStdout(run.stdout);
     const journalParse = existsSync(journalPath)

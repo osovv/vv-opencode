@@ -71,9 +71,10 @@ Measured by `bun run contracts:host --probe` on 2026-11-04:
 - `hostArgNormalization=host-normalized` — unknown keys are stripped and defaults are
   applied before the plugin tool sees the arguments. Type-invalid values are still
   rejected by the plugin contract layer (`INVALID_INPUT`), which the probe verifies.
-- The full nine-tool matrix on 2.2.5 is partial: registration and probes pass, four
-  workflow rows report no host tool result. This is tracked as a follow-up gate, not as
-  verified coverage.
+- The full nine-tool matrix on 2.2.5 passes (19 assertions, 9 owned tools, 17
+  definitions). The isolated harness must pin the vvoc role models to the cohort model
+  and keep `./.vvoc/vvoc.json` at the host child's working directory: since 2.2 the host
+  resolves the built-in role defaults instead of falling back to the session model.
 
 ## Where things live
 

@@ -124,6 +124,10 @@ export function createAnalyticsPlugin(
         ((level: "warn", message: string) =>
           console.error(`[vvoc analytics][${level}] ${message}`));
       const vvocVersion = getPackageVersionSync();
+      // The native app identifies the host version on every supported host; the
+      // 2.2.x session stream no longer carries it on session.created.
+      const hostVersion =
+        readString((ctx as { app?: { version?: unknown } }).app?.version) ?? "unknown";
       const projectID = ctx.location.project.id;
       const projectDirectory = ctx.location.directory;
 
@@ -154,6 +158,45 @@ export function createAnalyticsPlugin(
         const enabled = isVvocPluginEnabled(capture.vvoc, "analytics");
         sessionPolicy.set(sessionID, enabled);
         return enabled;
+      };
+
+      const sessionLookups = new Set<string>();
+
+      /**
+       * Hosts since 2.2 no longer emit session.created/renamed to plugins, so a
+       * session's title is fetched once from the native session record on its
+       * first observed activity. Failure leaves the title empty; usage records are
+       * never blocked by it.
+       */
+      const titleAttempts = new Map<string, number>();
+      const ensureSessionMetadata = async (sessionID: string): Promise<void> => {
+        const known = sessionMetadata.get(sessionID);
+        // The host titles a session asynchronously, so keep a bounded number of
+        // refreshes while the known title is still empty.
+        const needsTitle = known === undefined || known.title === "";
+        if (!needsTitle || sessionLookups.has(sessionID)) return;
+        const attempts = titleAttempts.get(sessionID) ?? 0;
+        if (attempts >= 3) return;
+        titleAttempts.set(sessionID, attempts + 1);
+        sessionLookups.add(sessionID);
+        try {
+          const raw = (await ctx.session.get({ sessionID })) as unknown;
+          const info = asRecord(raw) ?? asRecord((raw as { data?: unknown } | undefined)?.data);
+          if (info === undefined) return;
+          const meta = sessionMetadata.get(sessionID) ?? {
+            title: "",
+            version: undefined,
+            emittedTitle: undefined,
+          };
+          const title = readString(info.title);
+          if (title !== undefined) meta.title = title;
+          sessionMetadata.set(sessionID, meta);
+          await emitSessionRecord(sessionID);
+        } catch {
+          // A missing/denied session read keeps the title unavailable only.
+        } finally {
+          sessionLookups.delete(sessionID);
+        }
       };
 
       const emitSessionRecord = async (sessionID: string): Promise<void> => {
@@ -223,6 +266,13 @@ export function createAnalyticsPlugin(
         }
         if (type === "session.compaction.ended" || type === "session.compaction.failed") {
           await handleCompactionUsage(event, data);
+          return;
+        }
+        if (type === "session.execution.succeeded" || type === "session.execution.failed") {
+          // The host titles a session asynchronously; the terminal execution boundary
+          // is the last cheap opportunity to pick a title that appeared late.
+          const sessionID = readString(data.sessionID);
+          if (sessionID !== undefined) await ensureSessionMetadata(sessionID);
         }
       };
 
@@ -236,6 +286,7 @@ export function createAnalyticsPlugin(
         readonly tokens: UsageTokens;
         readonly cost: unknown;
       }): Promise<void> => {
+        await ensureSessionMetadata(input.sessionID);
         const record: UsageRecord = {
           kind: "usage",
           ts: deps.now().toISOString(),
@@ -251,7 +302,7 @@ export function createAnalyticsPlugin(
           tokens: input.tokens,
           cost: typeof input.cost === "number" && Number.isFinite(input.cost) ? input.cost : 0,
           vvocVersion,
-          opencodeVersion: sessionMetadata.get(input.sessionID)?.version ?? "unknown",
+          opencodeVersion: hostVersion,
         };
         await deps.append(record);
       };
