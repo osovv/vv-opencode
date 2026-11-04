@@ -27,6 +27,7 @@ import {
   finalizePublishedRelease,
   parseWorkflowRunId,
   resolveReleaseChannel,
+  resolveWorkflowRunId,
   waitForPublishWorkflow,
   type ReleaseCommandRunner,
 } from "./release-bump.ts";
@@ -108,6 +109,75 @@ describe("workflow run parsing", () => {
       "123456789",
     );
     expect(() => parseWorkflowRunId("")).toThrow("Could not determine GitHub Actions run ID");
+  });
+});
+
+describe("workflow run resolution", () => {
+  const commit = "0123456789abcdef0123456789abcdef01234567";
+
+  test("uses the dispatch URL when gh prints one", () => {
+    let captures = 0;
+    const capture: ReleaseCommandRunner = () => {
+      captures += 1;
+      return "";
+    };
+    expect(
+      resolveWorkflowRunId(
+        "https://github.com/osovv/vv-opencode/actions/runs/123456789",
+        commit,
+        capture,
+        () => undefined,
+      ),
+    ).toBe("123456789");
+    expect(captures).toBe(0);
+  });
+
+  test("falls back to the commit run list when the dispatch prints nothing", () => {
+    const commands: CapturedCommand[] = [];
+    const capture: ReleaseCommandRunner = (command, args, failureMessage) => {
+      commands.push({ mode: "capture", command, args, failureMessage });
+      return JSON.stringify([
+        { databaseId: 111, headSha: "ffffffffffffffffffffffffffffffffffffffff" },
+        { databaseId: 222, headSha: commit },
+      ]);
+    };
+
+    expect(resolveWorkflowRunId("", commit, capture, () => undefined)).toBe("222");
+    expect(commands[0]?.args.slice(0, 4)).toEqual([
+      "run",
+      "list",
+      "--workflow",
+      "publish.yml",
+    ]);
+    expect(commands[0]?.args).toContain(commit);
+  });
+
+  test("retries while the run has not appeared yet", () => {
+    let calls = 0;
+    const sleeps: number[] = [];
+    const capture: ReleaseCommandRunner = () => {
+      calls += 1;
+      return calls < 3 ? "[]" : JSON.stringify([{ databaseId: 333, headSha: commit }]);
+    };
+
+    expect(
+      resolveWorkflowRunId("", commit, capture, (ms) => {
+        sleeps.push(ms);
+      }),
+    ).toBe("333");
+    expect(sleeps).toHaveLength(2);
+  });
+
+  test("fails closed with the commit and inspection command when no run is found", () => {
+    expect(() =>
+      resolveWorkflowRunId(
+        "",
+        commit,
+        () => "[]",
+        () => undefined,
+        2,
+      ),
+    ).toThrow(`Could not resolve the publish.yml run for commit ${commit}`);
   });
 });
 

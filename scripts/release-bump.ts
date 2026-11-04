@@ -46,6 +46,7 @@
 //   getCurrentBranchName - Returns the current branch name and rejects detached HEAD release bumps.
 //   dispatchVerifiedPublishWorkflow - Pushes only the release commit branch and returns the exact-SHA publish workflow run URL.
 //   parseWorkflowRunId - Extracts a GitHub Actions run ID from gh workflow run output.
+//   resolveWorkflowRunId - Resolves the dispatched publish run from the dispatch output or the commit run list.
 //   waitForPublishWorkflow - Waits for the exact workflow run and fails closed unless it succeeds.
 //   extractReleaseChangelogEntry - Extracts one version block for GitHub Release notes.
 //   finalizePublishedRelease - Retries npm gitHead propagation, then creates and pushes the local annotated tag and GitHub Release.
@@ -85,6 +86,9 @@ const ALLOWED_RELEASE_FILES = new Set([
 /** Regenerated during the bump because the generated reference embeds PACKAGE_VERSION. */
 const TOOL_CONTRACTS_REFERENCE_PATH = "templates/skills/vv-execute/references/tool-contracts.md";
 const CAPTURE_MAX_BUFFER = 128 * 1024 * 1024;
+/** Bounded polling for the dispatched publish run (gh prints nothing on success). */
+const PUBLISH_RUN_RESOLUTION_ATTEMPTS = 12;
+const PUBLISH_RUN_RESOLUTION_DELAY_MS = 2_500;
 const PUBLISHED_METADATA_RETRY_DELAYS_MS = [
   1_000, 2_000, 4_000, 8_000, 15_000, 30_000, 30_000, 30_000, 30_000, 30_000, 30_000, 30_000,
   30_000, 30_000, 30_000, 30_000,
@@ -467,6 +471,62 @@ export function parseWorkflowRunId(workflowOutput: string): string {
   return match[1];
 }
 
+/**
+ * Resolve the publish run started by this dispatch. Recent `gh workflow run`
+ * versions print nothing on success, so the run is located by the release
+ * commit instead of by scraping the dispatch output.
+ */
+export function resolveWorkflowRunId(
+  workflowOutput: string,
+  commitSha: string,
+  capture: ReleaseCommandRunner = runCaptureRetryable,
+  sleep: ReleaseSleeper = sleepMs,
+  attempts: number = PUBLISH_RUN_RESOLUTION_ATTEMPTS,
+): string {
+  try {
+    return parseWorkflowRunId(workflowOutput);
+  } catch {
+    // Expected on current gh: successful dispatch prints no URL.
+  }
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (attempt > 0) sleep(PUBLISH_RUN_RESOLUTION_DELAY_MS);
+    try {
+      const raw = capture(
+        "gh",
+        [
+          "run",
+          "list",
+          "--workflow",
+          "publish.yml",
+          "--commit",
+          commitSha,
+          "--limit",
+          "10",
+          "--json",
+          "databaseId,headSha,createdAt",
+        ],
+        `Failed to list publish.yml runs for ${commitSha}.`,
+      );
+      const rows: unknown = JSON.parse(raw);
+      if (!Array.isArray(rows)) continue;
+      for (const row of rows) {
+        const record = row as { databaseId?: unknown; headSha?: unknown };
+        const id = record.databaseId;
+        if (typeof id === "number" && Number.isInteger(id) && record.headSha === commitSha) {
+          return String(id);
+        }
+      }
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  const detail = lastError === undefined ? "" : ` (last error: ${String(lastError)})`;
+  throw new Error(
+    `Could not resolve the publish.yml run for commit ${commitSha} after ${attempts} attempts${detail}. The workflow may not have started; inspect with: gh run list --workflow publish.yml --commit ${commitSha}. No release tag was created.`,
+  );
+}
+
 export function waitForPublishWorkflow(
   workflowRunId: string,
   execute: ReleaseCommandRunner = run,
@@ -678,7 +738,7 @@ function main(): void {
   });
   let workflowRunId: string;
   try {
-    workflowRunId = parseWorkflowRunId(workflowOutput);
+    workflowRunId = resolveWorkflowRunId(workflowOutput, releaseCommitSha);
   } catch (error) {
     console.error(`\n✗ ${String(error)}`);
     console.error("  The release commit was pushed, but automatic CI monitoring could not start.");

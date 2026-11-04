@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   gate:
-    name: static gate
+    name: repository gate
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -42,3 +42,9 @@ jobs:
 
       - name: Tool contracts check
         run: bun run contracts:check
+
+      - name: Unit and integration tests
+        run: bun test
+
+      - name: Build and package surface
+        run: bun run pack:check
