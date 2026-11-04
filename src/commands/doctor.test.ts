@@ -18,10 +18,10 @@
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
-import { chmod, mkdir, readFile, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { readFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import doctorCommand from "./doctor.js";
+import doctorCommand, { runDoctor } from "./doctor.js";
 import {
   ensurePackageInstalled,
   installManagedAgentPrompts,
@@ -149,7 +149,6 @@ test("doctor reports prompt, skill, duplicate-root, and permission drift as warn
   const projectDir = await mkdtemp(join(tmpdir(), "vvoc-doctor-drift-project-"));
   const initialCwd = process.cwd();
   const initialExitCode = process.exitCode;
-  const initialPath = process.env.PATH;
 
   try {
     const paths = await resolvePaths({
@@ -162,14 +161,6 @@ test("doctor reports prompt, skill, duplicate-root, and permission drift as warn
     await installVvocConfig(paths);
     await installManagedAgentPrompts(paths, { force: true });
     await installManagedSkillFiles(paths, { force: true });
-
-    // Doctor probes the host version; the CI runner has no OpenCode binary.
-    const binDir = join(projectDir, "bin");
-    await mkdir(binDir, { recursive: true });
-    const fakeOpenCode = join(binDir, "opencode");
-    await writeFile(fakeOpenCode, "#!/bin/sh\necho 2.2.5\n", "utf8");
-    await chmod(fakeOpenCode, 0o755);
-    process.env.PATH = `${binDir}:${initialPath ?? ""}`;
 
     const controllerPath = join(paths.managedAgentsDirPath, "vv-controller.md");
     await writeFile(controllerPath, `${await readFile(controllerPath, "utf8")}\nSTALE\n`, "utf8");
@@ -187,9 +178,18 @@ test("doctor reports prompt, skill, duplicate-root, and permission drift as warn
     process.chdir(projectDir);
     process.exitCode = 0;
     const { stdout } = await captureOutput(async () => {
-      await (
-        doctorCommand as { run: (context: { args: Record<string, unknown> }) => Promise<void> }
-      ).run({ args: { scope: "project", "config-dir": configHome } });
+      await runDoctor(
+        { scope: "project", "config-dir": configHome },
+        {
+          inspectRuntime: async () => ({
+            version: "2.2.5",
+            supportedRange: ">=2.0.18 <3.0.0",
+            versionSupported: true,
+            support: "verified",
+            verifiedHosts: ["2.2.5"],
+          }),
+        },
+      );
     });
 
     expect(stdout).toContain("Warnings:");
@@ -201,7 +201,6 @@ test("doctor reports prompt, skill, duplicate-root, and permission drift as warn
   } finally {
     process.chdir(initialCwd);
     process.exitCode = initialExitCode ?? 0;
-    process.env.PATH = initialPath;
     await rm(configHome, { recursive: true, force: true });
     await rm(projectDir, { recursive: true, force: true });
   }

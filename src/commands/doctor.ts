@@ -11,15 +11,16 @@
 //
 // START_MODULE_MAP
 //   default - Doctor command definition for vvoc installation diagnostics.
+//   runDoctor - Testable doctor flow with injectable native host verification.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-CLI-JSON-PIN-SYNC-R1 T-002 - Printed the native cli.json TUI client pin beside the server pin.]
+//   LAST_CHANGE: [C-WORKFLOW-PROMPT-SYNC-DOCTOR-ARCHIVE T-003 - Extracted an injectable runDoctor flow so host-warning coverage does not depend on a globally installed opencode binary.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
 import type { ConfigReadScope } from "../lib/config-layers.js";
-import { inspectInstallationForScope } from "../lib/opencode.js";
+import { inspectInstallationForScope, type OpenCodeRuntimeInspection } from "../lib/opencode.js";
 
 export default defineCommand({
   meta: {
@@ -39,81 +40,93 @@ export default defineCommand({
     },
   },
   async run({ args }) {
-    // START_BLOCK_PRINT_DIAGNOSTIC_REPORT
-    const scope = resolveReadScope(args.scope);
-    const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
-    const inspection = await inspectInstallationForScope({ scope, cwd: process.cwd(), configDir });
-
-    console.log(`Scope: ${inspection.scope}`);
-    console.log(
-      `OpenCode source: ${inspection.opencodeSource.kind}${inspection.opencodeSource.path ? ` ${inspection.opencodeSource.path}` : ""}`,
-    );
-    console.log(
-      `vvoc source: ${inspection.vvocSource.kind}${inspection.vvocSource.path ? ` ${inspection.vvocSource.path}` : ""}`,
-    );
-    console.log(`OpenCode version: ${inspection.runtime.version ?? "unavailable"}`);
-    console.log(`OpenCode supported range: ${inspection.runtime.supportedRange}`);
-    console.log(
-      `OpenCode support: ${inspection.runtime.support ?? "unknown"} (verified hosts: ${inspection.runtime.verifiedHosts?.join(", ") || "none"})`,
-    );
-    console.log(
-      `OpenCode supported: ${inspection.runtime.versionSupported === undefined ? "unknown" : inspection.runtime.versionSupported ? "yes" : "no"}`,
-    );
-    console.log(`OpenCode config: ${inspection.opencode.path}`);
-    console.log(
-      `OpenCode config parse: ${inspection.opencode.parseError ? inspection.opencode.parseError : "ok"}`,
-    );
-    console.log(
-      `Configured plugins: ${inspection.opencode.plugins.length > 0 ? inspection.opencode.plugins.map((entry) => (typeof entry === "string" ? entry : entry.package)).join(", ") : "<none>"}`,
-    );
-    console.log(`TUI package registered: ${inspection.tui.registered ? "yes" : "no"}`);
-    console.log(`TUI capability note: ${inspection.tui.note}`);
-    const cliPinLabel =
-      inspection.cli.parseError !== undefined
-        ? "unavailable (parse error)"
-        : (inspection.cli.managedPin ?? (inspection.cli.exists ? "none" : "no cli.json"));
-    console.log(`TUI client pin (cli.json): ${cliPinLabel}`);
-    console.log(`vvoc config: ${inspection.vvoc.path}`);
-    console.log(
-      `vvoc config parse: ${inspection.vvoc.parseError ? inspection.vvoc.parseError : inspection.vvoc.exists ? "ok" : "missing"}`,
-    );
-    console.log(`vvoc schema: ${inspection.vvoc.schema ?? "missing"}`);
-    console.log(`vvoc version: ${inspection.vvoc.version ?? "missing"}`);
-    console.log(
-      `Guardian model: ${inspection.guardian.config ? (inspection.guardian.config.model ?? "default") : "unknown"}`,
-    );
-    console.log(
-      `Secrets Redaction config: ${inspection.secretsRedaction.config ? "present" : "unknown"}`,
-    );
-    console.log("Roles:");
-    if (inspection.roles.assignments.length === 0) {
-      console.log("  <none>");
-    } else {
-      for (const role of inspection.roles.assignments) {
-        console.log(`  ${role.roleId}: ${role.model}`);
-      }
-    }
-
-    if (inspection.warnings.length > 0) {
-      console.log("Warnings:");
-      for (const warning of inspection.warnings) {
-        console.log(`- ${warning}`);
-      }
-    }
-
-    if (inspection.problems.length > 0) {
-      console.error("Problems:");
-      for (const problem of inspection.problems) {
-        console.error(`- ${problem}`);
-      }
-      process.exitCode = 1;
-      return;
-    }
-
-    console.log("Doctor: ok");
-    // END_BLOCK_PRINT_DIAGNOSTIC_REPORT
+    await runDoctor(args as Record<string, unknown>);
   },
 });
+
+export async function runDoctor(
+  args: Record<string, unknown>,
+  options: { inspectRuntime?: () => Promise<OpenCodeRuntimeInspection> } = {},
+): Promise<void> {
+  // START_BLOCK_PRINT_DIAGNOSTIC_REPORT
+  const scope = resolveReadScope(args.scope);
+  const configDir = typeof args["config-dir"] === "string" ? args["config-dir"] : undefined;
+  const inspection = await inspectInstallationForScope({
+    scope,
+    cwd: process.cwd(),
+    configDir,
+    ...(options.inspectRuntime === undefined ? {} : { inspectRuntime: options.inspectRuntime }),
+  });
+
+  console.log(`Scope: ${inspection.scope}`);
+  console.log(
+    `OpenCode source: ${inspection.opencodeSource.kind}${inspection.opencodeSource.path ? ` ${inspection.opencodeSource.path}` : ""}`,
+  );
+  console.log(
+    `vvoc source: ${inspection.vvocSource.kind}${inspection.vvocSource.path ? ` ${inspection.vvocSource.path}` : ""}`,
+  );
+  console.log(`OpenCode version: ${inspection.runtime.version ?? "unavailable"}`);
+  console.log(`OpenCode supported range: ${inspection.runtime.supportedRange}`);
+  console.log(
+    `OpenCode support: ${inspection.runtime.support ?? "unknown"} (verified hosts: ${inspection.runtime.verifiedHosts?.join(", ") || "none"})`,
+  );
+  console.log(
+    `OpenCode supported: ${inspection.runtime.versionSupported === undefined ? "unknown" : inspection.runtime.versionSupported ? "yes" : "no"}`,
+  );
+  console.log(`OpenCode config: ${inspection.opencode.path}`);
+  console.log(
+    `OpenCode config parse: ${inspection.opencode.parseError ? inspection.opencode.parseError : "ok"}`,
+  );
+  console.log(
+    `Configured plugins: ${inspection.opencode.plugins.length > 0 ? inspection.opencode.plugins.map((entry) => (typeof entry === "string" ? entry : entry.package)).join(", ") : "<none>"}`,
+  );
+  console.log(`TUI package registered: ${inspection.tui.registered ? "yes" : "no"}`);
+  console.log(`TUI capability note: ${inspection.tui.note}`);
+  const cliPinLabel =
+    inspection.cli.parseError !== undefined
+      ? "unavailable (parse error)"
+      : (inspection.cli.managedPin ?? (inspection.cli.exists ? "none" : "no cli.json"));
+  console.log(`TUI client pin (cli.json): ${cliPinLabel}`);
+  console.log(`vvoc config: ${inspection.vvoc.path}`);
+  console.log(
+    `vvoc config parse: ${inspection.vvoc.parseError ? inspection.vvoc.parseError : inspection.vvoc.exists ? "ok" : "missing"}`,
+  );
+  console.log(`vvoc schema: ${inspection.vvoc.schema ?? "missing"}`);
+  console.log(`vvoc version: ${inspection.vvoc.version ?? "missing"}`);
+  console.log(
+    `Guardian model: ${inspection.guardian.config ? (inspection.guardian.config.model ?? "default") : "unknown"}`,
+  );
+  console.log(
+    `Secrets Redaction config: ${inspection.secretsRedaction.config ? "present" : "unknown"}`,
+  );
+  console.log("Roles:");
+  if (inspection.roles.assignments.length === 0) {
+    console.log("  <none>");
+  } else {
+    for (const role of inspection.roles.assignments) {
+      console.log(`  ${role.roleId}: ${role.model}`);
+    }
+  }
+
+  if (inspection.warnings.length > 0) {
+    console.log("Warnings:");
+    for (const warning of inspection.warnings) {
+      console.log(`- ${warning}`);
+    }
+  }
+
+  if (inspection.problems.length > 0) {
+    console.error("Problems:");
+    for (const problem of inspection.problems) {
+      console.error(`- ${problem}`);
+    }
+    process.exitCode = 1;
+    return;
+  }
+
+  console.log("Doctor: ok");
+  // END_BLOCK_PRINT_DIAGNOSTIC_REPORT
+}
 
 function resolveReadScope(value: unknown): ConfigReadScope {
   return value === "global" || value === "project" ? value : "effective";
