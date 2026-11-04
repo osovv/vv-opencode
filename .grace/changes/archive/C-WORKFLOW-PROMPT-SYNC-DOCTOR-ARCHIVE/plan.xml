@@ -1,0 +1,222 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-WORKFLOW-PROMPT-SYNC-DOCTOR-ARCHIVE>
+    <IntentSummary>Implement the approved three-block fix set sequentially: synchronize the tracked launch protocol and standalone field rules across managed agents and skills; reconcile legacy inline managed {file:...} prompts and add read-only doctor drift/duplicate/permission diagnostics; canonicalize skills roots; add a streaming archive mode to the vv-reflect extractor; then prepare and verify the 2.4.0 release. The user explicitly authorized autonomous execution in the current conversation without a separate review checkpoint.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-CLI-MANAGED-AGENTS</Value>
+        <Value>M-CLI-MANAGED-SKILLS</Value>
+        <Value>M-CLI-CONFIG</Value>
+        <Value>M-CLI-COMMANDS</Value>
+        <Value>M-PLUGIN-WORKFLOW</Value>
+        <Value>templates/skills/vv-execute/SKILL.md</Value>
+        <Value>templates/skills/vv-review/SKILL.md</Value>
+        <Value>templates/agents/vv-implementer.md</Value>
+        <Value>templates/agents/vv-code-reviewer.md</Value>
+        <Value>templates/agents/vv-spec-reviewer.md</Value>
+        <Value>templates/skills/vv-reflect/references/session-graph.py</Value>
+        <Value>src/lib/opencode/agent-registrations.ts</Value>
+        <Value>src/lib/opencode/inspection.ts</Value>
+        <Value>src/commands/doctor.ts</Value>
+        <Value>src/lib/session-graph.test.ts</Value>
+      </MustExist>
+      <MustContain><File>templates/skills/vv-execute/SKILL.md</File><Text>VVOC_WORK_ITEM_ID</Text></MustContain>
+      <MustContain><File>templates/agents/vv-implementer.md</File><Text>VVOC_STATUS</Text></MustContain>
+      <MustContain><File>src/lib/opencode/agent-registrations.ts</File><Text>getManagedSkillsPathReference</Text></MustContain>
+      <MustContain><File>src/lib/opencode/inspection.ts</File><Text>const warnings: string[] = [];</Text></MustContain>
+      <MustContain><File>src/lib/opencode/agent-registrations.ts</File><Text>canonicalSkillsPath</Text></MustContain>
+      <MustContain><File>templates/skills/vv-reflect/references/session-graph.py</File><Text>parser.add_argument("--session", type=str, default=None)</Text></MustContain>
+      <MustContain><File>package.json</File><Text>"version": "2.4.0"</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/lib/managed-agents.test.ts src/lib/managed-skills.test.ts src/lib/opencode.test.ts src/lib/session-graph.test.ts</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run typecheck</Command>
+      </MustPassCommand>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-CLI-MANAGED-AGENTS</Module>
+        <Module>M-CLI-MANAGED-SKILLS</Module>
+        <Module>M-CLI-CONFIG</Module>
+        <Module>M-CLI-COMMANDS</Module>
+        <Module>M-PLUGIN-WORKFLOW</Module>
+        <Module>M-RELEASE-AUTOMATION</Module>
+      </MustVerify>
+      <MustContain><File>templates/skills/vv-execute/SKILL.md</File><Text>VVOC_WORK_ITEM_ID: wi-&lt;n&gt;</Text></MustContain>
+      <MustContain><File>templates/skills/vv-execute/SKILL.md</File><Text>standalone item takes only</Text></MustContain>
+      <MustContain><File>templates/skills/vv-review/SKILL.md</File><Text>VVOC_WORK_ITEM_ID: wi-&lt;n&gt;</Text></MustContain>
+      <MustContain><File>templates/agents/vv-implementer.md</File><Text>copy the</Text></MustContain>
+      <MustNotContain><File>templates/agents/vv-implementer.md</File><Text>returned by `work_item_open`</Text></MustNotContain>
+      <MustNotContain><File>templates/agents/vv-code-reviewer.md</File><Text>returned by `work_item_open`</Text></MustNotContain>
+      <MustNotContain><File>templates/agents/vv-spec-reviewer.md</File><Text>returned by `work_item_open`</Text></MustNotContain>
+      <MustContain><File>src/lib/opencode/agent-registrations.ts</File><Text>syncLegacyInlineManagedPrompt</Text></MustContain>
+      <MustContain><File>src/lib/opencode/inspection.ts</File><Text>managed prompt</Text></MustContain>
+      <MustContain><File>src/lib/opencode/inspection.ts</File><Text>duplicate skills root</Text></MustContain>
+      <MustContain><File>src/lib/opencode/inspection.ts</File><Text>apply_patch</Text></MustContain>
+      <MustContain><File>src/lib/opencode/agent-registrations.ts</File><Text>canonicalSkillsPath</Text></MustContain>
+      <MustContain><File>templates/skills/vv-reflect/references/session-graph.py</File><Text>--archive</Text></MustContain>
+      <MustContain><File>templates/skills/vv-reflect/references/session-graph.py</File><Text>def archive_aggregate</Text></MustContain>
+      <MustContain><File>templates/skills/vv-reflect/SKILL.md</File><Text>--archive</Text></MustContain>
+      <MustContain><File>README.md</File><Text>opencode/agents/*.md</Text></MustContain>
+      <MustContain><File>package.json</File><Text>"version": "2.4.0"</Text></MustContain>
+      <MustContain><File>schemas/vvoc/v3.json</File><Text>@osovv/vv-opencode@2.4.0</Text></MustContain>
+      <MustContain><File>CHANGELOG.md</File><Text>2.4.0</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/lib/managed-agents.test.ts src/lib/managed-skills.test.ts src/lib/opencode.test.ts src/lib/session-graph.test.ts src/commands/doctor.test.ts src/commands/sync.test.ts src/plugins/workflow/contracts.test.ts</Command>
+        <Command>bun run check</Command>
+        <Command>bun run build</Command>
+        <Command>bun run pack:check</Command>
+        <Command>bun run release:check</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <PlanningNotes>
+      <Note>Block A is documentation and model-facing wording only. The controller template stays profile-neutral; the launch protocol lives in vv-execute, vv-review, the workflow system instruction, and worker templates.</Note>
+      <Note>Block B keeps V1 migration fail-closed. Legacy inline managed {file:...} prompts are reconciled only when the inline value is one file token and the target file carries the vvoc managed marker; all other inline systems are reported as user-owned with their source path.</Note>
+      <Note>Doctor checks are warning-only unless an existing problem is detected. The duplicate-root check normalizes with realpath when available and falls back to a resolved absolute path.</Note>
+      <Note>The archive extractor must not load every call into memory. It streams session_message rows, deduplicates by tool entry id when the same id reappears, and only unions legacy part rows when that table exists.</Note>
+      <Note>The release is prepared locally. npm publication, CI dispatch, tag push, and GitHub Release creation remain out of scope for this environment.</Note>
+    </PlanningNotes>
+    <DurableScope>
+      <GraphAnchors>
+        <M-CLI-MANAGED-AGENTS />
+        <M-CLI-MANAGED-SKILLS />
+        <M-CLI-CONFIG />
+        <M-CLI-COMMANDS />
+        <M-PLUGIN-WORKFLOW />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-CLI-MANAGED-AGENTS />
+        <V-M-CLI-MANAGED-SKILLS />
+        <V-M-CLI-CONFIG />
+        <V-M-CLI-COMMANDS />
+        <V-M-PLUGIN-WORKFLOW />
+      </VerificationAnchors>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>templates/skills/vv-execute/SKILL.md</File>
+      <File>templates/skills/vv-review/SKILL.md</File>
+      <File>templates/skills/vv-reflect/SKILL.md</File>
+      <File>templates/skills/vv-reflect/references/session-graph.py</File>
+      <File>templates/agents/vv-implementer.md</File>
+      <File>templates/agents/vv-code-reviewer.md</File>
+      <File>templates/agents/vv-spec-reviewer.md</File>
+      <File>src/plugins/workflow/input-validation.ts</File>
+      <File>src/plugins/workflow/system-instruction.md</File>
+      <File>src/lib/opencode/agent-registrations.ts</File>
+      <File>src/lib/opencode/inspection.ts</File>
+      <File>src/lib/opencode/shared-utils.ts</File>
+      <File>src/lib/managed-skills.ts</File>
+      <File>scripts/release-bump.ts</File>
+      <File>templates/agents/vv-reflector.md</File>
+      <File>src/lib/managed-agents.test.ts</File>
+      <File>src/lib/managed-skills.test.ts</File>
+      <File>src/lib/opencode.test.ts</File>
+      <File>src/lib/session-graph.test.ts</File>
+      <File>src/commands/doctor.test.ts</File>
+      <File>src/commands/sync.test.ts</File>
+      <File>src/plugins/workflow/contracts.test.ts</File>
+      <File>src/lib/agent-tool-catalog.test.ts</File>
+      <File>README.md</File>
+      <File>CHANGELOG.md</File>
+      <File>package.json</File>
+      <File>schemas/vvoc/v3.json</File>
+      <File>.grace/context/technology.xml</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/main.xml</File>
+      <File>.grace/changes/active/C-WORKFLOW-PROMPT-SYNC-DOCTOR-ARCHIVE/spec.xml</File>
+      <File>.grace/changes/active/C-WORKFLOW-PROMPT-SYNC-DOCTOR-ARCHIVE/plan.xml</File>
+      <Glob>templates/skills/vv-execute/references/**</Glob>
+      <Glob>dist/**</Glob>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Synchronize the tracked launch and standalone work_item_open protocol across managed skills, agents, and workflow guidance.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>vv-execute dispatch/review steps contain the literal `VVOC_WORK_ITEM_ID: wi-&lt;n&gt;` first-line contract, the state-to-agent map, the standalone permitted-field rule, the review_only new-item rule, and the single-agent-per-state rejection guidance.</Criterion>
+          <Criterion>vv-review uses the same literal header contract, and vv-implementer/vv-code-reviewer/vv-spec-reviewer copy the header from the assignment and state that the controller owns work-item lifecycle.</Criterion>
+          <Criterion>The workflow system instruction and work_item_open description carry the state map and standalone field list without weakening any runtime gate.</Criterion>
+          <Criterion>Updated contract tests pass and no controller template gains profile-specific workflow terms.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-agents.test.ts src/lib/managed-skills.test.ts src/plugins/workflow/contracts.test.ts src/lib/agent-tool-catalog.test.ts</Command>
+          <Command>bun run contracts:generate</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Reconcile legacy inline managed {file:...} system prompts during sync.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>sync resolves an inline `{file:...}` system value, and when the target exists and carries the vvoc managed marker it rewrites the target with the current managed prompt body while preserving the inline registration.</Criterion>
+          <Criterion>A user-owned or non-file inline system is never overwritten; the result reports the source path and that the file is not managed.</Criterion>
+          <Criterion>Generated native markdown remains deleted or skipped when an inline system override owns the prompt, and repeated sync is idempotent.</Criterion>
+          <Criterion>Targeted sync/prompt tests cover managed migration, user-owned skip, missing target, and idempotence.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/opencode.test.ts src/commands/sync.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Add read-only doctor diagnostics for prompt drift, duplicate skill roots, and deprecated permission actions.</Title>
+        <DependsOn>T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>doctor warns when an installed managed agent prompt or managed skill body differs from the shipped template, naming the file and installed version.</Criterion>
+          <Criterion>doctor warns when two skills[] entries normalize to the same real path, and warns when the configured permission rules contain the inert apply_patch action with a suggested replacement.</Criterion>
+          <Criterion>A missing `{file:...}` reference remains a problem and still exits non-zero; warnings do not change the exit code.</Criterion>
+          <Criterion>Doctor tests cover each warning and the existing missing-file problem.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/commands/doctor.test.ts src/lib/opencode.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Deduplicate skills[] roots by real path and correct managed-agent path documentation.</Title>
+        <DependsOn>T-003</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>sync canonicalizes skills[] entries for comparison, removes later duplicates while keeping first-occurrence order, and still ensures the managed root is registered once.</Criterion>
+          <Criterion>Unrelated skills entries and a real (non-symlink) user-owned skill directory are preserved; no destructive deletion is introduced.</Criterion>
+          <Criterion>README and .grace/context/technology.xml identify `$XDG_CONFIG_HOME/opencode/agents/*.md` and `./.opencode/agents/*.md` as the native managed-agent prompt locations, while legacy vvoc agent files are documented as migration inputs.</Criterion>
+          <Criterion>Targeted sync tests pass and repeated sync is idempotent.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/opencode.test.ts src/commands/sync.test.ts</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Add a streaming archive mode to the vv-reflect session-graph extractor.</Title>
+        <DependsOn>T-004</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>session-graph.py supports `--archive` with `--since`, `--until`, `--project`, `--agent`, `--skill`, `--top`, `--format`, and `--out`.</Criterion>
+          <Criterion>Archive aggregation streams rows, deduplicates tool calls by entry id (last state wins), unions legacy part rows only when present and never sums both tables, and emits totals, tools, skills, agents, projects, repeated_calls, top_errors, and sessions.</Criterion>
+          <Criterion>Archived JSON and Markdown outputs are deterministic for an unchanged database and the MD output is readable without a JSON parser.</Criterion>
+          <Criterion>Synthetic-schema tests cover archive totals, since/project/agent/skill filters, deduplication, legacy part union, and both output formats.</Criterion>
+          <Criterion>The vv-reflect SKILL.md and extractor docstring direct machine-wide questions to `--archive` and document the legacy part relationship.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/session-graph.test.ts</Command>
+          <Command>python3 templates/skills/vv-reflect/references/session-graph.py --archive --db /tmp/opencode/test.db --since 2026-01-01 --format json</Command>
+        </Verification>
+      </T-005>
+      <T-006>
+        <Title>Reconcile GRACE projections and prepare the verified 2.4.0 release.</Title>
+        <DependsOn>T-005</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>M-CLI-MANAGED-AGENTS, M-CLI-MANAGED-SKILLS, M-CLI-CONFIG, M-CLI-COMMANDS, and M-PLUGIN-WORKFLOW descriptions/paths and their verification entries describe the new behavior and tests truthfully.</Criterion>
+          <Criterion>package.json, schemas/vvoc/v3.json $id, CHANGELOG.md, and the generated tool-contracts reference identify 2.4.0.</Criterion>
+          <Criterion>`bun run check`, `bun run build`, `bun run pack:check`, `bun run release:check`, `grace lint --path .`, and `grace status --path .` pass on the final snapshot.</Criterion>
+          <Criterion>The release commit is prepared locally; npm publish, CI dispatch, tag push, and GitHub Release creation are explicitly reported as not performed.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run check</Command>
+          <Command>bun run build</Command>
+          <Command>bun run pack:check</Command>
+          <Command>bun run release:check</Command>
+          <Command>grace lint --path .</Command>
+          <Command>grace status --path .</Command>
+        </Verification>
+      </T-006>
+    </ImplementationPlan>
+  </C-WORKFLOW-PROMPT-SYNC-DOCTOR-ARCHIVE>
+</GraceChangePlan>

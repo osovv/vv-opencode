@@ -43,7 +43,7 @@
     <Vvoc>
       <GlobalConfig>$XDG_CONFIG_HOME/vvoc/vvoc.json</GlobalConfig>
       <ProjectConfig>.vvoc/vvoc.json under the selected project root.</ProjectConfig>
-      <ManagedAgents>.vvoc/agents/*.md for project-scoped managed agent prompts, with global counterparts under the vvoc config home.</ManagedAgents>
+      <ManagedAgents>$XDG_CONFIG_HOME/opencode/agents/*.md for global managed agent prompts and .opencode/agents/*.md for project scope, beside the native config discovery root; legacy vvoc/agents/*.md files referenced by inline system prompts remain recognized migration inputs.</ManagedAgents>
       <ManagedSkills>.vvoc/skills/*/SKILL.md for project-scoped managed skills, with global counterparts under the vvoc config home.</ManagedSkills>
       <SpecPackages>.vvoc/specs/YYYY-MM-DD-&lt;slug&gt;/{spec.xml, design-context.xml optional, plan.xml}</SpecPackages>
     </Vvoc>

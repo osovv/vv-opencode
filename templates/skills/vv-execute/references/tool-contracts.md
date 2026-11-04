@@ -2,10 +2,10 @@
 
 Generated from the pure tool catalog. Do not edit by hand; run `bun run contracts:generate`.
 
-- Package: `@osovv/vv-opencode@2.3.3`
+- Package: `@osovv/vv-opencode@2.4.0`
 - Tool contract revision: `1`
 - Reference path: `templates/skills/vv-execute/references/tool-contracts.md`
-- Current model-facing size: descriptions 8794 bytes, published input schemas 22572 bytes
+- Current model-facing size: descriptions 9082 bytes, published input schemas 22572 bytes
 - Baseline (commit f4319f8, SDK @opencode-ai/plugin@1.18.2, source-extraction): descriptions 8796 bytes, projected input schemas 6815 bytes
 
 > Schema acceptance is structural only. It is not authorization, not proof of evidence,
@@ -22,7 +22,7 @@ This is an on-demand reference; load only the tool section you need rather than 
 ### `work_item_open`
 
 - Summary: Open one or more work items idempotently, or register/append generic execution tasks.
-- Description: Open one or more workflow work items idempotently with explicit mode and requiredReviewers.
+- Description: Open one or more workflow work items idempotently with explicit mode and requiredReviewers. A standalone item takes only key, title, mode, and requiredReviewers; goal, acceptanceCriteria, verification, writeScope, dependsOn, and blockedBy …
 
 | field | type | required | description |
 | --- | --- | --- | --- |

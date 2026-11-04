@@ -2,7 +2,7 @@
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Conservative vvoc-managed native OpenCode agent markdown, managed skills registration, and managed agent model IO.
-//   SCOPE: Native `default_agent`/`skills` config registration, native discovered agent markdown generation with native frontmatter, managed prompt/skill file install and sync with managed-marker guards, the OpenCode skills symlink, and read/write of managed agent model overrides. Generic model/default-model/provider overrides live in model-overrides.ts.
+//   SCOPE: Native `default_agent`/`skills` config registration, real-path skills-root deduplication, native discovered agent markdown generation with native frontmatter, managed prompt/skill file install and sync with managed-marker guards, legacy inline `{file:...}` managed prompt reconciliation, the OpenCode skills symlink, and read/write of managed agent model overrides. Generic model/default-model/provider overrides live in model-overrides.ts.
 //   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/managed-agents.ts, src/lib/managed-skills.ts, src/lib/model-roles.ts, src/lib/opencode/shared-utils.ts, src/lib/opencode/paths.ts]
 //   LINKS: [M-CLI-CONFIG, M-CLI-MANAGED-AGENTS, M-CLI-MANAGED-SKILLS]
 //   ROLE: RUNTIME
@@ -27,12 +27,14 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct fix - Pass the declaring config directory when validating inline agent overrides so a global config that uses {file:} tokens no longer fails sync.]
+//   LAST_CHANGE: [C-WORKFLOW-PROMPT-SYNC-DOCTOR-ARCHIVE T-002/T-004 - Reconciled legacy inline managed {file:...} prompt bodies during install/sync, reported user-owned inline sources, and deduplicated skills roots by real path while preserving first-occurrence order.]
 // END_CHANGE_SUMMARY
 
 import { applyEdits, format, modify } from "jsonc-parser";
+import { realpathSync } from "node:fs";
 import { lstat, mkdir, readlink, symlink, unlink } from "node:fs/promises";
-import { dirname, join, relative, resolve } from "node:path";
+import { homedir } from "node:os";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import {
   MANAGED_NATIVE_AGENT_NAMES,
   MANAGED_OPENCODE_AGENTS,
@@ -270,6 +272,7 @@ function quoteYaml(value: string): string {
 
 type InlineAgentOverride = {
   definesSystem: boolean;
+  system?: string;
   managedKeys: Set<string>;
 };
 
@@ -308,6 +311,7 @@ async function readInlineManagedAgentOverrides(
     if (!entry) continue;
     overrides.set(agentName, {
       definesSystem: Object.hasOwn(entry, "system"),
+      ...(typeof entry.system === "string" ? { system: entry.system } : {}),
       managedKeys: new Set(
         Object.keys(entry).filter((key) => MANAGED_AGENT_FRONTMATTER_KEYS.has(key)),
       ),
@@ -351,14 +355,16 @@ async function resolveInlineSystemActions(
 async function applyInlineSystemAction(
   agentPath: string,
   action: InlineSystemAction,
+  source?: string,
 ): Promise<WriteResult[]> {
+  const reason = `inline agent registration owns the system prompt${source ? `; source is ${source}` : ""}`;
   if (action === "delete") {
     const removed = await removeTextFile(agentPath);
     return [
       {
         action: removed ? "deleted" : "kept",
         path: agentPath,
-        reason: "inline agent registration owns the system prompt",
+        reason,
       },
     ];
   }
@@ -366,9 +372,55 @@ async function applyInlineSystemAction(
     {
       action: "skipped",
       path: agentPath,
-      reason: "inline agent registration owns the system prompt",
+      reason,
     },
   ];
+}
+
+const INLINE_FILE_TOKEN = /^\s*\{file:([^}]+)\}\s*$/;
+
+/** Resolve a single `{file:...}` token against the declaring config directory. */
+function resolveInlineSystemFile(
+  system: string | undefined,
+  configDir: string,
+): string | undefined {
+  if (system === undefined) return undefined;
+  const match = INLINE_FILE_TOKEN.exec(system);
+  if (match === null) return undefined;
+  const raw = match[1].trim();
+  if (!raw) return undefined;
+  const expanded = raw.startsWith("~/") ? join(homedir(), raw.slice(2)) : raw;
+  return isAbsolute(expanded) ? expanded : resolve(configDir, expanded);
+}
+
+/**
+ * Reconciles a legacy inline `agents.<id>.system = {file:...}` reference with
+ * the current managed prompt template. Pre-V2 releases registered managed
+ * prompts this way under the vvoc config root; the native migration changed
+ * the registration shape but not the referenced file, so sync must refresh the
+ * managed file or the host keeps serving stale instructions.
+ */
+async function syncLegacyInlineManagedPrompt(
+  paths: Pick<ResolvedPaths, "opencodeConfigPath" | "managedAgentsDirPath">,
+  agentName: ManagedAgentPromptName,
+  override: InlineAgentOverride | undefined,
+): Promise<WriteResult | undefined> {
+  const targetPath = resolveInlineSystemFile(override?.system, dirname(paths.opencodeConfigPath));
+  if (targetPath === undefined) return undefined;
+  const generatedPath = getManagedAgentPromptPath(paths.managedAgentsDirPath, agentName);
+  if (resolve(targetPath) === resolve(generatedPath)) return undefined;
+  const expectedPath = getManagedAgentPromptPath(dirname(targetPath), agentName);
+  if (resolve(expectedPath) !== resolve(targetPath)) return undefined;
+
+  const currentText = await readOptionalText(targetPath);
+  if (currentText === undefined || !isManagedFile(currentText)) return undefined;
+
+  const nextText = await renderManagedPrompt(agentName);
+  if (currentText === nextText) {
+    return { action: "kept", path: targetPath, reason: "legacy inline managed prompt" };
+  }
+  await writeText(targetPath, nextText);
+  return { action: "updated", path: targetPath, reason: "legacy inline managed prompt" };
 }
 
 export async function installManagedAgentPrompts(
@@ -382,12 +434,17 @@ export async function installManagedAgentPrompts(
 
   for (const agentName of MANAGED_NATIVE_AGENT_NAMES) {
     const agentPath = getManagedAgentPromptPath(paths.managedAgentsDirPath, agentName);
+    const override = inlineOverrides.get(agentName);
+    const legacyResult = await syncLegacyInlineManagedPrompt(paths, agentName, override);
+    if (legacyResult) results.push(legacyResult);
     const systemAction = inlineSystem.get(agentName);
     if (systemAction !== undefined) {
-      results.push(...(await applyInlineSystemAction(agentPath, systemAction)));
+      const source =
+        resolveInlineSystemFile(override?.system, dirname(paths.opencodeConfigPath)) ??
+        override?.system;
+      results.push(...(await applyInlineSystemAction(agentPath, systemAction, source)));
       continue;
     }
-    const override = inlineOverrides.get(agentName);
     const currentText = await readOptionalText(agentPath);
     if (!currentText) {
       await writeText(
@@ -434,12 +491,17 @@ export async function syncManagedAgentPrompts(
 
   for (const agentName of MANAGED_NATIVE_AGENT_NAMES) {
     const agentPath = getManagedAgentPromptPath(paths.managedAgentsDirPath, agentName);
+    const override = inlineOverrides.get(agentName);
+    const legacyResult = await syncLegacyInlineManagedPrompt(paths, agentName, override);
+    if (legacyResult) results.push(legacyResult);
     const systemAction = inlineSystem.get(agentName);
     if (systemAction !== undefined) {
-      results.push(...(await applyInlineSystemAction(agentPath, systemAction)));
+      const source =
+        resolveInlineSystemFile(override?.system, dirname(paths.opencodeConfigPath)) ??
+        override?.system;
+      results.push(...(await applyInlineSystemAction(agentPath, systemAction, source)));
       continue;
     }
-    const override = inlineOverrides.get(agentName);
     results.push(await syncManagedPrompt(paths, agentName, options, override));
   }
 
@@ -855,6 +917,17 @@ function getManagedSkillsPathReference(
   return skillsRef.startsWith(".") ? skillsRef : `./${skillsRef}`;
 }
 
+function canonicalSkillsPath(entry: string, baseDir: string): string {
+  if (entry.includes("://")) return entry;
+  const expanded = entry.startsWith("~/") ? join(homedir(), entry.slice(2)) : entry;
+  const absolute = isAbsolute(expanded) ? expanded : resolve(baseDir, expanded);
+  try {
+    return realpathSync(absolute);
+  } catch {
+    return absolute;
+  }
+}
+
 function ensureManagedSkillsPathConfigText(
   text: string,
   paths: Pick<
@@ -865,12 +938,34 @@ function ensureManagedSkillsPathConfigText(
   const document = parseObjectDocument(text, "OpenCode config");
   const currentPaths = readSkillsArray(document, "OpenCode config");
   const managedSkillsPath = getManagedSkillsPathReference(paths);
+  const baseDir =
+    paths.scope === "project"
+      ? (paths.projectRoot ?? dirname(paths.opencodeConfigPath))
+      : dirname(paths.opencodeConfigPath);
+  const canonicalManaged = canonicalSkillsPath(managedSkillsPath, baseDir);
+  const seen = new Set<string>();
+  const nextPaths: string[] = [];
+  let managedPresent = false;
 
-  if (currentPaths.includes(managedSkillsPath)) {
-    return text;
+  for (const entry of currentPaths) {
+    const canonical = canonicalSkillsPath(entry, baseDir);
+    if (canonical === canonicalManaged) {
+      if (managedPresent) continue;
+      managedPresent = true;
+      nextPaths.push(entry);
+      continue;
+    }
+    if (seen.has(canonical)) continue;
+    seen.add(canonical);
+    nextPaths.push(entry);
   }
+  if (!managedPresent) nextPaths.push(managedSkillsPath);
 
-  const nextPaths = [...currentPaths, managedSkillsPath];
+  const unchanged =
+    nextPaths.length === currentPaths.length &&
+    nextPaths.every((entry, index) => entry === currentPaths[index]);
+  if (unchanged) return text;
+
   const nextText = applyEdits(
     text,
     modify(text, ["skills"], nextPaths, {

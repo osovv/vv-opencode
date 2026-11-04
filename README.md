@@ -212,7 +212,7 @@ Two families: `vv-*` skills guide the work protocol, while `vvoc-*` skills opera
 | `vv-plan` | A spec is approved and ready to implement | A task-level implementation plan with file targets, contracts, dependencies, and acceptance criteria |
 | `vv-execute` | A plan is approved and you want it applied step by step | Ordered execution with verification, an explicit inline-or-classic mode choice, and applied spec/plan archival |
 | `vv-review` | You want findings, not fixes | A review-only workflow that reports spec/code issues and stops before implementation |
-| `vv-reflect` | A long development, debugging, ops, or investigation session exposed environment friction or produced reusable knowledge | Dispatches the read-only `vv-reflector` subagent over the session and its subagent tree, then applies environment improvements (documents, steering, guardrails, skills, tooling) or lessons/runbooks only after per-entry approval |
+| `vv-reflect` | A long development, debugging, ops, or investigation session exposed environment friction or produced reusable knowledge | Dispatches the read-only `vv-reflector` subagent over the session and its subagent tree — or the streaming `--archive` aggregate when the question spans sessions/projects — then applies environment improvements (documents, steering, guardrails, skills, tooling) or lessons/runbooks only after per-entry approval |
 | `vv-handoff` | You are ending a session and want the visible context preserved | A redacted XML note at `.vvoc/handoff/YYYY-MM-DD-<session-slug>/handoff.xml`, written from already-visible context only |
 | `vvoc-usage-analytics` | You ask about token usage, cache hit rate, costs, or caching regressions | Read-only analysis across `vvoc analytics`, the analytics JSONL, and historical `opencode.db` data |
 
@@ -229,7 +229,7 @@ Skills are loaded by OpenCode at session start through the native `skills` strin
 | `vvoc sync` | Refresh native plugins/agents/skills registrations, prompts, skills, config |
 | `vvoc launch` | Launch OpenCode with deterministic runtime and vvoc config sources after a host-window preflight |
 | `vvoc status` | Show current installation state, including the installed OpenCode version against the supported window and combined-package registration |
-| `vvoc doctor` | Diagnose OpenCode version/window/runtime/vvoc setup problems (exits non-zero on issues) |
+| `vvoc doctor` | Diagnose OpenCode version/window/runtime/vvoc setup problems and warn about stale managed prompts/skills, duplicate skills roots, and deprecated permission actions (exits non-zero on problems) |
 | `vvoc config validate` | Validate canonical `vvoc.json` |
 | `vvoc role list\|set\|unset` | Manage model role assignments |
 | `vvoc preset list\|show\|<name>` | Inspect or apply named presets |
@@ -265,7 +265,7 @@ Canonical project-local paths:
 ```text
 OpenCode config          → ./.opencode/opencode.json(c)
 vvoc config              → ./.vvoc/vvoc.json
-Managed agent prompts    → ./.vvoc/agents/*.md
+Managed agent prompts    → ./.opencode/agents/*.md
 Managed skills           → ./.vvoc/skills/*/SKILL.md
 Spec package directory   → ./.vvoc/specs/YYYY-MM-DD-<slug>/
 Handoff notes            → ./.vvoc/handoff/YYYY-MM-DD-<session-slug>/handoff.xml
@@ -279,17 +279,19 @@ Global paths:
 ```text
 OpenCode config          → $XDG_CONFIG_HOME/opencode/opencode.json
 vvoc config              → $XDG_CONFIG_HOME/vvoc/vvoc.json
-Managed agent prompts    → $XDG_CONFIG_HOME/vvoc/agents/*.md
+Managed agent prompts    → $XDG_CONFIG_HOME/opencode/agents/*.md
 Managed skills           → $XDG_CONFIG_HOME/vvoc/skills/*/SKILL.md
 Persisted data           → $XDG_DATA_HOME/vvoc/
 Usage analytics          → $XDG_DATA_HOME/vvoc/analytics/usage-YYYY-MM.jsonl
 ```
 
+Native OpenCode 2.x discovers managed agent markdown from the `agents/` directory beside the config file, so vvoc writes `agents/*.md` there. Legacy pre-V2 `$XDG_CONFIG_HOME/vvoc/agents/*.md` files referenced by an inline `agents.<id>.system` are recognized as managed migration inputs: `vvoc sync` refreshes a managed file in place and reports user-owned inline sources without overwriting them.
+
 ### One pinned package in the native plugins array
 
 OpenCode 2.x keeps one native config document per process. `opencode.json(c)` is loaded by the core/server plugin runtime and activates vvoc features such as model roles, Guardian, workflow, hashline edit, redaction, and web tools. The terminal UI process takes its own settings (tabs, keybinds, TUI-only plugin entries) from the native `cli.json`, and it also loads the TUI entrypoints of the plugins carried by the server inventory. vv-opencode uses that directly: the same pinned package entry (for example `@osovv/vv-opencode@X.Y.Z`) is registered once in the native `plugins` array, the host resolves its `./server` export for the server runtime and its `./tui` export for the terminal UI, and headless/server launches never load the UI module.
 
-`vvoc install`, `vvoc init`, and `vvoc sync` conservatively write that single pinned base-package entry — a string, or a `{ "package": …, "options": … }` object — into the native `plugins` array; sync also migrates the broken legacy `@osovv/vv-opencode/tui` form and older managed pins. Machines upgraded from a V1 host carry a second, host-migrated vvoc entry in the client-side `cli.json` (the host moves the retired `tui.json(c)` plugin list there on first start), so the same commands mirror an existing managed `cli.json` entry to the pinned specifier — comments, client preferences, unrelated entries, and the entry's options are preserved, and nothing is created when no client pin exists. `vvoc doctor` and `vvoc status` print the TUI client pin beside the server pin and warn when the two drift apart. Existing comments, unrelated settings, unrelated plugin entries, and their `options` are preserved; malformed plugin entries fail without rewrite. Supported V1 document shapes are materialized into the native V2 shape by `vvoc sync` once the host is inside the supported window, using the official OpenCode V1-to-V2 migration guide, with a timestamped `*.vvoc-backup-<timestamp>` sibling and validate-before-write. Residual or ambiguous V1 fields are refused before any mutation, so `plugin`, `agent`, `provider`, `command`, `small_model`, and `tools` never remain in a document vvoc writes.
+`vvoc install`, `vvoc init`, and `vvoc sync` conservatively write that single pinned base-package entry — a string, or a `{ "package": …, "options": … }` object — into the native `plugins` array; sync also migrates the broken legacy `@osovv/vv-opencode/tui` form and older managed pins. Machines upgraded from a V1 host carry a second, host-migrated vvoc entry in the client-side `cli.json` (the host moves the retired `tui.json(c)` plugin list there on first start), so the same commands mirror an existing managed `cli.json` entry to the pinned specifier — comments, client preferences, unrelated entries, and the entry's options are preserved, and nothing is created when no client pin exists. `vvoc doctor` and `vvoc status` print the TUI client pin beside the server pin and warn when the two drift apart. Existing comments, unrelated settings, unrelated plugin entries, and their `options` are preserved; malformed plugin entries fail without rewrite. Supported V1 document shapes are materialized into the native V2 shape by `vvoc sync` once the host is inside the supported window, using the official OpenCode V1-to-V2 migration guide, with a timestamped `*.vvoc-backup-<timestamp>` sibling and validate-before-write. Residual or ambiguous V1 fields are refused before any mutation, so `plugin`, `agent`, `provider`, `command`, `small_model`, and `tools` never remain in a document vvoc writes. A legacy inline `agents.<id>.system = {file:...}` reference to a vvoc-managed prompt is refreshed in place by `vvoc sync`; a user-owned inline system is reported with its source path and never overwritten.
 
 The native document shape vvoc validates, extends, and writes into:
 
@@ -328,7 +330,7 @@ The optional schema-v3 `web` section follows the same layer precedence and is om
 
 ### Diagnostics never mutate
 
-`vvoc status` and `vvoc doctor` report the installed OpenCode version, the supported window (`OpenCode supported range: >=2.0.18 <3.0.0`) and the verified host list, selected runtime/vvoc config paths, plugin registration, and validation problems without normalizing or rewriting files. `vvoc upgrade` can still finish the package installation when the follow-up `vvoc sync` fails; it then reports a partial upgrade, leaves config unchanged, and tells you to fix the invalid config before rerunning `vvoc sync`.
+`vvoc status` and `vvoc doctor` report the installed OpenCode version, the supported window (`OpenCode supported range: >=2.0.18 <3.0.0`) and the verified host list, selected runtime/vvoc config paths, plugin registration, and validation problems without normalizing or rewriting files. `vvoc doctor` additionally warns when a managed agent prompt or managed skill body is stale relative to the installed package, when two `skills` entries resolve to the same real path, or when a permission rule uses a deprecated action such as `apply_patch`; those warnings do not change the exit code, while a missing `{file:...}` reference remains a problem. `vvoc upgrade` can still finish the package installation when the follow-up `vvoc sync` fails; it then reports a partial upgrade, leaves config unchanged, and tells you to fix the invalid config before rerunning `vvoc sync`.
 
 Runtime compatibility is window-bounded: install, init, sync, and launch refuse a host outside `>=2.0.18 <3.0.0` before touching config, Guardian evaluates permissions through the native `permission.evaluate` hook, hashline edit refs must use current hash/context anchors, and sync writes current managed agents without deleting old pre-rename user or command entries.
 

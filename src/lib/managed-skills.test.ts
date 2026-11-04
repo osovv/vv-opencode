@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-007 - Added exact returned work-item identity checks for the vv-execute and vv-review dispatch steps. Prior: bounded recovery, native plan registration, and scoped re-review coverage.]
+//   LAST_CHANGE: [C-WORKFLOW-PROMPT-SYNC-DOCTOR-ARCHIVE T-001 - Updated vv-execute and vv-review identity assertions for the literal header, state map, standalone fields, and launch-rejection guidance.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -271,10 +271,11 @@ describe("managed workflow skill prompts", () => {
       expect(body).not.toContain("VVOC_WORK_ITEM_ID: wi-1");
       expect(body).toContain("VVOC_WORK_ITEM_ID");
     }
-    expect(executeBody).toContain("exact returned VVOC_WORK_ITEM_ID header");
-    expect(reviewBody).toContain(
-      "exact `VVOC_WORK_ITEM_ID` returned by `work_item_open` as the first line",
-    );
+    expect(executeBody).toContain("VVOC_WORK_ITEM_ID: wi-<n>");
+    expect(executeBody).toContain("standalone item takes only");
+    expect(executeBody).toContain("LAUNCH_REJECTED_INVALID_TRANSITION");
+    expect(reviewBody).toContain("VVOC_WORK_ITEM_ID: wi-<n>");
+    expect(reviewBody).toContain("REVIEW_ROUND_NOT_ACTIVE");
     expect(reviewBody).toContain("carry no route");
   });
 

@@ -16,7 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX refine-thinking-discipline - Added instruction-delivery assertions for settled-conclusion reopen triggers, false-premise handling, pressure-versus-evidence distinction, and reviewer-conflict routing with per-claim/restatement exclusions. Prior: exact returned work-item id and parser-backed terminal-status agreement.]
+//   LAST_CHANGE: [C-WORKFLOW-PROMPT-SYNC-DOCTOR-ARCHIVE T-001 - Worker templates now copy the assignment header and state that the controller owns work-item lifecycle; the shipped protocol examples remain parser-validated.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -450,7 +450,8 @@ describe("managed agent prompts", () => {
       expect(template).toContain(describeStatusVocabulary(testCase.agent));
       expect(template).toContain("no preface");
       expect(template).toContain("blank line before the body");
-      expect(template).toContain("returned by `work_item_open`");
+      expect(template).toContain("from the top of your assignment");
+      expect(template).not.toContain("returned by `work_item_open`");
     }
   });
 

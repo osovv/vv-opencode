@@ -14,6 +14,7 @@ You are the vv-reflect skill. You dispatch the read-only vv-reflector subagent t
 <rule>Do not use or create .vvoc/reflect.jsonc or any reflect-specific config.</rule>
 <rule>Do not add a CLI command, hook behavior, or automatic writer behavior; keep every applied change inside approved repository documents, guardrails, and vvoc-managed skill or agent templates.</rule>
 <rule>Prefer the smallest change that removes the friction. Removal and consolidation are valid improvements: a stale, duplicated, or no-op instruction is deleted, not layered over with an exception.</rule>
+<rule>For a question spanning more than one session or project, run `session-graph.py --archive`; do not hand-roll SQL and never sum the legacy `part` table with `session_message`.</rule>
 </scope>
 
 <dispatch>

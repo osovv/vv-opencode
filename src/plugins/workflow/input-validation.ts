@@ -23,7 +23,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-002 - Initial branch-aware workflow tool input validation with exported validateWorkflowToolInput, owned contracts, and canonical descriptions; correction cycle adds an args-only action/decision field matrix, bounded branch diagnostics with precise indexed boundary paths, and shared generic task branch validation for both work_item_open items and work_checkpoint register/amend tasks. Field-specific trims/bounds now live in the contract schema so no blanket recursive string rejection is applied.]
+//   LAST_CHANGE: [C-WORKFLOW-PROMPT-SYNC-DOCTOR-ARCHIVE T-001 - Expanded the model-facing work_item_open description with the standalone permitted fields, rejected generic-task fields, and the ready-to-copy header contract.]
 // END_CHANGE_SUMMARY
 
 import type { ZodRawShape } from "zod";
@@ -77,7 +77,7 @@ export function isWorkflowToolId(value: unknown): value is WorkflowToolId {
 /** Canonical public descriptions shared by registrations and contracts. */
 export const WORKFLOW_TOOL_DESCRIPTIONS = {
   work_item_open:
-    "Open one or more workflow work items idempotently with explicit mode and requiredReviewers.",
+    "Open one or more workflow work items idempotently with explicit mode and requiredReviewers. A standalone item takes only key, title, mode, and requiredReviewers; goal, acceptanceCriteria, verification, writeScope, dependsOn, and blockedBy are generic-task fields and are rejected on a standalone open. The response includes a ready-to-copy VVOC_WORK_ITEM_ID header for each item.",
   work_item_list: "List workflow work items for the current session.",
   work_item_close: "Close a workflow work item by id when it is ready_to_close.",
   work_item_decide:

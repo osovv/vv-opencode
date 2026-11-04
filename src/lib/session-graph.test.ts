@@ -6,8 +6,7 @@
 //     default newest-top-level and newest-matched fallback), subagent-tree recursion, tool
 //     friction signals, changed-file semantics, message tails, and the depth/max-nodes
 //     truncation markers.
-//   SCOPE: Deterministic instruction-contract coverage for the shipped Python extractor; skipped
-//     when python3 is unavailable on PATH.
+//   SCOPE: Deterministic instruction-contract coverage for the shipped Python extractor, including archive aggregation filters, legacy part union/deduplication, and JSON/Markdown output; skipped when python3 is unavailable on PATH.
 //   DEPENDS: [bun:test, bun:sqlite, node:child_process, node:fs, node:os, node:path, node:url]
 //   LINKS: [M-CLI-MANAGED-SKILLS, V-M-CLI-MANAGED-SKILLS]
 //   ROLE: TEST
@@ -20,7 +19,9 @@
 //   PYTHON - python3 path from Bun.which, or null when unavailable.
 //   ToolEntry - Shape of a live-schema tool content entry.
 //   MessageData - Shape of a synthetic session_message payload.
+//   nextToolId - Monotonic synthetic call id counter for fixture tools.
 //   tool - Builds a synthetic tool content entry.
+//   toolWithId - Builds a synthetic tool entry with an explicit call id.
 //   insertMessage - Inserts one synthetic session_message row.
 //   buildFixture - Creates a temp DB with the 2.x schema and a root/child/older-root tree.
 //   runExtractorRaw - Runs the extractor against the fixture and returns raw stdout.
@@ -29,12 +30,12 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.2.0 - Added default/fallback resolution, changed-file semantics, max-nodes cap, and md truncation coverage.]
+//   LAST_CHANGE: [C-WORKFLOW-PROMPT-SYNC-DOCTOR-ARCHIVE T-005 - Added archive aggregation, filters, legacy part union/deduplication, determinism, and JSON/Markdown output coverage.]
 // END_CHANGE_SUMMARY
 
 import { Database } from "bun:sqlite";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, expect } from "bun:test";
@@ -46,11 +47,23 @@ const SCRIPT_URL = new URL(
 const SCRIPT_PATH = SCRIPT_URL.pathname;
 const PYTHON = Bun.which("python3");
 
-type ToolEntry = { type: "tool"; name: string; state: { status: string; input: unknown } };
+type ToolEntry = {
+  type: "tool";
+  id: string;
+  name: string;
+  state: { status: string; input: unknown };
+};
 type MessageData = { text?: string; files?: unknown[]; content?: unknown[] };
 
+let nextToolId = 0;
+
 function tool(name: string, status: string, input: unknown): ToolEntry {
-  return { type: "tool", name, state: { status, input } };
+  nextToolId += 1;
+  return { type: "tool", id: `call-${nextToolId}`, name, state: { status, input } };
+}
+
+function toolWithId(id: string, name: string, status: string, input: unknown): ToolEntry {
+  return { type: "tool", id, name, state: { status, input } };
 }
 
 function insertMessage(
@@ -112,7 +125,7 @@ function buildFixture(): { dir: string; dbPath: string } {
   });
   insertMessage(db, "root", 2, "assistant", {
     content: [
-      tool("shell", "completed", { command: "bun test" }),
+      toolWithId("call-root-shell-1", "shell", "completed", { command: "bun test" }),
       tool("shell", "completed", { command: "bun test" }),
       tool("shell", "completed", { command: "bun test" }),
       tool("read", "error", { filePath: "src/a.ts" }),
@@ -274,6 +287,133 @@ pythonTest("renders a truncation marker in md format", () => {
       "md",
     ]);
     expect(output).toContain("Truncated:");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+pythonTest("aggregates the archive with filters and skill totals", () => {
+  const { dir, dbPath } = buildFixture();
+  try {
+    const db = new Database(dbPath);
+    db.run("UPDATE session_v2 SET time_created = 1767225600000 WHERE id IN ('root','child')");
+    db.run("UPDATE session_v2 SET time_created = 1577836800000 WHERE id = 'root-old'");
+    insertMessage(db, "root", 3, "assistant", {
+      content: [tool("skill", "completed", { id: "vv-execute" })],
+    });
+    db.close();
+
+    const payload = runExtractor(dbPath, dir, [
+      "--archive",
+      "--since",
+      "2026-01-01",
+      "--until",
+      "2026-01-01",
+      "--top",
+      "5",
+    ]);
+    const totals = payload.totals as Record<string, number>;
+    expect(totals.sessions).toBe(2);
+    expect(totals.calls).toBe(7);
+    expect(totals.errors).toBe(2);
+    expect(totals.skill_loads).toBe(1);
+    expect((payload.skills as Array<{ id: string; loads: number }>)[0]).toMatchObject({
+      id: "vv-execute",
+      loads: 1,
+    });
+    expect((payload.tools as Array<{ name: string }>).map((entry) => entry.name)).toContain(
+      "shell",
+    );
+
+    const byAgent = runExtractor(dbPath, dir, [
+      "--archive",
+      "--agent",
+      "vv-implementer",
+      "--top",
+      "5",
+    ]);
+    expect((byAgent.totals as { sessions: number; calls: number; errors: number }).sessions).toBe(
+      1,
+    );
+    expect((byAgent.totals as { calls: number }).calls).toBe(1);
+    expect((byAgent.totals as { errors: number }).errors).toBe(1);
+
+    const bySkill = runExtractor(dbPath, dir, ["--archive", "--skill", "vv-execute", "--top", "5"]);
+    expect((bySkill.totals as { sessions: number; calls: number }).sessions).toBe(1);
+    expect((bySkill.totals as { calls: number }).calls).toBe(6);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+pythonTest("unions legacy part rows without double-counting session_message calls", () => {
+  const { dir, dbPath } = buildFixture();
+  try {
+    const db = new Database(dbPath);
+    db.run(
+      "CREATE TABLE part (id TEXT PRIMARY KEY, session_id TEXT, time_created INTEGER, data TEXT)",
+    );
+    db.run("INSERT INTO part VALUES (?,?,?,?)", [
+      "part-only",
+      "root",
+      1000,
+      JSON.stringify({
+        type: "tool",
+        callID: "part-only",
+        tool: "grep",
+        state: { status: "completed", input: { pattern: "needle" } },
+      }),
+    ]);
+    db.run("INSERT INTO part VALUES (?,?,?,?)", [
+      "call-root-shell-1",
+      "root",
+      1000,
+      JSON.stringify({
+        type: "tool",
+        callID: "call-root-shell-1",
+        tool: "shell",
+        state: { status: "error", input: { command: "stale" } },
+      }),
+    ]);
+    db.close();
+
+    const payload = runExtractor(dbPath, dir, ["--archive", "--top", "5"]);
+    const totals = payload.totals as { calls: number; errors: number };
+    // Five root calls + one child call + one part-only call. The overlapping
+    // call-1 row is replaced by the session_message state, not added.
+    expect(totals.calls).toBe(7);
+    expect(totals.errors).toBe(2);
+    const shell = (payload.tools as Array<{ name: string; calls: number; errors: number }>).find(
+      (entry) => entry.name === "shell",
+    );
+    expect(shell?.calls).toBe(4);
+    expect(shell?.errors).toBe(1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+pythonTest("archive output is deterministic and writes json plus markdown", () => {
+  const { dir, dbPath } = buildFixture();
+  try {
+    const first = runExtractorRaw(dbPath, dir, ["--archive", "--top", "5"]);
+    const second = runExtractorRaw(dbPath, dir, ["--archive", "--top", "5"]);
+    expect(first).toBe(second);
+
+    const outDir = join(dir, "archive-out");
+    runExtractorRaw(dbPath, dir, ["--archive", "--top", "5", "--out", outDir]);
+    expect(existsSync(join(outDir, "aggregate.json"))).toBe(true);
+    expect(existsSync(join(outDir, "digest.md"))).toBe(true);
+    const aggregate = JSON.parse(readFileSync(join(outDir, "aggregate.json"), "utf8")) as {
+      totals: { calls: number };
+    };
+    expect(aggregate.totals.calls).toBe(6);
+    expect(readFileSync(join(outDir, "digest.md"), "utf8")).toContain(
+      "# OpenCode archive aggregate",
+    );
+
+    const markdown = runExtractorRaw(dbPath, dir, ["--archive", "--format", "md"]);
+    expect(markdown).toContain("| Tool | Calls | Errors | Rate | Sessions |");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

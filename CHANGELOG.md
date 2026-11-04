@@ -1,3 +1,9 @@
+## <small>2.4.0 (2026-11-04)</small>
+
+### Summary
+
+Version 2.4.0 closes the verified agent-facing workflow, managed-prompt sync, doctor, and reflection gaps. Managed skills and agents now describe the literal `VVOC_WORK_ITEM_ID: wi-<n>` launch header, the state-to-agent map, the standalone `work_item_open` field rule, and controller-only work-item lifecycle, so workers copy the assignment header instead of a sample id. `vvoc sync` refreshes legacy inline managed `{file:...}` system prompts, preserves and reports user-owned inline sources, and deduplicates `skills` roots by real path; `vvoc doctor` warns about stale managed prompts and skills, duplicate skill roots, and deprecated permission actions such as `apply_patch`, while missing file references remain fail-closed problems. The bundled `vv-reflect` extractor gains a streaming `--archive` mode with since/until/project/agent/skill filters, call-id deduplication, legacy `part` union, deterministic JSON/Markdown output, and a documented machine-wide workflow. README and GRACE context now point at the native `opencode/agents` discovery path and describe legacy `vvoc/agents` files as migration inputs.
+
 ## <small>2.3.3 (2026-11-04)</small>
 
 ### Summary

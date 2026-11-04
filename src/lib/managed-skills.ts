@@ -20,7 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [2026-08-19-usage-analytics-skill - Added the vvoc-usage-analytics tooling skill (first vvoc-* managed skill).]
+//   LAST_CHANGE: [C-WORKFLOW-PROMPT-SYNC-DOCTOR-ARCHIVE T-003 - Reference discovery now returns regular files only so an accidental directory in a bundled references folder cannot be read as a skill reference.]
 // END_CHANGE_SUMMARY
 
 import { readdir, readFile } from "node:fs/promises";
@@ -62,8 +62,8 @@ export async function loadManagedSkillReference(
 export async function listManagedSkillReferenceNames(name: ManagedSkillName): Promise<string[]> {
   const refDirUrl = new URL(`../../templates/skills/${name}/references/`, import.meta.url);
   try {
-    const entries = await readdir(refDirUrl);
-    return entries;
+    const entries = await readdir(refDirUrl, { withFileTypes: true });
+    return entries.filter((entry) => entry.isFile()).map((entry) => entry.name);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return [];

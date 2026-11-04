@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.1.2 - Added OpenCode host compatibility diagnostic coverage.]
+//   LAST_CHANGE: [C-WORKFLOW-PROMPT-SYNC-DOCTOR-ARCHIVE T-003 - Added warning coverage for stale managed prompts and skills, duplicate skills roots, deprecated permission actions, and missing {file:} problem behavior.]
 // END_CHANGE_SUMMARY
 
 import { expect, test } from "bun:test";
@@ -24,6 +24,8 @@ import { join } from "node:path";
 import doctorCommand from "./doctor.js";
 import {
   ensurePackageInstalled,
+  installManagedAgentPrompts,
+  installManagedSkillFiles,
   installVvocConfig,
   resolvePaths,
   syncManagedAgentRegistrations,
@@ -134,6 +136,98 @@ test("doctor reports invalid vvoc config and exits non-zero without mutating it"
     expect(stderr).toContain(paths.vvocConfigPath);
     expect(process.exitCode ?? 0).toBe(1);
     expect(await readFile(paths.vvocConfigPath, "utf8")).toBe(invalidText);
+  } finally {
+    process.chdir(initialCwd);
+    process.exitCode = initialExitCode ?? 0;
+    await rm(configHome, { recursive: true, force: true });
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("doctor reports prompt, skill, duplicate-root, and permission drift as warnings without failing", async () => {
+  const configHome = await mkdtemp(join(tmpdir(), "vvoc-doctor-drift-config-"));
+  const projectDir = await mkdtemp(join(tmpdir(), "vvoc-doctor-drift-project-"));
+  const initialCwd = process.cwd();
+  const initialExitCode = process.exitCode;
+
+  try {
+    const paths = await resolvePaths({
+      scope: "project",
+      cwd: projectDir,
+      configDir: configHome,
+    });
+    await ensurePackageInstalled(paths);
+    await syncManagedAgentRegistrations(paths);
+    await installVvocConfig(paths);
+    await installManagedAgentPrompts(paths, { force: true });
+    await installManagedSkillFiles(paths, { force: true });
+
+    const controllerPath = join(paths.managedAgentsDirPath, "vv-controller.md");
+    await writeFile(controllerPath, `${await readFile(controllerPath, "utf8")}\nSTALE\n`, "utf8");
+    const skillPath = join(paths.managedSkillsDirPath, "vv-execute", "SKILL.md");
+    await writeFile(skillPath, `${await readFile(skillPath, "utf8")}\nSTALE\n`, "utf8");
+
+    const config = JSON.parse(await readFile(paths.opencodeConfigPath, "utf8")) as {
+      skills?: string[];
+      permissions?: Array<Record<string, unknown>>;
+    };
+    config.skills = [".vvoc/skills", join(projectDir, ".vvoc", "skills")];
+    config.permissions = [{ action: "apply_patch", resource: "*", effect: "deny" }];
+    await writeFile(paths.opencodeConfigPath, JSON.stringify(config, null, 2) + "\n", "utf8");
+
+    process.chdir(projectDir);
+    process.exitCode = 0;
+    const { stdout } = await captureOutput(async () => {
+      await (
+        doctorCommand as { run: (context: { args: Record<string, unknown> }) => Promise<void> }
+      ).run({ args: { scope: "project", "config-dir": configHome } });
+    });
+
+    expect(stdout).toContain("Warnings:");
+    expect(stdout).toContain(controllerPath);
+    expect(stdout).toContain(skillPath);
+    expect(stdout).toContain("duplicate skills root");
+    expect(stdout).toContain('permission action "apply_patch"');
+    expect(process.exitCode ?? 0).toBe(0);
+  } finally {
+    process.chdir(initialCwd);
+    process.exitCode = initialExitCode ?? 0;
+    await rm(configHome, { recursive: true, force: true });
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
+test("doctor keeps a missing {file:} reference as a problem", async () => {
+  const configHome = await mkdtemp(join(tmpdir(), "vvoc-doctor-missing-file-config-"));
+  const projectDir = await mkdtemp(join(tmpdir(), "vvoc-doctor-missing-file-project-"));
+  const initialCwd = process.cwd();
+  const initialExitCode = process.exitCode;
+
+  try {
+    const paths = await resolvePaths({
+      scope: "project",
+      cwd: projectDir,
+      configDir: configHome,
+    });
+    await ensurePackageInstalled(paths);
+    await installVvocConfig(paths);
+    const config = JSON.parse(await readFile(paths.opencodeConfigPath, "utf8")) as {
+      agents?: Record<string, Record<string, unknown>>;
+    };
+    config.agents = { "vv-controller": { system: "{file:./missing.md}" } };
+    await writeFile(paths.opencodeConfigPath, JSON.stringify(config, null, 2) + "\n", "utf8");
+
+    process.chdir(projectDir);
+    process.exitCode = 0;
+    const { stderr } = await captureOutput(async () => {
+      await (
+        doctorCommand as { run: (context: { args: Record<string, unknown> }) => Promise<void> }
+      ).run({ args: { scope: "project", "config-dir": configHome } });
+    });
+
+    expect(stderr).toContain("Problems:");
+    expect(stderr).toContain("unresolved {file:} reference");
+    expect(process.exitCode ?? 0).toBe(1);
   } finally {
     process.chdir(initialCwd);
     process.exitCode = initialExitCode ?? 0;

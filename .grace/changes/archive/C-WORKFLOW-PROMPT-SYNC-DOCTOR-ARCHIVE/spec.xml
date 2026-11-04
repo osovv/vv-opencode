@@ -1,0 +1,65 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-WORKFLOW-PROMPT-SYNC-DOCTOR-ARCHIVE>
+    <Summary>Close the verified agent-facing workflow protocol, managed-prompt sync, doctor drift, skill-root deduplication, and archive-aggregate gaps, then prepare the 2.4.0 release.</Summary>
+    <Problem>Three independent surfaces are incomplete. Managed skill and agent instructions do not consistently describe the exact tracked launch header or the controller-only ownership of work items, so workers are told to use a tool they cannot call and controllers are not shown the literal first-line contract. The managed prompt sync cannot reconcile legacy inline {file:...} managed system prompts after the V2 native-markdown migration, and doctor does not report prompt drift, duplicate skill roots, or the inert apply_patch permission action. The vv-reflect extractor is single-session only, so machine-wide questions require rewriting an ad-hoc aggregator that is easy to double-count across the legacy part table and session_message.</Problem>
+    <Goals>
+      <Goal>Make the tracked launch protocol executable from the shipped instructions: literal VVOC_WORK_ITEM_ID first line, state-to-agent map, standalone field rules, review_only handling, and explicit recovery from launch rejections.</Goal>
+      <Goal>Teach workers to copy the assignment header verbatim and never open, list, or close work items themselves.</Goal>
+      <Goal>Reconcile legacy inline managed {file:...} system prompts during sync, preserving user-owned files and reporting the source when management is not possible.</Goal>
+      <Goal>Add read-only doctor checks for managed prompt drift, duplicate skill roots, and deprecated permission actions without failing open on missing {file:...} references.</Goal>
+      <Goal>Canonicalize and deduplicate the skills[] roots by real path while preserving user order and unrelated entries.</Goal>
+      <Goal>Add a streaming archive mode to the vv-reflect extractor with call-id deduplication, filters, deterministic aggregates, and JSON/Markdown output.</Goal>
+      <Goal>Correct the documented managed-agent path to the native OpenCode discovery location and prepare a 2.4.0 package/schema/changelog release.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>Preserve all existing workflow state transitions, authorization gates, review obligations, recovery budgets, persisted state version, and native tool names.</Constraint>
+      <Constraint>Do not weaken fail-closed V1 migration: report-only and unmappable OpenCode fields continue to abort sync with a manual checklist. Only improve the diagnostic wording where needed.</Constraint>
+      <Constraint>Managed prompt writes remain conservative: user-owned files are never overwritten, managed files keep their managed marker, and inline system overrides continue to win over generated markdown.</Constraint>
+      <Constraint>Doctor additions are read-only and produce warnings for drift, duplicate roots, and deprecated permission actions; missing {file:...} references remain problems with a non-zero exit.</Constraint>
+      <Constraint>Skill deduplication must preserve the first occurrence, preserve unrelated strings, and never silently delete a real directory or non-symlink skill copy.</Constraint>
+      <Constraint>The archive extractor remains standard-library-only, opens the database read-only, never reads message text for aggregates, and never doubles legacy part and session_message rows.</Constraint>
+      <Constraint>No generated dist edits. Native dependency pins, canonical vvoc schema v3, persisted workflow snapshot version 4, and public exports remain unchanged.</Constraint>
+      <Constraint>The release is prepared locally to 2.4.0 with package/schema/changelog consistency and full gates; npm publication through the CI workflow is not performed from this environment.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>No new workflow tool, state, mode, authority stage, or persisted-state format.</NonGoal>
+      <NonGoal>No automatic deletion of user-owned inline agents, skill directories, or permission rules.</NonGoal>
+      <NonGoal>No generic allowlist that claims to validate every future native permission action; only curated deprecated aliases are reported.</NonGoal>
+      <NonGoal>No replacement of the session-scoped extractor output or its existing target-resolution behavior.</NonGoal>
+      <NonGoal>No npm publish, CI dispatch, git tag push, or GitHub Release creation from this environment.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>AC-01: The shipped vv-execute and vv-review instructions contain the literal `VVOC_WORK_ITEM_ID: wi-&lt;n&gt;` contract, a state-to-allowed-agent map, the standalone permitted-field rule, the review_only new-item rule, and the single-agent-per-state rejection guidance.</Criterion>
+      <Criterion>AC-02: vv-implementer, vv-code-reviewer, and vv-spec-reviewer tell the worker to copy the header from the assignment and state that the controller owns work-item lifecycle; no worker template claims work_item_open is available to the worker.</Criterion>
+      <Criterion>AC-03: work_item_open's model-facing description lists the standalone fields and the generic-task-only fields, and the shipped contract tests assert that wording without claiming that validation returns only one issue.</Criterion>
+      <Criterion>AC-04: sync updates a vvoc-managed legacy inline {file:...} system prompt to the current template body, preserves user-owned files, and reports the source when an inline system file is not managed.</Criterion>
+      <Criterion>AC-05: doctor reports stale managed agent prompts and managed skills, duplicate skills[] roots after real-path normalization, and the inert apply_patch permission action as warnings; a missing {file:...} reference remains a problem.</Criterion>
+      <Criterion>AC-06: skills[] deduplication keeps one canonical root per real path, preserves first-occurrence order and unrelated entries, and leaves a user-owned skill directory untouched.</Criterion>
+      <Criterion>AC-07: session-graph.py supports an archive mode with since/until/project/agent/skill filters, top limits, JSON and Markdown output, streaming aggregation, and call-id deduplication; the archive totals do not sum legacy part and session_message rows.</Criterion>
+      <Criterion>AC-08: README and GRACE context identify the native managed-agent prompt location correctly, the release is 2.4.0 across package.json, schema $id, and CHANGELOG, and typecheck, lint, format, GRACE markup, contract checks, tests, build, pack check, release check, grace lint, and grace status pass on the final snapshot.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-CLI-MANAGED-AGENTS />
+      <M-CLI-MANAGED-SKILLS />
+      <M-CLI-CONFIG />
+      <M-CLI-COMMANDS />
+      <M-PLUGIN-WORKFLOW />
+      <M-RELEASE-AUTOMATION />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/lib/managed-agents.test.ts src/lib/managed-skills.test.ts src/lib/opencode.test.ts src/lib/session-graph.test.ts src/commands/doctor.test.ts src/commands/sync.test.ts src/plugins/workflow/contracts.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>bun run pack:check</ExpectedCommand>
+      <ExpectedCommand>bun run release:check</ExpectedCommand>
+      <ExpectedCommand>grace lint --path .</ExpectedCommand>
+      <ExpectedCommand>grace status --path .</ExpectedCommand>
+      <ExpectedEvidence>Targeted suites prove the instruction, migration, doctor, deduplication, and extractor behavior; the full gate and release:check prove the 2.4.0 package surface; GRACE lint/status prove the durable projections.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>The user explicitly requested all three fix blocks autonomously and a 2.4.0 release in the current conversation; this authorizes the approved lifecycle and direct implementation without a separate review checkpoint.</Assumption>
+      <Assumption>The legacy inline {file:...} prompt is vvoc-managed when the target file carries the managed marker and the inline value is a single file token; otherwise sync treats it as user-owned.</Assumption>
+      <Assumption>The local environment cannot publish to npm or dispatch the release workflow, so 2.4.0 is prepared and verified locally, not published.</Assumption>
+    </Assumptions>
+  </C-WORKFLOW-PROMPT-SYNC-DOCTOR-ARCHIVE>
+</GraceChangeSpec>

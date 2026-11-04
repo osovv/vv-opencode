@@ -45,7 +45,14 @@ python3 "$SCRIPT" --project "$PWD" --format json
 # or, when the assignment disambiguates the target:
 python3 "$SCRIPT" --session <id> --format json
 python3 "$SCRIPT" --child <child-id> --format json
+# for a machine-wide question spanning sessions or projects:
+python3 "$SCRIPT" --archive --since 2026-02-01 --out /tmp/opencode/archive
 ```
+
+`--archive` streams a machine-wide aggregate (`totals`, `tools`, `skills`, `agents`, `projects`,
+`repeated_calls`, `top_errors`, and top sessions), deduplicates calls by entry id, and unions the
+legacy `part` table with `session_message` instead of summing them. Use `--agent`, `--skill`,
+`--project`, `--since`, and `--until` to bound it; `--out` writes `aggregate.json` and `digest.md`.
 
 The script is read-only (`mode=ro` plus `PRAGMA query_only`). It returns the session tree with per-node friction signals: tool-call counts, errors, repeated call shapes, test-command runs, duration, cost, changed files, and a short message tail per node. Read it; do not re-dump raw transcripts. If the script is missing, the database or schema is unsupported, or the target session cannot be resolved, report exactly that in your result and stop. Do not fall back to a raw `opencode session export` or analyze the transcript inline; the main session stops when the extractor is unavailable.
 

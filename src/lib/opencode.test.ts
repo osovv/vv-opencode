@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct fix - Added coverage that prompt sync resolves {file:} tokens from the declaring config directory.]
+//   LAST_CHANGE: [C-WORKFLOW-PROMPT-SYNC-DOCTOR-ARCHIVE T-002/T-004 - Added legacy inline managed prompt reconciliation, user-owned source reporting, and real-path skills-root deduplication coverage.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -320,6 +320,30 @@ describe("managed native agent registration", () => {
     expect(parsed.skills).toEqual(["./custom-skills", ".vvoc/skills"]);
     expect(parsed.plugins).toEqual(["other-plugin"]);
     expect(ensureManagedAgentRegistrationsConfigText(output, paths)).toBe(output);
+  });
+
+  test("deduplicates skills roots that resolve to the managed directory", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-skills-dedupe-"));
+    try {
+      const paths = await resolvePaths({
+        scope: "global",
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      const managed = join(configHome, "vvoc", "skills");
+      const input = JSON.stringify(
+        { skills: ["../vvoc/skills", "./custom-skills", managed] },
+        null,
+        2,
+      );
+
+      const output = ensureManagedAgentRegistrationsConfigText(input, paths);
+      const parsed = parse(output) as { skills?: string[] };
+      expect(parsed.skills).toEqual(["../vvoc/skills", "./custom-skills"]);
+      expect(ensureManagedAgentRegistrationsConfigText(output, paths)).toBe(output);
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
   });
 
   test("refuses a V1-shaped document before any mutation", async () => {
@@ -1783,6 +1807,86 @@ describe("managed agent user ownership", () => {
 
       await expect(syncManagedAgentPrompts(paths, { force: true })).resolves.toBeDefined();
       expect(await readFile(paths.opencodeConfigPath, "utf8")).toContain("{file:./prompt.md}");
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+
+  test("refreshes a legacy inline managed {file:} prompt during sync", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-agent-legacy-file-"));
+    try {
+      const paths = await resolvePaths({
+        scope: "global",
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      await mkdir(dirname(paths.opencodeConfigPath), { recursive: true });
+      await mkdir(paths.vvocAgentsDirPath, { recursive: true });
+      const legacyPath = join(paths.vvocAgentsDirPath, "vv-controller.md");
+      await writeFile(
+        legacyPath,
+        "<!-- Managed by vvoc. `vvoc sync` rewrites files with this marker while preserving agent registration and model settings elsewhere. Remove this comment if you want to manage the file manually. -->\n\nOLD BODY\n",
+        "utf8",
+      );
+      await writeFile(
+        paths.opencodeConfigPath,
+        JSON.stringify(
+          { agents: { "vv-controller": { system: "{file:../vvoc/agents/vv-controller.md}" } } },
+          null,
+          2,
+        ) + "\n",
+        "utf8",
+      );
+
+      const results = await syncManagedAgentPrompts(paths, { force: true });
+      const legacy = await readFile(legacyPath, "utf8");
+      expect(legacy).toContain("Managed by vvoc");
+      expect(legacy).not.toContain("OLD BODY");
+      expect(legacy).toContain("Your job is to own the user-facing task end to end");
+      expect(results).toContainEqual(
+        expect.objectContaining({ action: "updated", path: legacyPath }),
+      );
+      expect(await readFile(paths.opencodeConfigPath, "utf8")).toContain(
+        "{file:../vvoc/agents/vv-controller.md}",
+      );
+
+      const second = await syncManagedAgentPrompts(paths, { force: true });
+      expect(second).toContainEqual(expect.objectContaining({ action: "kept", path: legacyPath }));
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
+    }
+  });
+
+  test("reports the source for a user-owned inline system prompt", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-agent-inline-source-"));
+    try {
+      const paths = await resolvePaths({
+        scope: "global",
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      await mkdir(dirname(paths.opencodeConfigPath), { recursive: true });
+      await writeFile(
+        join(dirname(paths.opencodeConfigPath), "custom.md"),
+        "Custom instructions.\n",
+        "utf8",
+      );
+      await writeFile(
+        paths.opencodeConfigPath,
+        JSON.stringify({ agents: { "vv-controller": { system: "{file:./custom.md}" } } }, null, 2) +
+          "\n",
+        "utf8",
+      );
+
+      const results = await syncManagedAgentPrompts(paths, { force: true });
+      const generated = results.find((result) =>
+        result.path.endsWith(join("agents", "vv-controller.md")),
+      );
+      expect(generated?.reason).toContain("source is");
+      expect(generated?.reason).toContain("custom.md");
+      expect(await readFile(join(dirname(paths.opencodeConfigPath), "custom.md"), "utf8")).toBe(
+        "Custom instructions.\n",
+      );
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }

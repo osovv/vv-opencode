@@ -18,6 +18,26 @@ For tracked subagents (`vv-implementer`, `vv-spec-reviewer`, `vv-code-reviewer`)
 7. Avoid free-form review loops without explicit work-item identity.
 8. In `review_only`, reviewer `FAIL` is a completed review finding result; collect all required reviewer results before closing, and do not route review-only failures to `vv-implementer`.
 
+Standalone field rule: a standalone `implementation` or `review_only` item takes only `key`, `title`,
+`mode`, and `requiredReviewers`. `goal`, `acceptanceCriteria`, `verification`, `writeScope`,
+`dependsOn`, and `blockedBy` belong to generic `execution.tasks[]` and are rejected on a standalone
+open.
+
+Launch states and allowed tracked agents:
+
+- `open` (implementation) or `awaiting_implementer`: only `vv-implementer`.
+- `awaiting_reviews` with an active round: only the pending reviewer roles (`vv-spec-reviewer` and/or
+  `vv-code-reviewer`).
+- `awaiting_acceptance`: no tracked launch; the controller calls `work_item_decide`.
+- `needs_context` or `blocked`: no tracked launch until an explicit recovery decision.
+- `ready_to_close` or `closed`: no tracked launch.
+
+Read a launch rejection instead of retrying the same transition. `LAUNCH_REJECTED_INVALID_TRANSITION`
+names the only allowed agent for the current state. `REVIEW_ROUND_NOT_ACTIVE` means the item has no
+active review round. `REVIEWER_ALREADY_IN_FLIGHT` means that reviewer is already running; wait for its
+report instead of launching it again. To review a diff or PR that no implementation item owns, open a
+new `review_only` item first; it starts directly in `awaiting_reviews`.
+
 Tracked result protocol (applies to every tracked launch):
 
 - A tracked result begins on its first line with the protocol top block — no preface, prose, or code

@@ -93,9 +93,9 @@ Stopping handoff:
 Final response protocol:
 
 - Start the first line of your final response with the protocol top block — no preface, prose, or code fence before it.
-- Use the exact `VVOC_WORK_ITEM_ID` returned by `work_item_open` for this assignment, never a sample id from another task.
+- Copy the `VVOC_WORK_ITEM_ID: wi-N` line from the top of your assignment verbatim into your final top block; never a sample id from another task. You never open, list, or close work items — the controller owns their lifecycle.
 - Include exactly these fields, in this order, once each, then one blank line before the body:
-  - `VVOC_WORK_ITEM_ID: <returned work item id>`
+  - `VVOC_WORK_ITEM_ID: <work item id from the assignment header>`
   - `VVOC_STATUS: DONE`
   - `VVOC_ROUTE: change_with_review`
 - Allowed `VVOC_STATUS` values: `DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED`

@@ -21,6 +21,8 @@
 //   ALLOWED_RELEASE_FILES - Files permitted to change during release preparation.
 //   TOOL_CONTRACTS_REFERENCE_PATH - Generated tool-contracts reference path, regenerated with the bumped version.
 //   CAPTURE_MAX_BUFFER - Maximum captured subprocess output size.
+//   PUBLISH_RUN_RESOLUTION_ATTEMPTS - Bounded attempts to resolve the dispatched publish run.
+//   PUBLISH_RUN_RESOLUTION_DELAY_MS - Delay between publish-run resolution attempts.
 //   PUBLISHED_METADATA_RETRY_DELAYS_MS - Bounded npm metadata retry delays.
 //   PackageJson - Package manifest fields consumed by release preparation.
 //   SchemaJson - Schema fields consumed by release preparation.

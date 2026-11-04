@@ -2,7 +2,7 @@
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Native OpenCode host compatibility diagnostics and source-aware installation inspection.
-//   SCOPE: opencode --version execution and native supported-window comparison, installation-state inspection across native OpenCode `plugins`/`agents`/`skills` and vvoc config files with modelIntent role-reference resolution, strict/effective layered-scope inspection with config-source attribution, and write-result formatting for CLI output.
+//   SCOPE: opencode --version execution and native supported-window comparison, installation-state inspection across native OpenCode `plugins`/`agents`/`skills` and vvoc config files with modelIntent role-reference resolution, read-only managed prompt/skill drift, duplicate skills-root, and deprecated permission-action warnings, strict/effective layered-scope inspection with config-source attribution, and write-result formatting for CLI output.
 //   DEPENDS: [node:path, src/lib/config-layers.ts, src/lib/model-roles.ts, src/lib/orchestration.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts, src/lib/package.ts, src/lib/opencode/shared-utils.ts, src/lib/opencode/paths.ts, src/lib/opencode/plugin-registration.ts]
 //   LINKS: [M-CLI-CONFIG, M-ORCHESTRATION-PROFILES]
 //   ROLE: RUNTIME
@@ -21,11 +21,13 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-CLI-JSON-PIN-SYNC-R1 T-002 - Exposed the native cli.json TUI client pin with a server-pin mismatch warning in installation inspection.]
+//   LAST_CHANGE: [C-WORKFLOW-PROMPT-SYNC-DOCTOR-ARCHIVE T-003 - Added read-only warnings for stale managed agent prompts and skills, duplicate skills roots, and deprecated permission actions while preserving existing problem semantics.]
 // END_CHANGE_SUMMARY
 
 import { comparePluginPins } from "./cli-plugin-registration.js";
-import { dirname, join } from "node:path";
+import { realpath } from "node:fs/promises";
+import { homedir } from "node:os";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import {
   readRawOpenCodeModelIntent,
   resolveOpenCodeConfigSource,
@@ -42,13 +44,29 @@ import {
   type GuardianConfig,
   type SecretsRedactionConfig,
 } from "../vvoc-config.js";
-import { PACKAGE_NAME } from "../package.js";
+import { PACKAGE_NAME, PACKAGE_VERSION } from "../package.js";
 import { getVvocSkillsDir } from "../vvoc-paths.js";
+import {
+  MANAGED_NATIVE_AGENT_NAMES,
+  getManagedAgentPromptPath,
+  loadManagedAgentPromptTemplate,
+} from "../managed-agents.js";
+import {
+  MANAGED_SKILL_NAMES,
+  getManagedSkillFilePath,
+  listManagedSkillReferenceNames,
+  loadManagedSkillReference,
+  loadManagedSkillTemplate,
+} from "../managed-skills.js";
 import {
   assertNativeOpenCodeDocument,
   parseObjectDocument,
+  readNativeAgents,
   readOptionalText,
   readPluginEntries,
+  readSkillsArray,
+  stripMarkdownFrontmatter,
+  type JsonObject,
   type OpenCodePluginEntry,
   type WriteResult,
 } from "./shared-utils.js";
@@ -238,6 +256,134 @@ export function extractOpenCodeVersion(output: string): string | undefined {
 }
 
 // START_BLOCK_INSPECT_INSTALLATION_STATE
+const MANAGED_PROMPT_MARKER = "<!-- Managed by vvoc.";
+const INLINE_FILE_TOKEN = /^\s*\{file:([^}]+)\}\s*$/;
+const DEPRECATED_PERMISSION_ACTIONS = new Map([
+  ["apply_patch", "edit"],
+  ["bash", "shell"],
+  ["task", "subagent"],
+  ["write", "edit"],
+  ["patch", "edit"],
+]);
+
+function managedPromptBody(text: string): string | undefined {
+  const start = text.indexOf(MANAGED_PROMPT_MARKER);
+  if (start < 0) return undefined;
+  const end = text.indexOf("-->", start);
+  if (end < 0) return undefined;
+  return text.slice(end + 3).trim();
+}
+
+function resolveInlineFileToken(system: string, configDir: string): string | undefined {
+  const match = INLINE_FILE_TOKEN.exec(system);
+  if (match === null) return undefined;
+  const raw = match[1].trim();
+  if (!raw) return undefined;
+  const expanded = raw.startsWith("~/") ? join(homedir(), raw.slice(2)) : raw;
+  return isAbsolute(expanded) ? expanded : resolve(configDir, expanded);
+}
+
+function skillsBaseDir(paths: ResolvedPaths): string {
+  return paths.scope === "project"
+    ? (paths.projectRoot ?? dirname(paths.opencodeConfigPath))
+    : dirname(paths.opencodeConfigPath);
+}
+
+async function canonicalSkillsPath(entry: string, baseDir: string): Promise<string> {
+  const expanded = entry.startsWith("~/") ? join(homedir(), entry.slice(2)) : entry;
+  const absolute = isAbsolute(expanded) ? expanded : resolve(baseDir, expanded);
+  try {
+    return await realpath(absolute);
+  } catch {
+    return absolute;
+  }
+}
+
+/** Read-only drift diagnostics for managed prompts, skills, skill roots, and permissions. */
+async function collectInstallationWarnings(
+  paths: ResolvedPaths,
+  document: JsonObject,
+  warnings: string[],
+): Promise<void> {
+  const agents = readNativeAgents(document, paths.opencodeConfigPath);
+  for (const agentName of MANAGED_NATIVE_AGENT_NAMES) {
+    const template = await loadManagedAgentPromptTemplate(agentName);
+    const expected = stripMarkdownFrontmatter(template).trim();
+    const candidates = new Set<string>([
+      getManagedAgentPromptPath(paths.managedAgentsDirPath, agentName),
+    ]);
+    const inlineSystem = agents[agentName]?.system;
+    if (typeof inlineSystem === "string") {
+      const target = resolveInlineFileToken(inlineSystem, dirname(paths.opencodeConfigPath));
+      if (target !== undefined) candidates.add(target);
+    }
+    for (const candidate of candidates) {
+      const text = await readOptionalText(candidate);
+      if (text === undefined) continue;
+      const body = managedPromptBody(text);
+      if (body === undefined) continue;
+      if (body !== expected) {
+        warnings.push(
+          `managed prompt ${candidate} is stale or customized relative to ${PACKAGE_NAME}@${PACKAGE_VERSION}; run vvoc sync to refresh the managed body`,
+        );
+      }
+    }
+  }
+
+  for (const skillName of MANAGED_SKILL_NAMES) {
+    const skillPath = getManagedSkillFilePath(paths.managedSkillsDirPath, skillName);
+    const current = await readOptionalText(skillPath);
+    if (current !== undefined) {
+      const template = await loadManagedSkillTemplate(skillName);
+      if (current !== template) {
+        warnings.push(
+          `managed skill ${skillPath} differs from the shipped template; run vvoc sync or vvoc sync --force`,
+        );
+      }
+    }
+    for (const refName of await listManagedSkillReferenceNames(skillName)) {
+      const refPath = join(paths.managedSkillsDirPath, skillName, "references", refName);
+      const refText = await readOptionalText(refPath);
+      if (refText === undefined) continue;
+      const refTemplate = await loadManagedSkillReference(skillName, refName);
+      if (refText !== refTemplate) {
+        warnings.push(
+          `managed skill reference ${refPath} differs from the shipped template; run vvoc sync or vvoc sync --force`,
+        );
+      }
+    }
+  }
+
+  const baseDir = skillsBaseDir(paths);
+  const seen = new Map<string, string>();
+  for (const entry of readSkillsArray(document, paths.opencodeConfigPath)) {
+    const canonical = await canonicalSkillsPath(entry, baseDir);
+    const previous = seen.get(canonical);
+    if (previous !== undefined && previous !== entry) {
+      warnings.push(
+        `duplicate skills root: "${previous}" and "${entry}" both resolve to ${canonical}`,
+      );
+    } else if (previous === undefined) {
+      seen.set(canonical, entry);
+    }
+  }
+
+  const permissions = document.permissions;
+  if (Array.isArray(permissions)) {
+    for (const rule of permissions) {
+      if (typeof rule !== "object" || rule === null || Array.isArray(rule)) continue;
+      const action = (rule as { action?: unknown }).action;
+      if (typeof action !== "string") continue;
+      const replacement = DEPRECATED_PERMISSION_ACTIONS.get(action);
+      if (replacement !== undefined) {
+        warnings.push(
+          `permission action "${action}" is likely inert; use "${replacement}" for the native 2.x tool action`,
+        );
+      }
+    }
+  }
+}
+
 export async function inspectInstallation(
   paths: ResolvedPaths,
   options: { runtime?: OpenCodeRuntimeInspection } = {},
@@ -264,6 +410,7 @@ export async function inspectInstallation(
 
   const opencodeText = await readOptionalText(paths.opencodeConfigPath);
   let opencodeParseError: string | undefined;
+  let opencodeDocument: JsonObject | undefined;
   let plugins: OpenCodePluginEntry[] = [];
   let pluginConfigured = false;
 
@@ -273,6 +420,7 @@ export async function inspectInstallation(
       assertNativeOpenCodeDocument(document, paths.opencodeConfigPath, {
         configDir: dirname(paths.opencodeConfigPath),
       });
+      opencodeDocument = document;
       plugins = readPluginEntries(document, paths.opencodeConfigPath);
       pluginConfigured = plugins.some((entry) =>
         isManagedPackageTarget(typeof entry === "string" ? entry : entry.package),
@@ -281,6 +429,10 @@ export async function inspectInstallation(
       opencodeParseError = error instanceof Error ? error.message : String(error);
       problems.push(opencodeParseError);
     }
+  }
+
+  if (opencodeDocument !== undefined) {
+    await collectInstallationWarnings(paths, opencodeDocument, warnings);
   }
 
   const cliText = await readOptionalText(paths.cliConfigPath);

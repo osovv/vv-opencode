@@ -188,8 +188,25 @@ Every material finding from plan.xml must be enumerated explicitly in the packet
 </step>
 
 <step name="dispatch">
-Open an implementation work item with work_item_open for this task (e.g. `{ key, title, mode: "implementation", requiredReviewers: ["spec", "code"] }`).
-Dispatch vv-implementer with the exact returned VVOC_WORK_ITEM_ID header + the constructed packet.
+Open an implementation work item with work_item_open for this task:
+`{ items: [{ key, title, mode: "implementation", requiredReviewers: ["spec", "code"] }] }`.
+A standalone item takes only `key`, `title`, `mode`, and `requiredReviewers`. The fields `goal`, `acceptanceCriteria`, `verification`, `writeScope`, `dependsOn`, and `blockedBy` belong to `execution.tasks[]` and are rejected on a standalone open. Put those details in the assignment packet, not in work_item_open.
+
+The work_item_open response includes a ready-to-copy `header` for each item. Dispatch vv-implementer with a packet whose FIRST meaningful line is exactly that header, in the form `VVOC_WORK_ITEM_ID: wi-<n>`: colon after the id, nothing else on that line (no `=`, no trailing prose), followed by the constructed packet.
+
+The launch gate allows exactly one tracked agent per workflow state:
+
+| State | Allowed tracked agent |
+|---|---|
+| `open` (implementation) | `vv-implementer` |
+| `awaiting_implementer` | `vv-implementer` |
+| `awaiting_reviews` (active round) | the pending `vv-spec-reviewer` and `vv-code-reviewer` roles |
+| `awaiting_acceptance` | none; the controller calls `work_item_decide` |
+| `needs_context` / `blocked` | none until an explicit recovery decision |
+| `ready_to_close` / `closed` | none |
+
+If a launch is rejected, read the rejection instead of retrying the same transition. `LAUNCH_REJECTED_INVALID_TRANSITION` names the only allowed agent for the current state. `REVIEW_ROUND_NOT_ACTIVE` means the item has no active review round yet. `REVIEWER_ALREADY_IN_FLIGHT` means that reviewer is already running; wait for its report instead of launching it again.
+
 The implementer writes code, runs tests, and returns a status. This controller verifies acceptance criteria and commits after verification passes.
 </step>
 
@@ -223,8 +240,12 @@ If criteria fail → re-dispatch implementer with specific failure details.
 
 <step name="review">
 A DONE implementer moves the work item to awaiting_reviews with a review round that requires EVERY role in requiredReviewers (spec and code). Dispatch and collect ALL required reviewers before closing:
-- Dispatch vv-spec-reviewer with the returned VVOC_WORK_ITEM_ID header and a spec-compliance packet.
-- Dispatch vv-code-reviewer with the returned VVOC_WORK_ITEM_ID header and the changed code/diff.
+- Dispatch vv-spec-reviewer with the header line exactly as returned, `VVOC_WORK_ITEM_ID: wi-<n>`, followed by a spec-compliance packet.
+- Dispatch vv-code-reviewer with the same header line followed by the changed code/diff.
+Each reviewer prompt must start with the header as its FIRST meaningful line; prose or `VVOC_WORK_ITEM_ID=` before it is rejected.
+
+The launch gate allows exactly one agent per state. A reviewer launch is rejected while the item is open (`REVIEW_ROUND_NOT_ACTIVE`) or while another reviewer is in flight (`REVIEWER_ALREADY_IN_FLIGHT`); read the rejection and wait for that report instead of relaunching. To review a diff or PR that no implementation item owns, open a NEW item with `mode: "review_only"` and its reviewer roles first; a review-only item starts directly in `awaiting_reviews`.
+
 Collect both results.
 - Both PASS → the work item becomes ready_to_close → proceed to commit.
 - Any FAIL → the work item returns to awaiting_implementer. Re-dispatch the implementer with the normalized reviewer findings, then repeat handle-status → verify → review (bounded by the runtime review-round limit). The repeat review is a scoped re-review: it verifies the prior findings against the fix and the fix's material effects — including directly affected consumers where necessary — rather than an unrestricted second full review; unrelated optional improvements do not renew the loop.
