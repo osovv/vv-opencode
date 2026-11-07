@@ -1,8 +1,8 @@
 // FILE: src/runtime/snapshot-config.ts
-// VERSION: 2.0.0
+// VERSION: 3.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Derive full effective snapshot policy from loaded vvoc configuration, native agent/model overlays, and native config updates, and classify an initial session selection as explicit or implicit without forced location reloads.
-//   SCOPE: Effective role/agent-binding extraction, raw custom-agent preservation, native overlay merging, initial-selection provenance from the host default, and config.updated watcher plumbing for unbound candidates. No native client, no persistence, no admission, no location reload.
+//   PURPOSE: Extract the effective runtime policy (roles, agent bindings, full vvoc document) from a loaded vvoc configuration and decode the native session-creation events the runtime consumes for creation-time role reconciliation.
+//   SCOPE: Effective role/agent-binding extraction, strict role-selection parsing, native event decoding for session creation and model selection, config-update event identification, and canonical selection normalization. No persistence, no admission, no dispatch validation, no location reload, and no credential handling.
 //   DEPENDS: [src/lib/config-layers.ts, src/lib/model-roles.ts, src/runtime/types.ts]
 //   LINKS: [M-NATIVE-RUNTIME, V-M-NATIVE-RUNTIME]
 //   ROLE: RUNTIME
@@ -15,38 +15,26 @@
 //   agentBindingsFrom - Derive built-in agent bindings from role assignments and resolved selections.
 //   agentPolicyBindings - Derive built-in agent bindings from an effective runtime config.
 //   deepCloneConfig - Deep-copy a config document into an immutable captured value.
-//   classifyInitialSelection - Classify a host session's model against the default in force at creation.
-//   decodeSessionCreatedEvent - Decode the session's creation model for provenance.
 //   canonicalModelVariant - Collapse the native absent/`default` variant to undefined.
 //   normalizeModelSelection - Normalize one selection to its canonical variant form.
+//   decodeSessionCreatedEvent - Decode the session's creation model for creation-time reconciliation.
 //   decodeModelSelectedEvent - Decode a native explicit model-selection event.
-//   decodeInboxEnqueuedEvent - Decode a native accepted-input event (session.inbox.enqueued).
-//   isAcceptedWorkloadEvent - True when a native event marks an accepted workload boundary.
-//   isConfigUpdateEvent - True when a native config change invalidates unbound candidates.
-//   watchConfigUpdates - Consume config.updated events and notify the owner without a forced location reload.
-//   BehaviourProjection - Credential-free, version-independent projection of a bound family's policy.
-//   buildBehaviourProjection - Build the credential-free, version-independent behaviour projection from effective roles, agent roles, and vvoc.
-//   sanitizePolicyConfig - Deep-copy a config document without credential values or package-version-derived fields.
-//   canonicalizeJson - Deterministic JSON serialization with stable key ordering.
-//   behaviourContentHash - SHA-256 content hash of a behaviour projection, independent of package version.
+//   isConfigUpdateEvent - True when a native config change invalidates cached effective config.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SNAPSHOT-ANCHORING-REDESIGN T-002 - Added the credential-free, version-independent behaviour projection and content hash.]
+//   LAST_CHANGE: [C-SESSION-OWNED-SETTINGS T-002 - Dropped the behaviour projection/hash, initial-selection provenance classification, accepted-input decoding, and config-watch plumbing; role parsing now fails with plain errors because no admission layer remains.]
 // END_CHANGE_SUMMARY
 
-import { createHash } from "node:crypto";
 import type { VvocConfigSnapshot } from "../lib/config-layers.js";
 import type { VvocConfig } from "../lib/vvoc-config.js";
 import { getBuiltInRoleBindings, parseModelSelectionWithVariant } from "../lib/model-roles.js";
-import {
-  SnapshotAdmissionError,
-  type AgentPolicyBinding,
-  type CaptureIntent,
-  type CapturedVvocConfig,
-  type EffectiveRuntimeConfig,
-  type ModelSelection,
-  type RuntimeEvent,
+import type {
+  AgentPolicyBinding,
+  CapturedVvocConfig,
+  EffectiveRuntimeConfig,
+  ModelSelection,
+  RuntimeEvent,
 } from "./types.js";
 
 // START_BLOCK_POLICY_EXTRACTION
@@ -80,10 +68,7 @@ export function parseRoleSelections(
     try {
       parsed = parseModelSelectionWithVariant(raw);
     } catch (cause) {
-      throw new SnapshotAdmissionError(
-        `Role ${role} has an invalid model binding (${raw}); refusing to capture policy.`,
-        { cause },
-      );
+      throw new Error(`Role ${role} has an invalid model binding (${raw}).`, { cause });
     }
     roleModels[role] = {
       providerID: parsed.provider,
@@ -117,97 +102,12 @@ export function agentPolicyBindings(effective: EffectiveRuntimeConfig): AgentPol
 }
 // END_BLOCK_POLICY_EXTRACTION
 
-// START_BLOCK_BEHAVIOUR_PROJECTION
-/** A credential-free, version-independent projection of a family's bound policy. */
-export type BehaviourProjection = {
-  readonly roleModels: Readonly<Record<string, ModelSelection>>;
-  readonly agentBindings: ReadonlyArray<AgentPolicyBinding>;
-  readonly policy: VvocConfig;
-};
-
-/** Credential field names that must never reach a durable artifact. */
-const CREDENTIAL_KEYS = new Set(["apiKey"]);
-
-/** Package-version-derived fields that must never influence snapshot identity. */
-const VERSION_DERIVED_KEYS = new Set(["$schema", "$id"]);
-
-function stripSensitiveKeys(value: unknown, parentKey?: string): void {
-  if (Array.isArray(value)) {
-    for (const entry of value) stripSensitiveKeys(entry, parentKey);
-    return;
-  }
-  if (value === null || typeof value !== "object") return;
-  const record = value as Record<string, unknown>;
-  for (const key of Object.keys(record)) {
-    if (CREDENTIAL_KEYS.has(key) || VERSION_DERIVED_KEYS.has(key)) {
-      delete record[key];
-      continue;
-    }
-    // The redaction seed is a secret value, not a policy knob.
-    if (parentKey === "secretsRedaction" && key === "secret") {
-      delete record[key];
-      continue;
-    }
-    stripSensitiveKeys(record[key], key);
-  }
-}
-
-/**
- * Deep-copy a validated config document while dropping every credential value and
- * every package-version-derived field, so the result is safe to persist and hashes
- * independently of the installed package version.
- */
-export function sanitizePolicyConfig(config: VvocConfig): VvocConfig {
-  const clone = structuredClone(config) as unknown;
-  stripSensitiveKeys(clone);
-  return clone as VvocConfig;
-}
-
-function sortJson(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortJson);
-  if (value === null || typeof value !== "object") return value;
-  const record = value as Record<string, unknown>;
-  const sorted: Record<string, unknown> = {};
-  for (const key of Object.keys(record).sort()) sorted[key] = sortJson(record[key]);
-  return sorted;
-}
-
-/** Deterministic JSON serialization with stable object key ordering. */
-export function canonicalizeJson(value: unknown): string {
-  return JSON.stringify(sortJson(value));
-}
-
-/** SHA-256 content hash of a behaviour projection; identity never depends on package version. */
-export function behaviourContentHash(projection: BehaviourProjection): string {
-  return createHash("sha256").update(canonicalizeJson(projection)).digest("hex");
-}
-
-/**
- * Build the behaviour-relevant projection bound to a family: resolved model
- * selections for root roles and agents plus the sanitized policy document.
- * Credentials and version-derived fields are excluded from both the value and the hash.
- */
-export function buildBehaviourProjection(input: {
-  readonly roles: Readonly<Record<string, string>>;
-  readonly agentRoles: Readonly<Record<string, string>>;
-  readonly vvoc: VvocConfig;
-}): BehaviourProjection {
-  const roleModels = parseRoleSelections(input.roles);
-  return {
-    roleModels,
-    agentBindings: agentBindingsFrom(input.agentRoles, roleModels),
-    policy: sanitizePolicyConfig(input.vvoc),
-  };
-}
-// END_BLOCK_BEHAVIOUR_PROJECTION
-
-// START_BLOCK_PROVENANCE
+// START_BLOCK_EVENT_DECODING
 /**
  * Collapse the native `default` variant to undefined. Native session rows store
  * `variant ?? "default"` (core/session/info.ts), while `Model.Resolver.withVariant`
  * treats `"default"` as absent and resolution omits it, so the two are the same
- * logical selection. Keeping them distinct makes ordinary unqualified requests
- * look like named variants and breaks equality/rollback ownership.
+ * logical selection.
  */
 export function canonicalModelVariant(variant: string | undefined): string | undefined {
   return variant === undefined || variant === "default" ? undefined : variant;
@@ -221,39 +121,6 @@ export function normalizeModelSelection(selection: ModelSelection): ModelSelecti
     modelID: selection.modelID,
     ...(variant === undefined ? {} : { variant }),
   };
-}
-
-function sameSelection(
-  left: ModelSelection | undefined,
-  right: ModelSelection | undefined,
-): boolean {
-  if (left === undefined || right === undefined) return left === right;
-  return (
-    left.providerID === right.providerID &&
-    left.modelID === right.modelID &&
-    canonicalModelVariant(left.variant) === canonicalModelVariant(right.variant)
-  );
-}
-
-/**
- * Classify a host session's model at first work against the host default that was
- * in force when the session was created. A session-local model that differs from
- * that default is an explicit user selection; a matching model followed the
- * implicit default. The default is captured at `session.created` time, not read
- * later, so a preset/config switch does not turn an old implicit tab explicit.
- */
-export function classifyInitialSelection(input: {
-  readonly sessionModel: ModelSelection | undefined;
-  readonly creationDefault: ModelSelection | undefined;
-}): CaptureIntent {
-  const { sessionModel, creationDefault } = input;
-  if (sessionModel === undefined || creationDefault === undefined) {
-    return { mode: "implicit", source: "config" };
-  }
-  if (!sameSelection(sessionModel, creationDefault)) {
-    return { mode: "explicit", source: "watcher", literal: sessionModel };
-  }
-  return { mode: "implicit", source: "config" };
 }
 
 /** Decode a native `session.created` payload carrying the session's initial model. */
@@ -285,7 +152,7 @@ function decodeModelRef(value: unknown): ModelSelection | undefined {
 /**
  * Decode a native explicit model-selection event (`session.model.selected`). The
  * host emits it only when a switch actually changes the model; an identical
- * switch is a no-op with no event, which is why provenance also reads the session.
+ * switch is a no-op with no event.
  */
 export function decodeModelSelectedEvent(event: RuntimeEvent):
   | {
@@ -304,100 +171,12 @@ export function decodeModelSelectedEvent(event: RuntimeEvent):
 }
 
 /**
- * Decode a native accepted-input event. `session.inbox.enqueued` is the host's
- * durable admission of one input (schema/session-event.ts); `execution.started`
- * can be an explicit resume and is not admission on its own.
- */
-export function decodeInboxEnqueuedEvent(event: RuntimeEvent):
-  | {
-      readonly sessionID: string;
-      readonly inboxID: string;
-      readonly itemType: string;
-      readonly created?: number | undefined;
-      readonly seq?: number | undefined;
-    }
-  | undefined {
-  if (event.type !== "session.inbox.enqueued") return undefined;
-  const data = event.data;
-  if (typeof data !== "object" || data === null) return undefined;
-  const record = data as Record<string, unknown>;
-  const sessionID = record.sessionID;
-  const inboxID = record.inboxID;
-  if (typeof sessionID !== "string" || typeof inboxID !== "string") return undefined;
-  const item = record.item;
-  const itemType =
-    typeof item === "object" &&
-    item !== null &&
-    typeof (item as { type?: unknown }).type === "string"
-      ? String((item as { type: string }).type)
-      : "unknown";
-  const created =
-    typeof event.created === "number" && Number.isFinite(event.created) ? event.created : undefined;
-  const rawSeq = event.durable?.seq;
-  const seq = typeof rawSeq === "number" && Number.isFinite(rawSeq) ? rawSeq : undefined;
-  return {
-    sessionID,
-    inboxID,
-    itemType,
-    ...(created === undefined ? {} : { created }),
-    ...(seq === undefined ? {} : { seq }),
-  };
-}
-
-/**
- * True when the event is a native accepted-input admission: `session.inbox.enqueued`
- * carrying a `user` or `synthetic` item. `session.inbox.delivered` only proves the
- * projection moved, and `session.execution.started` can be an explicit resume, so
- * neither alone authorizes a commit without the matching enqueued identity.
- */
-export function isAcceptedWorkloadEvent(event: RuntimeEvent): boolean {
-  const enqueued = decodeInboxEnqueuedEvent(event);
-  if (enqueued === undefined) return false;
-  return enqueued.itemType === "user" || enqueued.itemType === "synthetic";
-}
-
-/**
- * True when the event invalidates unbound candidates through a native config
- * change. Never `model.updated`/`agent.updated`: those are emitted by the
- * runtime's own `model.reload()`/`agent.reload()` and would make the refresh
- * re-trigger itself in an unbounded loop.
+ * True when the event invalidates the cached effective configuration through a
+ * native config change. Never `model.updated`/`agent.updated`: those are emitted
+ * by the runtime's own `model.reload()`/`agent.reload()` and would make the
+ * refresh re-trigger itself in an unbounded loop.
  */
 export function isConfigUpdateEvent(event: RuntimeEvent): boolean {
   return event.type === "config.updated";
 }
-// END_BLOCK_PROVENANCE
-
-// START_BLOCK_CONFIG_WATCH
-/**
- * Consume native config.updated events and notify the owner so cached effective
- * configuration and transforms are rebuilt. Never triggers a forced location
- * reload, and a watcher failure is reported rather than silently swallowed.
- */
-export function watchConfigUpdates(
-  events: AsyncIterable<RuntimeEvent>,
-  onChange: () => void | Promise<void>,
-  signal: AbortSignal,
-  onError?: (error: unknown) => void,
-): () => void {
-  let stopped = false;
-  const iterator = events[Symbol.asyncIterator]();
-  const loop = (async () => {
-    try {
-      for (;;) {
-        if (stopped || signal.aborted) break;
-        const next = await iterator.next();
-        if (next.done) break;
-        if (isConfigUpdateEvent(next.value)) await onChange();
-      }
-    } catch (error) {
-      // A watcher failure is reported to the owner; it is never silently swallowed.
-      onError?.(error);
-    }
-  })();
-  return () => {
-    stopped = true;
-    void loop;
-    void iterator.return?.();
-  };
-}
-// END_BLOCK_CONFIG_WATCH
+// END_BLOCK_EVENT_DECODING
