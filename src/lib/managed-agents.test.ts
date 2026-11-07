@@ -2,7 +2,7 @@
 // VERSION: 0.8.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify vvoc-managed agent prompt template loading, scoped runtime lookup, and correctness-obligation instruction contracts.
-//   SCOPE: Bundled template reads, profile-neutral controller invariants, controller correctness leadership with settled-conclusion reopen triggers, false-premise handling, and stop/recovery distinction with reserved handoffs, bounded implementer impact investigation with worker-stop semantics, settled evidence, false-premise escalation, and reviewer-finding conflict routing, evidence-based reviewer verdicts with initial-versus-scoped-re-review guidance, investigator property reporting, primary/subagent metadata checks, semantic agreement of the shipped tracked-result protocol examples with the runtime parser, scoped prompt resolution, and missing prompt failures.
+//   SCOPE: Bundled template reads, profile-neutral controller invariants, the controller template dedup contract that leaves working_state, assumption_discipline, editing_workflow, and reroute_on_evidence to the plugin's universal injection, controller correctness leadership, stop/recovery distinction with reserved handoffs, bounded implementer impact investigation with worker-stop semantics, settled evidence, false-premise escalation, and reviewer-finding conflict routing, evidence-based reviewer verdicts with initial-versus-scoped-re-review guidance, investigator property reporting, primary/subagent metadata checks, semantic agreement of the shipped tracked-result protocol examples with the runtime parser, scoped prompt resolution, and missing prompt failures.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/managed-agents.ts, src/lib/vvoc-paths.ts, src/plugins/workflow/protocol.ts]
 //   LINKS: [M-CLI-MANAGED-AGENTS, M-WORKFLOW-PROTOCOL, V-M-CLI-MANAGED-AGENTS]
 //   ROLE: TEST
@@ -16,7 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-PROMPT-SYNC-DOCTOR-ARCHIVE T-001 - Worker templates now copy the assignment header and state that the controller owns work-item lifecycle; the shipped protocol examples remain parser-validated.]
+//   LAST_CHANGE: [Instruction deduplication - The vv-controller template contract now asserts the dedup contract (no working_state, assumption_discipline, editing_workflow, or reroute_on_evidence copies; the plugin's universal sections are the single source) and drops assertions on the removed template wordings.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -114,10 +114,6 @@ describe("managed agent prompts", () => {
     expect(template).toContain("You are the vv-controller primary agent.");
     expect(MANAGED_PRIMARY_AGENT_NAMES.filter((name) => name === "vv-controller")).toHaveLength(1);
     expect(template).toContain("<core_principles>");
-    expect(template).toContain("<working_state>");
-    expect(template).toContain("<assumption_discipline>");
-    expect(template).toContain("<editing_workflow>");
-    expect(template).toContain("<reroute_on_evidence>");
     expect(template).toContain("<skill_trigger_rule>");
     expect(template).toContain("<source_and_authority>");
     expect(template).toContain("<stop_and_recovery>");
@@ -128,6 +124,17 @@ describe("managed agent prompts", () => {
     expect(template).toContain("`vv-review` performs findings-only independent review");
     expect(template).toContain("`vv-execute` validates an approved plan");
     expect(template).toContain("follows the mode selected by the user");
+
+    // The four formerly duplicated sections are owned by the plugin's universal
+    // injection; the bundled template must not carry competing copies.
+    for (const deduplicatedSection of [
+      "<working_state>",
+      "<assumption_discipline>",
+      "<editing_workflow>",
+      "<reroute_on_evidence>",
+    ]) {
+      expect(template).not.toContain(deduplicatedSection);
+    }
 
     for (const inactivePolicyTerm of [
       "direct_change",
@@ -190,7 +197,9 @@ describe("managed agent prompts", () => {
     const template = await loadManagedAgentPromptTemplate("vv-controller");
     const normalized = template.replace(/\s+/g, " ");
 
-    expect(normalized).toContain("Surface a false premise instead of silently satisfying it");
+    // working_state, assumption_discipline, and reroute_on_evidence wording now
+    // lives only in the plugin's universal injection; the assertions below cover
+    // the sections this template still carries.
     expect(normalized).toContain(
       "Distinguish unsupported disagreement or authority pressure from concrete new evidence",
     );
@@ -199,12 +208,6 @@ describe("managed agent prompts", () => {
     );
     expect(normalized).toContain(
       "route an explicit user change in requirements through the existing scope and approval process rather than a factual debate",
-    );
-    expect(normalized).toContain(
-      "Reopen a settled conclusion or reroute on concrete triggers only",
-    );
-    expect(normalized).toContain(
-      "Vague doubt or unsupported pressure is not itself a trigger, but required checks still run — an unchecked claim is not settled",
     );
     expect(normalized).toContain(
       "Move forward once the required checks substantiate the material claims for the current files and inputs",

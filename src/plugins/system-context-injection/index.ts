@@ -2,7 +2,7 @@
 // VERSION: 2.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Inject universal primary guidance, including correctness obligations and evidence discipline for behavior changes, and one bound-family-resolved concrete orchestration policy into vv-controller without polluting subagent prompts, through the native session context hook.
-//   SCOPE: Universal instructions with correctness obligations, material-assumption discipline, settled-conclusion reopen triggers, false-premise handling, and pressure-versus-evidence distinction; vv-controller policy selection from the immutable captured family config; the explore-subagent guidance exception even though native registry mode is subagent; built-in, managed and native-registry subagent exclusion for every other agent; internal title/summary/compaction exclusion; per-request agent-mode reads that never poison on transient failure; idempotent injection into native system parts; lifecycle cleanup. Skill-path registration is NOT delivered here: the old runtime config.skills.paths registration has no native plugin config-transform surface, and the native document `skills: string[]` install/sync writes are owned by T007.
+//   SCOPE: Universal instructions with correctness obligations, material-assumption discipline, settled-conclusion reopen triggers, false-premise handling, and pressure-versus-evidence distinction, which are the single source for the vv-controller bundled template's working_state, assumption_discipline, editing_workflow, and reroute_on_evidence sections (the bundled template no longer carries them); vv-controller policy selection from the immutable captured family config; the explore-subagent guidance exception even though native registry mode is subagent; built-in, managed and native-registry subagent exclusion for every other agent; internal title/summary/compaction exclusion; per-request agent-mode reads that never poison on transient failure; idempotent injection into native system parts; lifecycle cleanup. Skill-path registration is NOT delivered here: the old runtime config.skills.paths registration has no native plugin config-transform surface, and the native document `skills: string[]` install/sync writes are owned by T007.
 //   DEPENDS: [@opencode/plugin, src/lib/managed-agents.ts, src/lib/orchestration.ts, src/runtime/context.ts, src/runtime/types.ts]
 //   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, M-ORCHESTRATION-PROFILES, M-CLI-MANAGED-AGENTS, M-NATIVE-RUNTIME, V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION]
 //   ROLE: RUNTIME
@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SNAPSHOT-ANCHORING-REDESIGN T-007 - Static primary guidance stays in the system prefix while the variable orchestration policy is injected at the tail of the last user message only, so a profile change does not invalidate the cached prefix and tool/assistant messages keep their provider payload shape.]
+//   LAST_CHANGE: [Instruction deduplication - The universal working_state, assumption_discipline, editing_workflow, and reroute_on_evidence sections are now the single source for vv-controller: the bundled template no longer carries them, and the editing_workflow section absorbed the template-only contract-reading and speculative-reroute lines.]
 // END_CHANGE_SUMMARY
 
 import { SystemPart } from "@opencode/ai";
@@ -91,9 +91,11 @@ const UNIVERSAL_PRIMARY_SYSTEM_CONTEXTS = [
   ].join("\n"),
   [
     "<editing_workflow>",
+    "Before editing, understand the relevant local contract, nearby tests, and surrounding code.",
     "When editing files, prefer the `edit` tool over shell-based rewrites when it is available.",
     "Read the file first, then use exact `line#hash#anchor` refs from the latest `read` output when present.",
     "Reserve `bash` for tests, builds, git, and other non-file-edit commands.",
+    "If direct editing reveals unclear behavior or unexpectedly broad scope, stop and reroute instead of continuing speculatively.",
     "</editing_workflow>",
   ].join("\n"),
   [

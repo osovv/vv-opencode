@@ -2,7 +2,7 @@
 // VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Describe vvoc-managed OpenCode agent prompts and load them from bundled templates or scoped vvoc config roots.
-//   SCOPE: Built-in primary/subagent metadata, managed prompt names, prompt file path resolution, bundled template loading, and project/global prompt lookup.
+//   SCOPE: Built-in primary/subagent metadata, managed prompt names, prompt file path resolution, bundled template loading (the vv-controller template delegates its working_state, assumption_discipline, editing_workflow, and reroute_on_evidence sections to the system-context-injection plugin's universal sections as their single source), and project/global prompt lookup.
 //   DEPENDS: [node:fs/promises, node:path, src/lib/vvoc-paths.ts]
 //   LINKS: M-CLI-MANAGED-AGENTS, M-CLI-CONFIG, M-PLUGIN-GUARDIAN
 //   ROLE: RUNTIME
@@ -37,7 +37,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.5.0 - Removed two creative-role managed subagents. Only executor subagents remain.]
+//   LAST_CHANGE: [Instruction deduplication - The bundled vv-controller template no longer carries working_state, assumption_discipline, editing_workflow, or reroute_on_evidence; the system-context-injection plugin's universal sections are their single source.]
 // END_CHANGE_SUMMARY
 
 import { readFile } from "node:fs/promises";

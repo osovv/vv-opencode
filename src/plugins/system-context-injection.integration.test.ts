@@ -2,8 +2,8 @@
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify native universal primary guidance injection, including correctness obligations and evidence discipline, and bound-family concrete vv-controller orchestration policy injection into native system parts.
-//   SCOPE: Correctness-obligations delivery, settled-conclusion reopen triggers, false-premise handling, pressure-versus-evidence distinction, per-profile controller context, primary isolation, explore guidance, built-in/managed/configured subagent exclusion, duplicate prevention, native-registry mode exclusion, and unknown/disabled no-op.
-//   DEPENDS: [bun:test, src/lib/orchestration.ts, src/lib/vvoc-config.ts, src/plugins/system-context-injection/index.ts]
+//   SCOPE: Correctness-obligations delivery, settled-conclusion reopen triggers, false-premise handling, pressure-versus-evidence distinction, per-profile controller context, primary isolation, explore guidance, built-in/managed/configured subagent exclusion, duplicate prevention, assembled vv-controller template plus injection dedup with each universal section exactly once and the merged template-only editing_workflow lines, native-registry mode exclusion, and unknown/disabled no-op.
+//   DEPENDS: [bun:test, src/lib/managed-agents.ts, src/lib/orchestration.ts, src/lib/vvoc-config.ts, src/plugins/system-context-injection/index.ts]
 //   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, M-ORCHESTRATION-PROFILES, V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -19,11 +19,12 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SNAPSHOT-ANCHORING-REDESIGN T-007 - Static guidance is asserted in the system prefix while the variable orchestration policy is asserted at the request tail.]
+//   LAST_CHANGE: [Instruction deduplication - The injected editing_workflow section absorbed the template-only contract-reading and speculative-reroute lines, and an assembled vv-controller template plus injection test pins each formerly duplicated universal section to exactly one occurrence.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import type { OrchestrationProfile } from "../lib/orchestration.js";
+import { loadManagedAgentPromptTemplate } from "../lib/managed-agents.js";
 import { createDefaultVvocConfig, type VvocConfig } from "../lib/vvoc-config.js";
 import { createSystemContextInjectionPlugin } from "./system-context-injection/index.js";
 
@@ -376,6 +377,36 @@ describe("SystemContextInjectionPlugin", () => {
     expect(tail.match(/Keep architecture, critical code reading/g)).toHaveLength(1);
   });
 
+  test("assembled vv-controller template plus injection keeps each universal section once", async () => {
+    const harness = await makeHarness({ profile: "balanced" });
+    const handler = harness.hooks.get("context");
+    if (handler === undefined) throw new Error("no context hook registered");
+    const template = await loadManagedAgentPromptTemplate("vv-controller");
+    const event: NativeContextEvent = {
+      sessionID: "session-vv-controller-assembled",
+      agent: "vv-controller",
+      system: [{ type: "text", text: template }],
+      messages: [{ role: "user", content: [] }],
+    };
+    await handler(event);
+
+    const system = systemText(event);
+    // The bundled vv-controller template carries no copies of the four formerly
+    // duplicated sections; the universal injection is their single source, so
+    // the assembled system contains each tag exactly once.
+    for (const tag of [
+      "<working_state>",
+      "<assumption_discipline>",
+      "<editing_workflow>",
+      "<reroute_on_evidence>",
+    ]) {
+      expect(system.split(tag).length - 1).toBe(1);
+    }
+    expect(system).toContain(
+      "Reserve `bash` for tests, builds, git, and other non-file-edit commands.",
+    );
+  });
+
   test("skips plugin-managed and managed subagents", async () => {
     const harness = await makeHarness();
     for (const agent of ["guardian", "vv-implementer"]) {
@@ -468,6 +499,12 @@ describe("SystemContextInjectionPlugin", () => {
     );
     expect(text).toContain(
       "Reserve `bash` for tests, builds, git, and other non-file-edit commands.",
+    );
+    expect(text).toContain(
+      "Before editing, understand the relevant local contract, nearby tests, and surrounding code.",
+    );
+    expect(text).toContain(
+      "If direct editing reveals unclear behavior or unexpectedly broad scope, stop and reroute instead of continuing speculatively.",
     );
     expect(text).toContain(
       "inspect relevant index entries before debugging, fixing, changing behavior, operating on, architecting, or investigating repository-specific issues.",
