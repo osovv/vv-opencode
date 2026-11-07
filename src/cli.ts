@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
 
 // FILE: src/cli.ts
-// VERSION: 0.2.10
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Assemble and run the vvoc CLI entrypoint.
 //   SCOPE: Package version lookup, top-level command registration including the lint command, and main command execution.
-//   DEPENDS: [citty, src/commands/analytics.ts, src/commands/completion.ts, src/commands/config.ts, src/commands/doctor.ts, src/commands/guardian.ts, src/commands/init.ts, src/commands/install.ts, src/commands/launch.ts, src/commands/orchestration.ts, src/commands/lint.ts, src/commands/patch-provider.ts, src/commands/preset.ts, src/commands/plugin.ts, src/commands/role.ts, src/commands/status.ts, src/commands/sync.ts, src/commands/telegram.ts, src/commands/upgrade.ts, src/commands/version.ts, src/lib/package.ts]
+//   DEPENDS: [citty, src/commands/analytics.ts, src/commands/completion.ts, src/commands/config.ts, src/commands/doctor.ts, src/commands/guardian.ts, src/commands/init.ts, src/commands/install.ts, src/commands/launch.ts, src/commands/orchestration.ts, src/commands/lint.ts, src/commands/patch-provider.ts, src/commands/preset.ts, src/commands/plugin.ts, src/commands/role.ts, src/commands/session.ts, src/commands/status.ts, src/commands/sync.ts, src/commands/telegram.ts, src/commands/upgrade.ts, src/commands/version.ts, src/lib/package.ts]
 //   LINKS: [M-CLI-COMMANDS]
 //   ROLE: SCRIPT
 //   MAP_MODE: LOCALS
@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-TELEGRAM-TOPIC-HYGIENE T-008 - Registered the telegram command group in the CLI tree.]
+//   LAST_CHANGE: [C-SESSION-OWNED-SETTINGS T-003 - Registered the session command group for explicit family-settings changes.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand, runMain } from "citty";
@@ -35,6 +35,7 @@ import patchProvider from "./commands/patch-provider.js";
 import preset from "./commands/preset.js";
 import plugin from "./commands/plugin.js";
 import role from "./commands/role.js";
+import session from "./commands/session.js";
 import status from "./commands/status.js";
 import sync from "./commands/sync.js";
 import telegram from "./commands/telegram.js";
@@ -67,6 +68,7 @@ const main = defineCommand({
     preset,
     plugin,
     role,
+    session,
     status,
     sync,
     telegram,
