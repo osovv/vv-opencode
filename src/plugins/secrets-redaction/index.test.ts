@@ -33,7 +33,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-SECRETS - Reconciled the distinct-context real-host smoke with the pinned 2.0.18 host: the T-009 cross-context coordination publishes the family capture exactly once across subpath-registered contexts, so secrets-first distinct contexts now complete a turn with full redact -> restore evidence and no SnapshotAdmissionError; the test asserts the reconciled succeeded outcome instead of the pre-coordination failure. Prior T-009-SECRETS: deep-frozen tool-input regressions (array and nested-object restore through toolBefore, no-placeholder equivalent copy, cyclic input cycle preservation, and frozen tool-call redaction all assert the host-provided original is never mutated and the handler rebinds to an owned copy); earlier MID-REPAIR-2: per-native-session WebSocket framing regressions.]
+//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-SECRETS - Reconciled the distinct-context real-host smoke with the pinned 2.0.18 host: the T-009 cross-context coordination publishes the family capture exactly once across subpath-registered contexts, so secrets-first distinct contexts now complete a turn with full redact -> restore evidence and no family-binding admission failure; the test asserts the reconciled succeeded outcome instead of the pre-coordination failure. Prior T-009-SECRETS: deep-frozen tool-input regressions (array and nested-object restore through toolBefore, no-placeholder equivalent copy, cyclic input cycle preservation, and frozen tool-call redaction all assert the host-provided original is never mutated and the handler rebinds to an owned copy); earlier MID-REPAIR-2: per-native-session WebSocket framing regressions.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -960,11 +960,12 @@ realHostDescribe("real OpenCode 2.0.18 host smoke (built secrets-redaction)", ()
     // Distinct Plugin.Context objects (separately registered subpath packages)
     // exercise the T009 aggregate mode across context boundaries. Drift note:
     // an earlier revision of this test expected outcome "failed" plus a
-    // SnapshotAdmissionError, documenting the pre-coordination state where each
-    // distinct context raced its own family capture. The T-009 coordination
-    // (app/location-identity coordinator plus the shared per-family publication
-    // lock) reconciled the aggregate mode, and the pinned 2.0.18 host completes
-    // the secrets-first distinct-context turn: redaction must hold end to end.
+    // family-binding admission error, documenting the pre-coordination state
+    // where each distinct context raced its own family capture. The T-009
+    // coordination (app/location-identity coordinator plus the shared
+    // per-family publication lock) reconciled the aggregate mode, and the
+    // pinned host completes the secrets-first distinct-context turn: redaction
+    // must hold end to end.
     const scenario = await startScenario([
       {
         name: "secrets",
@@ -982,7 +983,8 @@ realHostDescribe("real OpenCode 2.0.18 host smoke (built secrets-redaction)", ()
       expect(entries.find((entry) => entry.type === "idle")?.outcome).toBe("succeeded");
       await new Promise((resolve) => setTimeout(resolve, 1500));
       const hostLog = await readFile(scenario.hostLogPath, "utf8").catch(() => "");
-      expect(hostLog).not.toContain("SnapshotAdmissionError");
+      expect(hostLog).not.toContain("admission");
+      expect(hostLog).not.toContain("family binding");
       const trace = await readFile(scenario.tracePath, "utf8").catch(() => "");
       expect(trace).toContain(smokePlaceholder());
       expect(trace).not.toContain(SMOKE_SECRET);
