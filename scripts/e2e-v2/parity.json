@@ -25,55 +25,55 @@
       "surface": "Model-roles plugin import, activation, toggle, idle quiescence, cleanup",
       "phase": "T-003",
       "status": "implemented-core",
-      "acceptance": "Real ModelRolesPlugin.setup runs via the shared context; idle registry has no captures or staged candidates and no reload loop.",
+      "acceptance": "Real ModelRolesPlugin.setup runs via the shared context; the settings service resolves without reload loops and stays bounded.",
       "command": "bun scripts/e2e-v2.ts --core"
     },
     {
-      "id": "plugin.model-roles.admission",
-      "surface": "Awaited first accepted prompt admission",
+      "id": "plugin.model-roles.birth",
+      "surface": "Lazy family-settings birth on first resolution",
       "phase": "T-003",
       "status": "implemented-core",
-      "acceptance": "A rejected preparation after the prompt hook binds nothing; the later valid prompt binds a durable family policy and dispatches the captured payload.",
+      "acceptance": "A location-only family root births a version-1 settings record into session metadata on first resolution and serves it from metadata thereafter.",
       "command": "bun scripts/e2e-v2.ts --core"
     },
     {
-      "id": "plugin.model-roles.rollback",
-      "surface": "Rejected/admission rollback without binding",
+      "id": "plugin.model-roles.fail-soft",
+      "surface": "Rejected preparation dispatches nothing; resolution never fails a request",
       "phase": "T-003",
       "status": "implemented-core",
-      "acceptance": "Preparation failure leaves the family unbound instead of publishing the staged candidate.",
+      "acceptance": "A preparation rejection dispatches zero provider requests; the accepted turn dispatches once and repeated settings resolution is stable with no per-request rewrite.",
       "command": "bun scripts/e2e-v2.ts --core"
     },
     {
       "id": "plugin.model-roles.variants",
-      "surface": "Captured source variants on the same real model",
+      "surface": "Native role variants on the same real model",
       "phase": "T-003",
       "status": "implemented-core",
-      "acceptance": "One model dispatches two distinct qualified payloads (override/high and plain/minimal); final registry readback exposes the family-qualified variants.",
+      "acceptance": "The root dispatches its default-role payload (override/high) and the auxiliary child dispatches the fast-role payload (plain/minimal); the final registry readback exposes the configured variant without fabricated entries.",
       "command": "bun scripts/e2e-v2.ts --core"
     },
     {
       "id": "plugin.model-roles.policy",
-      "surface": "Bound family policy versus changed configuration",
+      "surface": "Session-owned settings versus changed configuration",
       "phase": "T-003",
       "status": "implemented-core",
-      "acceptance": "A config change binds new work to a new snapshot while an already-bound family keeps its captured variant.",
+      "acceptance": "A config change births new families with the new role settings while an already-born family keeps resolving its recorded settings and native model.",
       "command": "bun scripts/e2e-v2.ts --core"
     },
     {
       "id": "plugin.model-roles.synthetic",
-      "surface": "Owned generate/synthetic pre-admission and raw-unbound refusal",
+      "surface": "Native generate/synthetic without any admission gateway",
       "phase": "T-003",
       "status": "implemented-core",
-      "acceptance": "Pre-admission publishes an owned family before native session.generate/session.synthetic, which then dispatch the captured payload; raw unbound generate and synthetic produce zero provider dispatch and no capture.",
+      "acceptance": "session.generate/session.synthetic complete natively with no pre-binding step and dispatch the session's role variant payload; the family settings resolve for both.",
       "command": "bun scripts/e2e-v2.ts --core"
     },
     {
       "id": "plugin.model-roles.auxiliary",
-      "surface": "Auxiliary title child bound to the family",
+      "surface": "Auxiliary title child bound to the family settings",
       "phase": "T-003",
       "status": "implemented-core",
-      "acceptance": "A persistent native child session is created with parentID, vvocAuxiliary kind/role metadata, and the same family capture prefix; exactly one provider dispatch is attributed to the parent, proving the native title dispatch was suppressed.",
+      "acceptance": "A persistent native child session is created with parentID, vvocAuxiliary kind/role metadata, and the family fast-role model; exactly one provider dispatch is attributed to the parent, proving the native title dispatch was suppressed.",
       "command": "bun scripts/e2e-v2.ts --core"
     },
     {
@@ -81,7 +81,7 @@
       "surface": "Child/fork/worktree family lineage resolution",
       "phase": "T-003",
       "status": "implemented-core",
-      "acceptance": "The auxiliary child, a native fork with empty parentID and fork.sessionID, and a session moved into a native worktree all resolve the host-verified root family capture and dispatch its payload before dispatch.",
+      "acceptance": "The auxiliary child, a native fork with empty parentID and fork.sessionID, and a session moved into a native worktree all resolve the root family settings record through host-verified lineage.",
       "command": "bun scripts/e2e-v2.ts --core"
     },
     {
@@ -89,7 +89,7 @@
       "surface": "Explicit-at-create and explicit switch selection provenance",
       "phase": "T-003",
       "status": "implemented-core",
-      "acceptance": "An explicit selection at create and an explicit switch before first binding are preserved over the configured default and dispatched in the provider payload.",
+      "acceptance": "An explicit selection at create and an explicit switch before first work are preserved over the configured default and dispatched in the provider payload; vvoc never rewrites them.",
       "command": "bun scripts/e2e-v2.ts --core"
     },
     {
@@ -97,31 +97,31 @@
       "surface": "Native fork with empty parentID and fork.sessionID",
       "phase": "T-003",
       "status": "implemented-core",
-      "acceptance": "A native fork records fork.sessionID and no parentID; family lookup and the dispatched payload follow the root family.",
+      "acceptance": "A native fork records fork.sessionID and no parentID; lineage lookup and the resolved settings record follow the root family.",
       "command": "bun scripts/e2e-v2.ts --core"
     },
     {
-      "id": "runtime.admission.ordering",
-      "surface": "First-accepted versus first-staged input ordering",
+      "id": "runtime.settings.stability",
+      "surface": "Settings birth stability under an explicit switch race",
       "phase": "T-003",
       "status": "implemented-core",
-      "acceptance": "With two differing-policy inputs staged on one family, the first native-accepted input binds; a fixture preparation delay after the real prompt hook controls ordering without implementing admission.",
+      "acceptance": "With a fixture preparation delay after the real prompt hook, the birth happens once from the pre-switch config and a later explicit model switch rewrites neither the record nor the session model.",
       "command": "bun scripts/e2e-v2.ts --core"
     },
     {
-      "id": "runtime.admission.owned",
-      "surface": "Owned pre-admission gateway and prompt-candidate separation",
+      "id": "runtime.settings.resolve",
+      "surface": "Family-wide resolution: lineage root metadata over live config",
       "phase": "T-003",
       "status": "implemented-core",
-      "acceptance": "admitWorkload mints its own owned candidate and publishes before native model resolution; it never publishes a prompt candidate.",
+      "acceptance": "Every session resolves its family root's metadata record (children carry none of their own); a family without a record resolves the live configuration fail-soft.",
       "command": "bun scripts/e2e-v2.ts --core"
     },
     {
-      "id": "runtime.snapshot-persist",
-      "surface": "Durable family capture persistence and restart replay",
+      "id": "runtime.settings-persist",
+      "surface": "Durable family settings persistence and restart replay",
       "phase": "T-003",
       "status": "implemented-core",
-      "acceptance": "Bound captures persist under the isolated XDG data directory; after a real host restart the same persisted session rebinds its original snapshot-qualified variant.",
+      "acceptance": "Family settings persist in the host session store (opencode.db); after a real host restart the same persisted record drives the same resolution byte-identically.",
       "command": "bun scripts/e2e-v2.ts --core"
     },
     {
@@ -129,7 +129,7 @@
       "surface": "Durable replay after service restart",
       "phase": "T-003",
       "status": "implemented-core",
-      "acceptance": "A second owned host instance replays the persisted family capture for an existing session instead of adopting the current policy silently.",
+      "acceptance": "A second owned host instance replays the persisted family settings for existing root and auxiliary sessions instead of rebirthing them, while a fresh family births the same effective config.",
       "command": "bun scripts/e2e-v2.ts --core"
     },
     {

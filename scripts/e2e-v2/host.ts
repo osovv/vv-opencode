@@ -78,13 +78,20 @@ import { VERIFIED_HOST_VERSION } from "../../src/lib/host-compat.ts";
 
 /** OpenCode host version under test: VVOC_HOST_VERSION, else the newest verified host. */
 export const PINNED_HOST_VERSION = process.env.VVOC_HOST_VERSION ?? VERIFIED_HOST_VERSION;
-/** SHA-256 of the host binary under test; override with VVOC_E2E_V2_HOST_SHA256. */
+/**
+ * SHA-256 of the host binary under test: the published 2.2.5 CLI binary
+ * (`@opencode/cli` 2.2.5, `bin/opencode.exe`), matching the newest verified
+ * entry in src/hosts.json. Override with VVOC_E2E_V2_HOST_SHA256.
+ */
 export const PINNED_HOST_SHA256 =
   process.env.VVOC_E2E_V2_HOST_SHA256 ??
-  "10d405161d8b9595f4a2ec31254e961969e6ca3f8239ac9bd55b6ff6431dc24f";
-/** Native host source commit recorded in evidence; override with VVOC_E2E_V2_SOURCE_COMMIT. */
-export const PINNED_SOURCE_COMMIT =
-  process.env.VVOC_E2E_V2_SOURCE_COMMIT ?? "cd9a14a6b688d4021bee381dfd39d2cef9c0f862";
+  "8d060e1d2fbb9bb44cf09ae6ed1f3f6a7cff070b5227e2f90970132b23a92050";
+/**
+ * Native host source commit recorded in evidence when known; override with
+ * VVOC_E2E_V2_SOURCE_COMMIT. The published 2.2.5 binary carries no verifiable
+ * source-commit metadata, so nothing is claimed by default.
+ */
+export const PINNED_SOURCE_COMMIT = process.env.VVOC_E2E_V2_SOURCE_COMMIT ?? "";
 /** Host binary under test: VVOC_E2E_V2_HOST, else the version-pinned seam host location. */
 export const DEFAULT_HOST_BINARY =
   process.env.VVOC_E2E_V2_HOST ??
