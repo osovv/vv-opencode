@@ -552,9 +552,8 @@ describe("SecretsRedactionPlugin registration", () => {
     const disposed: string[] = [];
     let released = false;
     const fakeRuntime = {
-      snapshots: {
+      settings: {
         configFor: async () => capture,
-        accept: async () => ({ status: "unbound" }),
       },
       release: async () => {
         released = true;

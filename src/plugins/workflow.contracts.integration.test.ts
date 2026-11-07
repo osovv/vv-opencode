@@ -128,9 +128,8 @@ async function createContractsHarness(): Promise<ContractsHarness> {
   };
   const loaded = await loadVvocConfig({ cwd: "/tmp/project" });
   const fakeRuntime = {
-    snapshots: {
+    settings: {
       configFor: async () => ({ vvoc: loaded.config }),
-      accept: async () => ({ status: "unbound" }),
     },
     client: async () => fakeClient,
     effectiveConfig: () => ({ vvoc: loaded.config }),

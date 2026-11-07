@@ -110,10 +110,9 @@ async function makePlugin(
   const entry = options.entry ?? baseEntry();
   const config = configFor(policy === "disabled" ? false : entry);
   const fakeRuntime = {
-    snapshots: {
+    settings: {
       configFor: async () =>
         policy === "unknown" ? undefined : { familyId: "fam-1", vvoc: config },
-      accept: async () => ({ status: "unbound" }),
     },
     release: async () => {
       released = true;

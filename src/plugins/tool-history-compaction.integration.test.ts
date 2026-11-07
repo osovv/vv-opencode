@@ -80,12 +80,11 @@ async function createHarness(
   let released = false;
   const capture = { familyId: "fam-1", vvoc: config };
   const fakeRuntime = {
-    snapshots: {
+    settings: {
       configFor: async (sessionID: string) => {
         if (options.resolve !== undefined) return options.resolve(sessionID);
         return policy === "unknown" ? undefined : capture;
       },
-      accept: async () => ({ status: "unbound" }),
     },
     client: async () => {
       if (options.clientThrows) throw new Error("client unavailable");

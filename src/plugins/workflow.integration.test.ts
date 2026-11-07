@@ -1682,11 +1682,10 @@ async function createWorkflowPluginHarness(
   const captures = options?.captures ?? {};
   const defaultCapture = { vvoc: loaded.config };
   const fakeRuntime = {
-    snapshots: {
+    settings: {
       // Tests explicitly bind a fixture policy per session; absence is only
       // used by the disabled/unbound regression and fails closed in production.
       configFor: async (sessionID: string) => captures[sessionID] ?? defaultCapture,
-      accept: async () => ({ status: "unbound" }),
     },
     client: async () => fakeClient,
     effectiveConfig: () => ({ vvoc: loaded.config }),

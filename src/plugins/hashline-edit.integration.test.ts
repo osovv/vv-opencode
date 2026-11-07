@@ -924,9 +924,8 @@ describe("HashlineEditPlugin cold-start native definitions", () => {
     const vvoc = createDefaultVvocConfig();
     vvoc.plugins = { ...vvoc.plugins, "hashline-edit": settings as never };
     const fakeRuntime = {
-      snapshots: {
+      settings: {
         configFor: async () => ({ familyId: "fam-1", vvoc }),
-        accept: async () => ({ status: "unbound" }),
       },
       permissions: {
         guard: async (_input: unknown, effect: () => Promise<unknown> | unknown) => effect(),
