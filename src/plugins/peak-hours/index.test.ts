@@ -2,7 +2,7 @@
 // VERSION: 2.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify native peak-hours plugin policy gating, hard blocks, grace, kind/agent exemptions, suggestions, soft pass-through, fail-open behavior, and an optional isolated real-host smoke that loads the actual built T-006 plugins on the pinned OpenCode 2.0.18 binary.
-//   SCOPE: Unconditional hook registration, per-family captured policy, native model.request hard blocking with dynamic suggestions and all-peak degradation, session-age and parentID grace, internal-kind/internal-agent/subagent exemptions, per-provider mode overrides, default production session/provider/agent registry adapters, lookup-failure fail-open, and a loopback-only real-host smoke proving primary payload context, native usage telemetry, and hard-block zero-dispatch with a soft negative control.
+//   SCOPE: Unconditional hook registration, per-family captured policy, native model.request hard blocking with dynamic suggestions and all-peak degradation, session-age and parentID grace, internal-kind/internal-agent/subagent exemptions, per-provider mode overrides, default production session/provider/agent registry adapters, lookup-failure fail-open, and a loopback-only real-host smoke using the retained repository_memory marker to prove primary payload context, native usage telemetry, and hard-block zero-dispatch with a soft negative control.
 //   DEPENDS: [bun:test, node:fs, node:http, node:path, src/plugins/peak-hours/index.ts, src/lib/peak-hours.ts, src/lib/vvoc-config.ts]
 //   LINKS: [M-PLUGIN-PEAK-HOURS, V-M-PLUGIN-PEAK-HOURS, M-E2E-V2-HARNESS]
 //   ROLE: TEST
@@ -32,7 +32,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-006 attempt 2 - Added default-registry adapter coverage and the loopback-only real-host smoke for primary payload context, native usage telemetry, and hard-block zero dispatch.]
+//   LAST_CHANGE: [DIRECT-FIX - Primary-dispatch smoke checks use retained repository_memory and consolidated evidence_discipline markers.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -845,10 +845,10 @@ t006SmokeDescribe("real OpenCode 2.0.18 T-006 smoke (actual built plugins)", () 
         (line) => line.event === "provider.request",
       );
       const primary = requests.filter((line) =>
-        JSON.stringify(line.body).includes("<working_state>"),
+        JSON.stringify(line.body).includes("<repository_memory>"),
       );
       expect(primary.length).toBeGreaterThan(0);
-      expect(JSON.stringify(primary[0]!.body)).toContain("<correctness_obligations>");
+      expect(JSON.stringify(primary[0]!.body)).toContain("<evidence_discipline>");
 
       // Real native session.step.ended usage must land in the analytics store.
       let usage: Record<string, unknown> | undefined;
@@ -876,11 +876,11 @@ t006SmokeDescribe("real OpenCode 2.0.18 T-006 smoke (actual built plugins)", () 
       const requests = providerTraceLines(started.providerTrace).filter(
         (line) => line.event === "provider.request",
       );
-      // The primary context carries `<working_state>`; a hard block must prevent
+      // The primary context carries `<repository_memory>`; a hard block must prevent
       // any primary dispatch. Title/auxiliary requests never carry it, so this
       // marker counts primary dispatches only.
       const primaryDispatches = requests.filter((line) =>
-        JSON.stringify(line.body).includes("<working_state>"),
+        JSON.stringify(line.body).includes("<repository_memory>"),
       );
       expect(primaryDispatches).toHaveLength(0);
     } finally {

@@ -2,7 +2,7 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Plugin-level integration coverage proving the three reachable execution paths (native-package, provided-plan, conversation-scoped) run through the common registry with real delegated launch/result/acceptance hooks, dynamic review obligations, honest completion, and fail-closed persistence.
-//   SCOPE: In-memory plugin domain integration with synthetic fixtures; no live model, SDK, or filesystem persistence writes.
+//   SCOPE: In-memory plugin domain integration with synthetic fixtures and canonical controller/skill instruction audit for source independence, bounded authority and reserved stops; no live model, SDK, or filesystem persistence writes.
 //   DEPENDS: [bun:test, src/plugins/workflow/state.ts, src/plugins/workflow/delegated.ts, src/plugins/workflow/execution.ts, src/plugins/workflow/authority.ts, src/plugins/workflow/transactions.ts]
 //   LINKS: [M-PLUGIN-WORKFLOW, M-WORKFLOW-EXECUTION, M-WORKFLOW-AUTHORITY, V-M-PLUGIN-WORKFLOW]
 //   ROLE: TEST
@@ -21,7 +21,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE wi-7 - Added direct work_item_decide coverage for generic failed-checkpoint rework: the public attempt must match the current accepted attempt (STALE_ATTEMPT otherwise), an unknown run stays RUN_NOT_FOUND, and a real generic failure reopens its covered task.]
+//   LAST_CHANGE: [DIRECT-FIX - Source-independent execution instruction checks follow the consolidated controller wording without weakening source, review or authority requirements.]
 // END_CHANGE_SUMMARY
 
 import { beforeEach, describe, expect, test } from "bun:test";
@@ -2331,10 +2331,15 @@ describe("instruction scenario audit", () => {
       /\s+/g,
       " ",
     );
-    expect(controller).toContain("<source_and_authority>");
+    expect(controller).toContain("<delegation_and_workflow>");
     expect(controller).not.toContain("<large_feature_gate>");
-    expect(controller).toContain("not a universal prerequisite");
-    expect(controller).toContain("do not install a universal final-review pair");
+    expect(controller).toContain(
+      "Keep requirement source, execution ownership, and authority distinct",
+    );
+    expect(controller).toContain(
+      "Do not invent a native package or second lifecycle for a provided plan or conversation-scoped request",
+    );
+    expect(controller).toContain("Do not impose a universal final-review pair");
     expect(controller).toContain("Honor explicitly delegated autonomy");
   });
 
@@ -2371,12 +2376,16 @@ describe("instruction scenario audit", () => {
   });
 
   test("scenario enabling rules are present for no-files, reserved-stop, and publication-bound runs", async () => {
-    const controller = readFileSync(join(templatesDir, "agents/vv-controller.md"), "utf8");
+    const controller = readFileSync(join(templatesDir, "agents/vv-controller.md"), "utf8").replace(
+      /\s+/g,
+      " ",
+    );
     // Discussion/review requests must not become implementation; reserved stops stay binding.
-    expect(controller).toContain("user-reserved stops");
+    expect(controller).toContain("Respect reserved stops");
     expect(controller).toContain("host permissions");
+    expect(controller).toContain("destructive, publication, or credential-operation boundaries");
     // Provided-plan and conversation-scoped sources need no native package.
-    expect(controller).toContain("do not invent a native package");
+    expect(controller).toContain("Do not invent a native package");
     // Review-only requests remain findings rather than implementation.
     const review = await skillBody("vv-review");
     expect(review).toContain("findings");

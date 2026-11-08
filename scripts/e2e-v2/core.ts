@@ -3,7 +3,7 @@
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Orchestrate the isolated packed-package core real-host run: build, pack, install, prepare the fixture project, own the host lifecycle on an ownership-marked scratch, drive the core cases, and persist bounded machine-readable evidence.
-//   SCOPE: Ownership-marked scratch creation/removal, in-process loopback provider, packed fixture plugin materialization, exact-PID host startup/restart/teardown, bounded control-plane and native API driver, per-request provider attribution, case execution, and evidence writing. Default evidence paths resolve under the harness scratch base and never inside the workspace. It never signs services, never kills by name, and never dispatches to a non-loopback origin.
+//   SCOPE: Ownership-marked scratch creation/removal, in-process loopback provider, packed fixture plugin materialization, exact-PID host startup/restart/teardown, bounded control-plane and native API driver, per-request provider attribution using retained repository_memory guidance for primary dispatch, case execution, and evidence writing. Default evidence paths resolve under the harness scratch base and never inside the workspace. It never signs services, never kills by name, and never dispatches to a non-loopback origin.
 //   DEPENDS: [node:fs/promises, node:net, node:path, node:url, scripts/e2e-v2/cases.ts, scripts/e2e-v2/host.ts, scripts/e2e-v2/provider.ts]
 //   LINKS: [M-E2E-V2-HARNESS, V-M-E2E-V2-HARNESS]
 //   ROLE: SCRIPT
@@ -58,7 +58,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SESSION-OWNED-SETTINGS T-006 - The restart-replay case now proves persisted family-settings metadata survives a real host restart and keeps driving the same resolution, replacing the snapshot-capture replay.]
+//   LAST_CHANGE: [DIRECT-FIX - System-context and peak-hours parity use the retained repository_memory marker after controller guidance consolidation.]
 //   PREVIOUS: [Direct fix - Default evidence paths now resolve under the harness scratch base (vvoc-e2e-evidence) instead of the workspace GRACE change tree, so a run never leaves evidence files that turn `grace lint` red.]
 // END_CHANGE_SUMMARY
 
@@ -1440,7 +1440,7 @@ export async function runAggregateParity(input: {
       await waitForProviderRequests(host.tracePath, 1, timeoutMs);
       await aggregatePrompt(host.api, host.projectDir, "aggregate primary probe");
       const records = await waitForProviderRequests(host.tracePath, 2, timeoutMs);
-      const injected = traceHasSystemText(records, "<semantic_continuity>");
+      const injected = traceHasSystemText(records, "<repository_memory>");
       checks.push({
         id: "plugin.system-context-injection",
         ok: injected,
@@ -1478,7 +1478,7 @@ export async function runAggregateParity(input: {
       };
     };
   /**
-   * A PRIMARY dispatch carries injected guidance (`<semantic_continuity>`), which
+   * A PRIMARY dispatch carries injected guidance (`<repository_memory>`), which
    * system-context-injection never adds to title/compaction/internal requests.
    * Counting only these avoids attributing an exempt auxiliary dispatch to a
    * primary peak-hours bypass.
@@ -1487,7 +1487,7 @@ export async function runAggregateParity(input: {
     records.filter(
       (record) =>
         record.path?.endsWith("/chat/completions") &&
-        JSON.stringify(record.body ?? "").includes("<semantic_continuity>"),
+        JSON.stringify(record.body ?? "").includes("<repository_memory>"),
     ).length;
   const openSession = async (
     api: ReturnType<typeof createNativeApi>,

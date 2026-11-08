@@ -1,9 +1,9 @@
 // FILE: src/plugins/system-context-injection.integration.test.ts
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify native universal primary guidance injection, including correctness obligations and evidence discipline, and bound-family concrete vv-controller orchestration policy injection into native system parts.
-//   SCOPE: Correctness-obligations delivery, settled-conclusion reopen triggers, false-premise handling, pressure-versus-evidence distinction, per-profile controller context, primary isolation, explore guidance, built-in/managed/configured subagent exclusion, duplicate prevention, native-registry mode exclusion, and unknown/disabled no-op.
-//   DEPENDS: [bun:test, src/lib/orchestration.ts, src/lib/vvoc-config.ts, src/plugins/system-context-injection/index.ts]
+//   PURPOSE: Verify canonical seven-section controller assembly, shared primary guidance preservation, and concrete controller policy delivery at the request tail.
+//   SCOPE: Exact bundled-template assembly and repeated-hook idempotence across all profiles; preserved memory, evidence, assumptions, counterexample, drift thresholds and authority guidance; controller-only instruction isolation; explore and other subagent exclusions; registry recovery; disabled/unknown no-op.
+//   DEPENDS: [bun:test, src/lib/managed-agents.ts, src/lib/orchestration.ts, src/lib/vvoc-config.ts, src/plugins/system-context-injection/index.ts]
 //   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, M-ORCHESTRATION-PROFILES, V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -19,10 +19,11 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SNAPSHOT-ANCHORING-REDESIGN T-007 - Static guidance is asserted in the system prefix while the variable orchestration policy is asserted at the request tail.]
+//   LAST_CHANGE: [DIRECT-FIX - Pin the approved assembled controller prompt once, shared guidance for non-controller primaries, and existing policy/exclusion behavior.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
+import { loadManagedAgentPromptTemplate } from "../lib/managed-agents.js";
 import type { OrchestrationProfile } from "../lib/orchestration.js";
 import { createDefaultVvocConfig, type VvocConfig } from "../lib/vvoc-config.js";
 import { createSystemContextInjectionPlugin } from "./system-context-injection/index.js";
@@ -142,14 +143,11 @@ describe("SystemContextInjectionPlugin", () => {
     const event = await harness.inject("build");
     const text = systemText(event);
 
-    expect(text).toContain("<working_state>");
-    expect(text).toContain("<reroute_on_evidence>");
-    expect(text).toContain("<semantic_continuity>");
-    expect(text).toContain("<assumption_discipline>");
-    expect(text).toContain("<correctness_obligations>");
-    expect(text).toContain("<anti_drift_budget>");
-    expect(text).toContain("<project_overlays>");
-    expect(text).toContain("<editing_workflow>");
+    expect(text).toContain("<working_cycle>");
+    expect(text).toContain("<project_context>");
+    expect(text).toContain("<evidence_discipline>");
+    expect(text).toContain("<execution_source_and_authority>");
+    expect(text).toContain("<delivery_discipline>");
     expect(text).toContain("<repository_memory>");
     expect(text).toContain(".vvoc/lessons/index.xml");
     expect(text).toContain(".vvoc/runbooks/index.xml");
@@ -158,7 +156,7 @@ describe("SystemContextInjectionPlugin", () => {
     expect(text).not.toContain("Work directly in the current session");
     expect(text).not.toContain("Use the full tracked implementation and review workflow");
     expect(text.replace(/\s+/g, " ")).toContain(
-      "prefer the `edit` tool over shell-based rewrites when it is available.",
+      "Prefer an available dedicated editing tool over shell-based rewrites.",
     );
   });
 
@@ -167,30 +165,24 @@ describe("SystemContextInjectionPlugin", () => {
     const text = systemText(await harness.inject("build")).replace(/\s+/g, " ");
 
     expect(text).toContain(
-      "For behavior changes, run a compact correctness cycle before reporting done",
+      "For behavior changes, state the intended effect, identify the directly affected consumers",
     );
+    expect(text).toContain("Distinguish write scope, impact scope, and verification scope.");
     expect(text).toContain(
-      "Separate write scope (what you may edit), impact scope (behavior that could change), and verification scope (what you actually check).",
-    );
-    expect(text).toContain(
-      "Investigating directly affected consumers to understand impact is required; broadening writes beyond the approved scope is not",
+      "Investigating affected consumers is part of understanding impact; it does not authorize broader edits.",
     );
     expect(text).toContain(
       "challenge at least one material assumption with a diagnostic counterexample",
     );
-    expect(text).toContain("Choose verification at the level where the risk arises");
     expect(text).toContain(
-      "Derive test expectations from the contract and the request, not from the implementation's current output",
+      "Choose verification proportionate to the risk and at the level where it arises",
     );
+    expect(text).toContain("Derive expectations from the request and contracts");
+    expect(text).toContain("ground mocks in the established contracts of their dependencies");
+    expect(text).toContain("absence of discovered defects alone does not establish acceptance");
+    expect(text).toContain("Name unverified material conditions and remaining uncertainty");
     expect(text).toContain(
-      "ground mocks in the dependency's established contract rather than in whatever makes the change pass",
-    );
-    expect(text).toContain("The absence of a discovered defect is not proof of correctness");
-    expect(text).toContain(
-      "an unverified material condition is reported as remaining uncertainty, never presented as a passed check",
-    );
-    expect(text).toContain(
-      "Unrelated informational or trivial documentation work needs none of this ceremony",
+      "Unrelated informational work and trivial documentation work need none of this correctness procedure",
     );
   });
 
@@ -204,33 +196,29 @@ describe("SystemContextInjectionPlugin", () => {
     expect(raw).not.toContain("An unmarked claim counts as");
     expect(text).not.toContain("restate the requirement in one line in your own words");
 
-    expect(text).toContain("Do not make silent material assumptions.");
+    expect(text).toContain("State material assumptions explicitly");
+    expect(text).toContain("carry their effects into the result report");
     expect(text).toContain(
-      "If a material assumption is necessary, state it explicitly and carry its effect into the result report.",
+      "Stop and reconsider the approach when evidence invalidates it or a material assumption",
     );
-    expect(text).toContain("If a material assumption later becomes false, stop and reroute.");
     expect(text).toContain(
-      "Resolve repository-answerable technical questions from the established code, contracts, and tests yourself",
+      "Resolve repository-answerable technical questions from code, contracts, tests, and documentation yourself",
     );
-    expect(text).toContain("only a genuine business-semantics fork needs a user decision");
+    expect(text).toContain("ask the user for genuine business-semantics decisions");
   });
 
   test("delivers evidence discipline with reopen triggers and false-premise handling", async () => {
     const harness = await makeHarness();
     const text = systemText(await harness.inject("build")).replace(/\s+/g, " ");
 
+    expect(text).toContain("Surface false premises and investigate the actual mechanism");
     expect(text).toContain(
-      "When a request assumes something that does not exist (a library, file, or behavior), surface the false premise",
+      "do not silently substitute another goal or add an unnecessary dependency to make a premise true",
     );
-    expect(text).toContain(
-      "never silently substitute a different goal or add an unnecessary dependency to make the premise true",
-    );
-    expect(text).toContain("A reopen or reroute trigger is concrete");
-    expect(text).toContain("Vague doubt or unsupported pressure is not itself a trigger");
+    expect(text).toContain("Reopen supported conclusions on concrete evidence");
+    expect(text).toContain("Vague doubt or unsupported pressure alone is not a trigger");
     expect(text).toContain("An unchecked claim is not settled");
-    expect(text).toContain(
-      "Interpret test results as evidence against the request and established contracts, not as the authoritative specification",
-    );
+    expect(text).toContain("Treat test results as evidence against the request and contracts");
   });
 
   test("injects primary-session system context for vv-controller", async () => {
@@ -239,7 +227,7 @@ describe("SystemContextInjectionPlugin", () => {
     const system = systemText(event);
     const tail = tailText(event);
 
-    expect(system).toContain("<working_state>");
+    expect(system).toContain("<working_cycle>");
     expect(system).not.toContain("selectively delegate bounded repository search");
     expect(system).not.toContain("Work directly in the current session");
     expect(system).not.toContain("Use the full tracked implementation");
@@ -288,7 +276,7 @@ describe("SystemContextInjectionPlugin", () => {
       const event = await harness.inject("vv-controller");
       const system = systemText(event);
       const tail = tailText(event);
-      expect(system).toContain("<working_state>");
+      expect(system).toContain("<working_cycle>");
       expect(system).not.toContain(expected);
       expect(tail).toContain(expected);
       for (const inactive of absent) expect(tail).not.toContain(inactive);
@@ -326,9 +314,24 @@ describe("SystemContextInjectionPlugin", () => {
 
   test("non-controller primary agents receive universal guidance without orchestration policy", async () => {
     const harness = await makeHarness({ profile: "orchestrated" });
-    for (const agent of ["build", "custom-primary"]) {
+    for (const agent of ["build", "enhancer", "custom-primary"]) {
       const text = systemText(await harness.inject(agent));
-      expect(text).toContain("<working_state>");
+      const normalized = text.replace(/\s+/g, " ");
+      expect(text).toContain("<working_cycle>");
+      expect(text).toContain("<repository_memory>");
+      expect(text).toContain(".vvoc/lessons/index.xml");
+      expect(text).toContain(".vvoc/runbooks/index.xml");
+      expect(normalized).toContain("Treat lessons and runbooks as advisory memory");
+      expect(normalized).toContain("vv-reflect skill to propose durable lessons or runbooks");
+      expect(normalized).toContain("finite shared reserve");
+      expect(normalized).toContain("Do not impose a universal final-review pair");
+      expect(normalized).toContain("Report completion as controller-accepted");
+      expect(text).not.toContain("You are vv-controller");
+      expect(text).not.toContain("<task_and_scope>");
+      expect(text).not.toContain("<delegation_and_workflow>");
+      expect(text).not.toContain("<communication>");
+      expect(text).not.toContain("Own the correctness of delegated work");
+      expect(text).not.toContain("BLOCKED and NEEDS_CONTEXT");
       expect(text).not.toContain("Work directly in the current session");
       expect(text).not.toContain("selectively delegate bounded repository search");
       expect(text).not.toContain("Use the full tracked implementation and review workflow");
@@ -344,9 +347,9 @@ describe("SystemContextInjectionPlugin", () => {
     expect(text.replace(/\s+/g, " ")).toContain(
       "You are a repository search-and-discovery worker.",
     );
-    expect(text).not.toContain("<working_state>");
-    expect(text).not.toContain("<correctness_obligations>");
-    expect(text).not.toContain("<semantic_continuity>");
+    expect(text).not.toContain("<working_cycle>");
+    expect(text).not.toContain("<evidence_discipline>");
+    expect(text).not.toContain("<project_context>");
     expect(text).not.toContain("Work directly in the current session");
     expect(text).not.toContain("selectively delegate bounded repository search");
   });
@@ -366,8 +369,8 @@ describe("SystemContextInjectionPlugin", () => {
 
     const system = systemText(event);
     expect(system).toContain("Existing system context.");
-    expect(system.match(/<working_state>/g)).toHaveLength(1);
-    expect(system.match(/<correctness_obligations>/g)).toHaveLength(1);
+    expect(system.match(/<working_cycle>/g)).toHaveLength(1);
+    expect(system.match(/<evidence_discipline>/g)).toHaveLength(1);
     expect(system.match(/<repository_memory>/g)).toHaveLength(1);
     expect(system).not.toContain("Keep architecture, critical code reading");
 
@@ -375,9 +378,87 @@ describe("SystemContextInjectionPlugin", () => {
     expect(tail.match(/Keep architecture, critical code reading/g)).toHaveLength(1);
   });
 
+  test("assembled controller preserves the approved seven sections once for every profile", async () => {
+    const template = await loadManagedAgentPromptTemplate("vv-controller");
+    const prompt = template.replace(/^---\n[\s\S]*?\n---\n/, "").trim();
+    const tags = [
+      "task_and_scope",
+      "project_context",
+      "repository_memory",
+      "evidence_discipline",
+      "working_cycle",
+      "delegation_and_workflow",
+      "communication",
+    ];
+    expect([...prompt.matchAll(/^<([a-z_]+)>$/gm)].map((match) => match[1])).toEqual(tags);
+
+    for (const profile of ["single-session", "balanced", "orchestrated", "delegated"] as const) {
+      const harness = await makeHarness({ profile });
+      const event = await harness.inject("vv-controller", prompt);
+      const once = structuredClone(event);
+      await harness.hooks.get("context")!(event);
+      // The host already supplied the complete canonical prompt: zero duplicated
+      // sections, reordered paragraphs, or extra universal wrappers may appear.
+      expect(event.system).toEqual([{ type: "text", text: prompt }]);
+      expect(event).toEqual(once);
+      for (const tag of tags) {
+        expect(systemText(event).split(`<${tag}>`).length - 1).toBe(1);
+      }
+      for (const retired of [
+        "working_state",
+        "assumption_discipline",
+        "editing_workflow",
+        "reroute_on_evidence",
+        "skill_trigger_rule",
+        "plan_artifacts",
+        "execution_source_and_authority",
+      ]) {
+        expect(systemText(event)).not.toContain(`<${retired}>`);
+      }
+      expect(event.messages[0]!.content).toHaveLength(1);
+      await harness.cleanup();
+    }
+  });
+
+  test("disabled injection leaves the complete managed controller and existing host context intact", async () => {
+    const template = await loadManagedAgentPromptTemplate("vv-controller");
+    const harness = await makeHarness({ enabled: false });
+    const event = await harness.inject("vv-controller", template);
+    expect(event.system).toEqual([{ type: "text", text: template }]);
+    expect(systemText(event)).toContain("<repository_memory>");
+    expect(systemText(event)).toContain("<delegation_and_workflow>");
+    expect(tailText(event)).toBe("");
+  });
+
+  test("does not duplicate a host-supplied controller prompt with CRLF line endings", async () => {
+    const template = await loadManagedAgentPromptTemplate("vv-controller");
+    const prompt = template.replace(/\n/g, "\r\n");
+    const harness = await makeHarness();
+    const event = await harness.inject("vv-controller", prompt);
+    expect(event.system).toEqual([{ type: "text", text: prompt }]);
+  });
+
+  test("shared primary projection is idempotent without changing existing instructions", async () => {
+    const harness = await makeHarness();
+    const event = await harness.inject("build", "User-owned primary instructions.");
+    const once = structuredClone(event);
+    await harness.hooks.get("context")!(event);
+    expect(event).toEqual(once);
+    expect(event.system[0]!.text).toBe("User-owned primary instructions.");
+    expect(event.system).toHaveLength(7);
+  });
+
   test("skips plugin-managed and managed subagents", async () => {
     const harness = await makeHarness();
-    for (const agent of ["guardian", "vv-implementer"]) {
+    for (const agent of [
+      "general",
+      "guardian",
+      "vv-implementer",
+      "vv-spec-reviewer",
+      "vv-code-reviewer",
+      "investigator",
+      "vv-reflector",
+    ]) {
       const event = await harness.inject(agent);
       expect(event.system).toEqual([]);
     }
@@ -417,12 +498,12 @@ describe("SystemContextInjectionPlugin", () => {
     // First lookup fails transiently: the agent is treated as non-subagent (no
     // permanent poisoning) and universal guidance is injected.
     const first = await harness.inject("build");
-    expect(systemText(first)).toContain("<working_state>");
+    expect(systemText(first)).toContain("<working_cycle>");
     // Recovery: the real envelope is parsed and the subagent mode is honored.
     const second = await harness.inject("reviewer");
     expect(second.system).toEqual([]);
     const third = await harness.inject("build");
-    expect(systemText(third)).toContain("<working_state>");
+    expect(systemText(third)).toContain("<working_cycle>");
     expect(calls).toBeGreaterThanOrEqual(3);
   });
 
@@ -446,33 +527,38 @@ describe("SystemContextInjectionPlugin", () => {
     expect((await unknown.inject("build")).system).toEqual([]);
   });
 
-  test("keeps injected guidance wording stable", async () => {
+  test("preserves working state, drift thresholds, local editing contracts and memory", async () => {
     const harness = await makeHarness();
     const text = systemText(await harness.inject("build")).replace(/\s+/g, " ");
 
     expect(text).not.toContain("proactively use the explore subagent");
     expect(text).not.toContain("change_with_review");
     expect(text).toContain(
-      "stabilize a compact working state before acting: goal, current route, constraints, non-goals when relevant, assumptions, verification target, current unknown, and reroute if.",
+      "maintain a compact working state: goal, current approach, constraints, relevant non-goals, assumptions, verification target, current unknowns, and reroute trigger",
     );
-    expect(text).toContain("When new evidence invalidates the current route, stop and reroute.");
-    expect(text).toContain("Reuse stable domain terms from the user request and the repository.");
-    expect(text).toContain("Do not make silent material assumptions.");
-    expect(text).toContain("When repeated attempts do not converge, stop and summarize.");
+    expect(text).toContain("Every retry needs a named diagnosis of the prior failure");
+    expect(text).toContain("continue with the canonical project term");
+    expect(text).toContain("State material assumptions explicitly");
     expect(text).toContain(
-      "project-specific vocabulary, preferred patterns, boundaries, verification commands, architecture notes, or examples",
-    );
-    expect(text).toContain(
-      "Read the file first, then use exact `line#hash#anchor` refs from the latest `read` output when present.",
+      "two major strategy changes for the same task, two review rounds without convergence",
     );
     expect(text).toContain(
-      "Reserve `bash` for tests, builds, git, and other non-file-edit commands.",
+      "pause and summarize what was learned, what remains unknown, and the safest next step",
+    );
+    expect(text).toContain("Prefer actual project guidance over generic vvoc defaults");
+    expect(text).toContain(
+      "Before editing, read the target file and understand its local contract, nearby tests, surrounding code, and directly affected consumers",
+    );
+    expect(text).toContain("use current references from the latest read where required");
+    expect(text).toContain(
+      "Reserve shell commands for tests, builds, version control, and other non-file-edit operations",
     );
     expect(text).toContain(
-      "inspect relevant index entries before debugging, fixing, changing behavior, operating on, architecting, or investigating repository-specific issues.",
+      "inspect relevant index entries before repository investigation, debugging, design, implementation, or operations",
     );
+    expect(text).toContain("Load only entries whose summary or applicability matches the task");
     expect(text).toContain(
-      "advisory agent-facing repository memory, not as stronger authority than explicit user instructions, code, tests, or repository-owned instructions.",
+      "Explicit user instructions, code, tests, and repository-owned contracts remain authoritative",
     );
   });
 });
