@@ -2,7 +2,7 @@
 // VERSION: 1.4.2
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify OpenCode runtime/TUI config mutation and canonical vvoc config path/helpers.
-//   SCOPE: Runtime/TUI plugin specifier writes and legacy migration, OpenCode host compatibility, role-reference OpenCode defaults/agent/tool rewrites, managed prompt/plan scaffolding, canonical vvoc schema v3 writes, strict pre-role schema rejection, inspection, and scope-aware path resolution behavior.
+//   SCOPE: Runtime/TUI plugin specifier writes and legacy migration, OpenCode host compatibility, role-reference OpenCode defaults/agent/tool rewrites, managed prompt/plan scaffolding and complete canonical controller refresh, canonical vvoc schema v3 writes, strict pre-role schema rejection, inspection, and scope-aware path resolution behavior.
 //   DEPENDS: [bun:test, jsonc-parser, src/lib/opencode.ts]
 //   LINKS: [M-CLI-CONFIG, V-M-CLI-CONFIG]
 //   ROLE: TEST
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-PROMPT-SYNC-DOCTOR-ARCHIVE T-002/T-004 - Added legacy inline managed prompt reconciliation, user-owned source reporting, and real-path skills-root deduplication coverage.]
+//   LAST_CHANGE: [DIRECT-FIX - Managed inline prompt reconciliation asserts the consolidated controller body and retained memory/delegation sections.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -1842,7 +1842,9 @@ describe("managed agent user ownership", () => {
       const legacy = await readFile(legacyPath, "utf8");
       expect(legacy).toContain("Managed by vvoc");
       expect(legacy).not.toContain("OLD BODY");
-      expect(legacy).toContain("Your job is to own the user-facing task end to end");
+      expect(legacy).toContain("Understand the task, complete authorized work, verify the result");
+      expect(legacy).toContain("<repository_memory>");
+      expect(legacy).toContain("<delegation_and_workflow>");
       expect(results).toContainEqual(
         expect.objectContaining({ action: "updated", path: legacyPath }),
       );

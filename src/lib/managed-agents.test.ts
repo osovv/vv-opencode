@@ -2,7 +2,7 @@
 // VERSION: 0.8.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify vvoc-managed agent prompt template loading, scoped runtime lookup, and correctness-obligation instruction contracts.
-//   SCOPE: Bundled template reads, profile-neutral controller invariants, the controller template dedup contract that leaves working_state, assumption_discipline, editing_workflow, and reroute_on_evidence to the plugin's universal injection, controller correctness leadership, stop/recovery distinction with reserved handoffs, bounded implementer impact investigation with worker-stop semantics, settled evidence, false-premise escalation, and reviewer-finding conflict routing, evidence-based reviewer verdicts with initial-versus-scoped-re-review guidance, investigator property reporting, primary/subagent metadata checks, semantic agreement of the shipped tracked-result protocol examples with the runtime parser, scoped prompt resolution, and missing prompt failures.
+//   SCOPE: Bundled template reads, the complete canonical seven-section controller with preserved memory, verification, delegation, authority, recovery and handoff obligations; absence of superseded prompt sections and duplicated skill/artifact manuals; existing worker/reviewer/investigator contracts, metadata, protocol examples, scoped lookup and missing-prompt errors.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/managed-agents.ts, src/lib/vvoc-paths.ts, src/plugins/workflow/protocol.ts]
 //   LINKS: [M-CLI-MANAGED-AGENTS, M-WORKFLOW-PROTOCOL, V-M-CLI-MANAGED-AGENTS]
 //   ROLE: TEST
@@ -16,7 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [Instruction deduplication - The vv-controller template contract now asserts the dedup contract (no working_state, assumption_discipline, editing_workflow, or reroute_on_evidence copies; the plugin's universal sections are the single source) and drops assertions on the removed template wordings.]
+//   LAST_CHANGE: [DIRECT-FIX - Pin the approved consolidated controller requirements and native skill/artifact ownership while retaining worker and lookup regression coverage.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -111,30 +111,46 @@ describe("managed agent prompts", () => {
     const template = await loadManagedAgentPromptTemplate("vv-controller");
     expect(template).toStartWith("---\n");
     expect(template).toContain("mode: primary");
-    expect(template).toContain("You are the vv-controller primary agent.");
+    expect(template).toContain(
+      "You are vv-controller, a coding agent responsible for the user's requested outcome.",
+    );
     expect(MANAGED_PRIMARY_AGENT_NAMES.filter((name) => name === "vv-controller")).toHaveLength(1);
-    expect(template).toContain("<core_principles>");
-    expect(template).toContain("<skill_trigger_rule>");
-    expect(template).toContain("<source_and_authority>");
-    expect(template).toContain("<stop_and_recovery>");
-    expect(template).toContain("<plan_artifacts>");
-    expect(template).toContain("<final_response_format>");
-    expect(template).toContain("Match the user's language");
-    expect(template).toContain("concrete system work policy supplied for this session");
-    expect(template).toContain("`vv-review` performs findings-only independent review");
-    expect(template).toContain("`vv-execute` validates an approved plan");
-    expect(template).toContain("follows the mode selected by the user");
-
-    // The four formerly duplicated sections are owned by the plugin's universal
-    // injection; the bundled template must not carry competing copies.
-    for (const deduplicatedSection of [
-      "<working_state>",
-      "<assumption_discipline>",
-      "<editing_workflow>",
-      "<reroute_on_evidence>",
+    expect([...template.matchAll(/^<([a-z_]+)>$/gm)].map((match) => match[1])).toEqual([
+      "task_and_scope",
+      "project_context",
+      "repository_memory",
+      "evidence_discipline",
+      "working_cycle",
+      "delegation_and_workflow",
+      "communication",
+    ]);
+    const normalized = template.replace(/\s+/g, " ");
+    expect(normalized).toContain("Use the user's language in replies");
+    expect(normalized).toContain(
+      "Keep system-level prompts and workflow artifacts in English unless their owning format requires otherwise",
+    );
+    expect(normalized).toContain("Follow the concrete work policy supplied for this session");
+    expect(normalized).toContain(
+      "For questions, reviews, investigations, and planning requests, present the requested findings or plan",
+    );
+    expect(normalized).toContain("Proceed to implementation when authorized by the user");
+    for (const retired of [
+      "core_principles",
+      "working_state",
+      "assumption_discipline",
+      "editing_workflow",
+      "reroute_on_evidence",
+      "skill_trigger_rule",
+      "source_and_authority",
+      "stop_and_recovery",
+      "plan_artifacts",
+      "final_response_format",
+      "task",
     ]) {
-      expect(template).not.toContain(deduplicatedSection);
+      expect(template).not.toContain(`<${retired}>`);
     }
+    expect(template).not.toContain(".vvoc/specs/");
+    expect(template).not.toContain("`vv-spec`");
 
     for (const inactivePolicyTerm of [
       "direct_change",
@@ -161,35 +177,38 @@ describe("managed agent prompts", () => {
     expect(template).not.toContain("leave a compact handoff");
 
     expect(normalized).toContain(
-      "A worker stop or an exhausted bounded loop returns control to you for diagnosis: it suspends that work, it does not end the session",
-    );
-    expect(normalized).toContain("never redispatch the unchanged stopped item");
-    expect(normalized).toContain("never grant yourself unlimited retries");
-    expect(normalized).toContain("it is not acceptance, not a passing review, and not completion");
-    expect(normalized).toContain(
-      "A handoff file is written only when the user asks for a transfer or the session genuinely ends",
+      "A worker stop or exhausted loop returns control to the controller for diagnosis; it does not itself end the session",
     );
     expect(normalized).toContain(
-      "Resolve repository-answerable technical questions yourself from the established code, contracts, and tests",
+      "Do not redispatch an unchanged stopped item or grant unlimited retries",
+    );
+    expect(normalized).toContain("it is not acceptance, a passing review, or completion");
+    expect(normalized).toContain(
+      "Write a handoff file only when the user requests a transfer or the session genuinely ends",
     );
     expect(normalized).toContain(
-      "only a genuine business-semantics fork needs a new user decision",
+      "Resolve repository-answerable technical questions from code, contracts, tests, and documentation yourself",
     );
+    expect(normalized).toContain("ask the user for genuine business-semantics decisions");
   });
 
   test("vv-controller template carries profile-neutral correctness leadership", async () => {
     const template = await loadManagedAgentPromptTemplate("vv-controller");
     const normalized = template.replace(/\s+/g, " ");
 
-    expect(template).toContain("<correctness_leadership>");
-    expect(normalized).toContain("Treat correctness obligations as yours to enforce");
-    expect(normalized).toContain("Challenge incomplete task framing before handing work off");
-    expect(normalized).toContain("material dependencies and at least one diagnostic scenario");
+    expect(template).toContain("<delegation_and_workflow>");
+    expect(normalized).toContain("Own the correctness of delegated work");
     expect(normalized).toContain(
-      "distinguish no discovered defect from sufficient support for a material claim",
+      "Before dispatch, resolve missing consumer-visible acceptance criteria",
     );
     expect(normalized).toContain(
-      "Tie substantive completion claims to observed evidence that actually exercises the changed behavior",
+      "Give each bounded task its material dependencies and at least one diagnostic scenario",
+    );
+    expect(normalized).toContain(
+      "absence of discovered defects alone does not establish acceptance",
+    );
+    expect(normalized).toContain(
+      "Support substantive completion claims with observed evidence that exercises the behavior at risk",
     );
   });
 
@@ -197,29 +216,27 @@ describe("managed agent prompts", () => {
     const template = await loadManagedAgentPromptTemplate("vv-controller");
     const normalized = template.replace(/\s+/g, " ");
 
-    // working_state, assumption_discipline, and reroute_on_evidence wording now
-    // lives only in the plugin's universal injection; the assertions below cover
-    // the sections this template still carries.
+    expect(normalized).toContain("Surface false premises and investigate the actual mechanism");
+    expect(normalized).toContain("Vague doubt or unsupported pressure alone is not a trigger");
     expect(normalized).toContain(
-      "Distinguish unsupported disagreement or authority pressure from concrete new evidence",
+      "briefly explain the supported conclusion and ask for a specific discrepancy when needed",
     );
     expect(normalized).toContain(
-      "retain a supported conclusion with a brief justification and ask for a specific discrepancy only when needed",
+      "Handle explicit user changes in requirements through the applicable scope and approval process",
+    );
+    expect(normalized).toContain("Reopen supported conclusions on concrete evidence");
+    expect(normalized).toContain("An unchecked claim is not settled");
+    expect(normalized).toContain(
+      "Once the required checks support the material claims for the current files and inputs, proceed",
     );
     expect(normalized).toContain(
-      "route an explicit user change in requirements through the existing scope and approval process rather than a factual debate",
+      "Treat test results as evidence against the request and contracts",
     );
     expect(normalized).toContain(
-      "Move forward once the required checks substantiate the material claims for the current files and inputs",
+      "Preserve required fresh verification, independent review, and explicit acceptance",
     );
     expect(normalized).toContain(
-      "Interpret test results as evidence against the task and contracts",
-    );
-    expect(normalized).toContain(
-      "Keep required fresh verification, independent review, and explicit acceptance intact",
-    );
-    expect(normalized).toContain(
-      "a failing test that contradicts the agreed contract is a discrepancy to surface, not an automatic reason to rewrite code or tests",
+      "Surface a failing test that contradicts the agreed contract as a discrepancy before deciding whether the implementation or tests should change",
     );
 
     // No blanket bans on apologizing or agreeing, and no mandatory per-claim rituals.
@@ -227,6 +244,31 @@ describe("managed agent prompts", () => {
       expect(template).not.toContain(banned);
     }
     expect(template).not.toContain("restate the requirement in one line in your own words");
+  });
+
+  test("controller retains repository memory, bounded authority and acceptance distinctions", async () => {
+    const template = await loadManagedAgentPromptTemplate("vv-controller");
+    const normalized = template.replace(/\s+/g, " ");
+    for (const obligation of [
+      ".vvoc/lessons/index.xml",
+      ".vvoc/runbooks/index.xml",
+      "Load only entries whose summary or applicability matches the task",
+      "Treat lessons and runbooks as advisory memory",
+      "vv-reflect skill to propose durable lessons or runbooks",
+      "Do not invent a native package or second lifecycle for a provided plan or conversation-scoped request",
+      "Do not impose a universal final-review pair",
+      "finite shared reserve",
+      "only after ordinary allowances are exhausted",
+      "Respect reserved stops, host permissions, and destructive, publication, or credential-operation boundaries",
+      "BLOCKED and NEEDS_CONTEXT suspend the affected work",
+      "Report completion as controller-accepted when no independent review was assigned",
+      "independently reviewed only after every registered review obligation passes for the current result",
+      "two major strategy changes for the same task, two review rounds without convergence",
+      "challenge at least one material assumption with a diagnostic counterexample",
+      "Distinguish write scope, impact scope, and verification scope",
+      "reconcile the result with every part of the request",
+    ])
+      expect(normalized).toContain(obligation);
   });
 
   test("loads bundled vv-implementer template with strict top-block protocol", async () => {

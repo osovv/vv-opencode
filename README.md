@@ -159,7 +159,7 @@ grep '<task_id>' .vvoc/specs/*/plan.xml     # dependency graph
 grep '<COMPONENT-' .vvoc/specs/*/*.xml      # component map across spec and plan
 ```
 
-`vv-controller` explicitly routes `vv-spec`, `vv-plan`, and `vv-review`; `vv-execute`, `vv-reflect`, and `vv-handoff` are available as managed skills for plan execution, environment reflection and durable repository memory, and end-of-session handoff notes.
+OpenCode routes managed skills through their descriptions and explicit user invocation: `vv-spec`, `vv-plan`, and `vv-review` cover specification, planning, and review; `vv-execute`, `vv-reflect`, and `vv-handoff` cover plan execution, environment reflection and durable repository memory, and end-of-session handoff notes. Native spec-package paths and lifecycle instructions live in the SDD skills.
 
 ---
 
@@ -175,7 +175,7 @@ The server plugins run inside the OpenCode server process; **ContextTuiPlugin** 
 | **ModelRolesPlugin** | Semantic model roles (`vv-role:smart`, `vv-role:fast`, …) instead of hardcoded model IDs in agents, subagents, and commands — resolved from the family settings recorded in the root session's metadata (with the live configuration as the fallback) each time a session or its children are created. |
 | **GuardianPlugin** | Keeps long or AFK runs moving by auto-approving routine low-risk permission requests; anything risky stays in OpenCode's normal manual approval flow. The assessment uses the captured `fast` auxiliary model by default, or an opt-in provider-neutral System One decision provider. |
 | **HashlineEditPlugin** | Routes each model to exactly one native edit tool (host `edit` for GLM/Qwen/Kimi, host `apply_patch` for GPT, `str_replace_editor` for DeepSeek, `hashline_edit` for unmatched models) and hides the other edit tools per session. |
-| **SystemContextInjectionPlugin** | Injects universal guidance — including correctness obligations and evidence discipline for behavior changes — plus the work policy selected by the orchestration profile into vv-controller at startup; subagents stay unpolluted. Skill discovery is registered by `vvoc install`/`sync` through the native `skills` config, not by a plugin. |
+| **SystemContextInjectionPlugin** | Projects shared primary guidance from the canonical controller template and adds missing controller sections without duplicating the host-supplied template. The active controller policy is added at the request tail; existing subagent exclusions and the explore-specific exception apply. Skill discovery is registered by `vvoc install`/`sync` through the native `skills` config. |
 | **SecretsRedactionPlugin** | Redacts tokens, keys, emails, and other sensitive values before messages reach the model, restoring them only where local execution needs the originals. |
 | **WebToolsPlugin** | Two provider-neutral tools — `web_search` and `web_fetch` — over Exa, Brave, Z.AI, DeepSeek, native retrieval, or Spider, with permission checks and normalized output. |
 | **ToolHistoryCompactionPlugin** | Shrinks the context replayed to the model by compacting old tool outputs non-destructively, without touching on-disk history. |
@@ -202,6 +202,8 @@ All prompt files are scaffolded by `vvoc install` / `vvoc sync`:
 
 Managed prompts and the universal guidance injected into primary sessions carry explicit correctness obligations. For behavior changes, agents derive the material properties that must be preserved from the request and established contracts, separate write scope from impact and verification scope, investigate directly affected consumers, challenge a material assumption with a diagnostic counterexample, and choose verification at the level the risk arises. Controllers tie completion claims to observed evidence rather than status markers; reviewers distinguish no discovered defect from sufficient support for a material claim and can fail a change for a material verification gap. Agents also keep evidence-supported conclusions settled until a concrete trigger — contradictory evidence, a specific counterexample, a changed requirement, or changed inputs — reopens them; they surface false premises instead of silently satisfying them, distinguish unsupported pressure from concrete evidence, and interpret test results as evidence against the request and contracts rather than as the specification. These obligations are prompt-level guidance only: `vvoc install` / `vvoc sync` deliver the current wording, changes take effect after an OpenCode restart like all vvoc config changes, and the bundled contract tests check instruction delivery and wording — they do not evaluate or guarantee how a real model behaves.
 
+The complete controller prompt has seven sections: `task_and_scope`, `project_context`, `repository_memory`, `evidence_discipline`, `working_cycle`, `delegation_and_workflow`, and `communication`. Its single wording source is `templates/agents/vv-controller.md`; the plugin reads that bundled template locally at startup. Other eligible primary agents receive the shared project, memory, evidence, and working-cycle sections plus the shared authority and delivery fragments, without the controller's role, task policy, worker-dispatch/recovery instructions, or full communication policy. Repository memory remains instruction-driven reading of `.vvoc/lessons/index.xml` and `.vvoc/runbooks/index.xml`. The workflow plugin still owns profile-specific machine protocols, and the active orchestration policy remains outside the stable system prefix. Run `vvoc sync` and restart OpenCode to update an existing managed controller prompt together with the plugin.
+
 ### Managed skills
 
 Two families: `vv-*` skills guide the work protocol, while `vvoc-*` skills operate and observe the vvoc/OpenCode tooling itself.
@@ -216,7 +218,7 @@ Two families: `vv-*` skills guide the work protocol, while `vvoc-*` skills opera
 | `vv-handoff` | You are ending a session and want the visible context preserved | A redacted XML note at `.vvoc/handoff/YYYY-MM-DD-<session-slug>/handoff.xml`, written from already-visible context only |
 | `vvoc-usage-analytics` | You ask about token usage, cache hit rate, costs, or caching regressions | Read-only analysis across `vvoc analytics`, the analytics JSONL, and historical `opencode.db` data |
 
-Skills are loaded by OpenCode at session start through the native `skills` string array in `opencode.json(c)` — `vvoc install`/`sync` write the path reference and maintain the OpenCode skills-directory symlink — and the `vv-controller` agent's skill-trigger rules invoke them automatically when a request matches their conditions.
+Skills are discovered by OpenCode through the native `skills` string array in `opencode.json(c)` — `vvoc install`/`sync` write the path reference and maintain the OpenCode skills-directory symlink. OpenCode supplies the available descriptions and loading instructions; the full skill is loaded when selected or explicitly invoked. The controller prompt does not repeat that catalog or its loading protocol.
 
 ---
 
