@@ -32,7 +32,7 @@ import {
   type NativeSnapshotContext,
   type NativeSnapshotRuntime,
 } from "../../runtime/context.js";
-import type { FamilyCapture } from "../../runtime/types.js";
+import type { FamilySettingsView } from "../../runtime/session-settings.js";
 import { type VvocConfigSnapshot } from "../../lib/config-layers.js";
 import { loadManagedAgentPromptText } from "../../lib/managed-agents.js";
 import {
@@ -788,33 +788,21 @@ export function createGuardianPlugin(options: GuardianPluginOptions = {}): Plugi
 
       const deps: GuardianReviewDependencies = {
         async policyFor(sessionID) {
-          let capture: FamilyCapture | undefined;
+          let view: FamilySettingsView | undefined;
           try {
-            capture = await runtime.snapshots.configFor(sessionID);
+            view = await runtime.settings.configFor(sessionID);
           } catch {
-            capture = undefined;
+            view = undefined;
           }
-          if (capture === undefined) {
-            try {
-              await runtime.snapshots.accept({ sessionID });
-            } catch {
-              // fall through to the second read
-            }
-            try {
-              capture = await runtime.snapshots.configFor(sessionID);
-            } catch {
-              capture = undefined;
-            }
-          }
-          if (capture === undefined) return undefined;
-          if (!isVvocPluginEnabled(capture.vvoc, "guardian")) return undefined;
+          if (view === undefined) return undefined;
+          if (!isVvocPluginEnabled(view.vvoc, "guardian")) return undefined;
           const config = resolveGuardianRuntimeConfig({
-            config: capture.vvoc,
+            config: view.vvoc,
             source: { kind: "project" },
             warnings: [],
             loadedAt: new Date().toISOString(),
           });
-          return { familyId: capture.familyId, config, prompt: prompt ?? "" };
+          return { familyId: view.familyId, config, prompt: prompt ?? "" };
         },
         history: async (sessionID) => loadHistory(await getClient(), sessionID),
         infer: (input) => inferWithTimeout(runtime, input),

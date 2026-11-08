@@ -599,9 +599,8 @@ async function createDelegatedPluginHarness(
   const loaded = await loadVvocConfig({ cwd: workspaceRoot });
   const defaultCapture = { vvoc: loaded.config };
   const fakeRuntime = {
-    snapshots: {
+    settings: {
       configFor: async () => defaultCapture,
-      accept: async () => ({ status: "unbound" }),
     },
     client: async () => {
       if (harness.clientAcquireFails) {

@@ -78,10 +78,9 @@ async function makeHarness(
   const hooks = new Map<string, (event: NativeContextEvent) => Promise<void> | void>();
   let released = false;
   const fakeRuntime = {
-    snapshots: {
+    settings: {
       configFor: async () =>
         policy === "unknown" ? undefined : { familyId: "fam-1", vvoc: config },
-      accept: async () => ({ status: "unbound" }),
     },
     release: async () => {
       released = true;

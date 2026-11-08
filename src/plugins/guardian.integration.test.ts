@@ -385,9 +385,8 @@ describe("Guardian native permission evaluate", () => {
     let released = false;
     let hookName: string | undefined;
     const fakeRuntime = {
-      snapshots: {
+      settings: {
         configFor: async () => undefined,
-        accept: async () => ({ status: "unbound" }),
       },
       client: async () => ({ session: { context: async () => [] } }),
       auxiliary: { generate: async () => ({ text: "{}" }) },
@@ -458,9 +457,8 @@ describe("Guardian native permission evaluate", () => {
     tempDirs.push(directory);
     let evaluate: ((event: GuardianPermissionEvaluation) => Promise<void>) | undefined;
     const fakeRuntime = {
-      snapshots: {
+      settings: {
         configFor: async () => ({ familyId: "fam-provider", vvoc }),
-        accept: async () => ({ status: "bound" }),
       },
       client: async () => ({ session: { context: async () => [] } }),
       auxiliary: {

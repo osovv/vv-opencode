@@ -37,7 +37,7 @@ import {
   type NativeSnapshotContext,
   type NativeSnapshotRuntime,
 } from "../../runtime/context.js";
-import type { FamilyCapture } from "../../runtime/types.js";
+import type { FamilySettingsView } from "../../runtime/session-settings.js";
 import { resolveWebRuntimeConfig, warnIfSecretBearingProjectConfigTracked } from "./config.js";
 import { createWebFetchTool } from "./fetch-service.js";
 import {
@@ -160,7 +160,7 @@ export function createWebToolsLog(options?: {
 }
 
 function diagnosticsFor(
-  capture: FamilyCapture,
+  view: FamilySettingsView,
   resolved: ReturnType<typeof resolveWebRuntimeConfig>,
   log: (event: WebToolsDiagnostic) => void,
 ): void {
@@ -168,7 +168,7 @@ function diagnosticsFor(
     level: "info",
     message: "web tools configuration loaded",
     extra: {
-      familyId: capture.familyId,
+      familyId: view.familyId,
       searchProvider: resolved.search.provider,
       ...(resolved.search.provider === "zai" ? { searchRegion: resolved.search.region } : {}),
       searchCredentialSource: resolved.search.credential?.source ?? "missing",
@@ -186,42 +186,32 @@ function diagnosticsFor(
 }
 
 // START_BLOCK_POLICY
-/** Resolve the bound-family web-tools policy; never falls back to current/default config. */
+/** Resolve the family-settings web-tools policy for one session. */
 async function resolvePolicy(
   runtime: NativeSnapshotRuntime,
   sessionID: string,
   log: (event: WebToolsDiagnostic) => void,
 ): Promise<WebToolsPolicyDecision> {
-  const read = async (): Promise<FamilyCapture | undefined> => {
-    try {
-      return await runtime.snapshots.configFor(sessionID);
-    } catch {
-      return undefined;
-    }
-  };
-  let capture = await read();
-  if (capture === undefined) {
-    try {
-      await runtime.snapshots.accept({ sessionID });
-    } catch {
-      // fall through to the second read; absence is unknown policy below
-    }
-    capture = await read();
+  let view: FamilySettingsView | undefined;
+  try {
+    view = await runtime.settings.configFor(sessionID);
+  } catch {
+    return undefined;
   }
-  if (capture === undefined) return undefined;
-  if (!isVvocPluginEnabled(capture.vvoc, "web-tools")) return "disabled";
+  if (view === undefined) return undefined;
+  if (!isVvocPluginEnabled(view.vvoc, "web-tools")) return "disabled";
   let resolved: ReturnType<typeof resolveWebRuntimeConfig>;
   try {
     resolved = resolveWebRuntimeConfig({
-      config: capture.vvoc,
+      config: view.vvoc,
       source: { kind: "project" },
       warnings: [],
     });
   } catch {
-    // A corrupt captured config is unknown policy, never silently disabled.
+    // A corrupt config is unknown policy, never silently disabled.
     return undefined;
   }
-  diagnosticsFor(capture, resolved, log);
+  diagnosticsFor(view, resolved, log);
   return { resolved, permission: runtime.permissions };
 }
 // END_BLOCK_POLICY

@@ -49,7 +49,7 @@ import {
   type SpecLintVerdict,
 } from "../../lib/spec-lint.js";
 import { createSpecLintCache, type SpecLintCache } from "../../lib/spec-lint-cache.js";
-import type { FamilyCapture } from "../../runtime/types.js";
+import type { FamilySettingsView } from "../../runtime/session-settings.js";
 
 // START_BLOCK_CONSTANTS
 export type SpecGuardMode = "warn" | "enforce";
@@ -354,31 +354,20 @@ export function createSpecGuardHandlers(deps: SpecGuardHookDependencies): SpecGu
 // END_BLOCK_HANDLERS
 
 // START_BLOCK_PLUGIN_ENTRY
-/** Resolve the bound-family mode; unbound work fails closed to `"off"`. */
+/** Resolve the family-settings mode; unresolvable settings fail closed to `"unknown"`. */
 async function resolveFamilyMode(
   runtime: NativeSnapshotRuntime,
   sessionID: string,
 ): Promise<SpecGuardPolicyMode> {
-  const read = async (): Promise<FamilyCapture | undefined> => {
-    try {
-      return await runtime.snapshots.configFor(sessionID);
-    } catch {
-      return undefined;
-    }
-  };
-  let capture = await read();
-  if (capture === undefined) {
-    // A first accepted workload may be persisted but not yet published.
-    try {
-      await runtime.snapshots.accept({ sessionID });
-    } catch {
-      // fall through to the second read
-    }
-    capture = await read();
+  let view: FamilySettingsView | undefined;
+  try {
+    view = await runtime.settings.configFor(sessionID);
+  } catch {
+    return "unknown";
   }
-  if (capture === undefined) return "unknown";
-  if (!isVvocPluginEnabled(capture.vvoc, "spec-guard")) return "off";
-  const entry = capture.vvoc.plugins?.["spec-guard"];
+  if (view === undefined) return "unknown";
+  if (!isVvocPluginEnabled(view.vvoc, "spec-guard")) return "off";
+  const entry = view.vvoc.plugins?.["spec-guard"];
   if (entry && typeof entry === "object" && entry.mode === "enforce") return "enforce";
   return "warn";
 }

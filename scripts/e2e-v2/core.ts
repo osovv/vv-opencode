@@ -58,9 +58,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [Direct fix - Default evidence paths now resolve under the harness scratch base (vvoc-e2e-evidence) instead of the workspace GRACE change tree, so a run never leaves evidence files that turn `grace lint` red.]
-//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-009-FULL - Installs the packed tarball with its declared dependency graph, verifies per-row outcomes, and drives the INSTALLED root aggregate on the real host control plane: system-context injection, analytics usage, peak-hours PRIMARY gating, web-tools permission-before-network, guardian deny/allow file-write gating, hashline-edit routed-tool + stale-anchor rejection, spec-guard scoped enforcement, and tool-history-compaction of the real dispatched request; retries readiness and deterministically replays the auxiliary family after restart.]
-//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-009-FULL - Installed-surface checks (root aggregate, standalone subpaths, nine-tool census, presets/variants, managed agents/skills, installed CLI lifecycle).]
+//   LAST_CHANGE: [C-SESSION-OWNED-SETTINGS T-006 - The restart-replay case now proves persisted family-settings metadata survives a real host restart and keeps driving the same resolution, replacing the snapshot-capture replay.]
+//   PREVIOUS: [Direct fix - Default evidence paths now resolve under the harness scratch base (vvoc-e2e-evidence) instead of the workspace GRACE change tree, so a run never leaves evidence files that turn `grace lint` red.]
 // END_CHANGE_SUMMARY
 
 import { createServer } from "node:net";
@@ -765,9 +764,9 @@ export async function runCore(options: CoreRunOptions): Promise<CoreRunSummary> 
 
     // START_BLOCK_REPLAY_RESTART
     // Durable replay after a real service restart: the runner owns the host
-    // lifecycle, so this case rebinds the same persisted root and auxiliary
-    // sessions after a fresh host instance and checks both family captures
-    // and payloads survived.
+    // lifecycle, so this case re-reads the same persisted root and auxiliary
+    // sessions after a fresh host instance and checks that the family settings
+    // metadata (and the resolution it drives) survived unchanged.
     {
       const check = new Checks();
       const startedAt = Date.now();
@@ -794,25 +793,23 @@ export async function runCore(options: CoreRunOptions): Promise<CoreRunSummary> 
           method: "POST",
           body: JSON.stringify({ text: "pre-restart replay" }),
         });
-        const rootInfo = await driver.waitIdleChange(rootID, beforeRoot);
-        const rootVariant = rootInfo?.model?.variant as string | undefined;
-        check.truthy(
-          typeof rootVariant === "string" && rootVariant.includes(".seam-smart."),
-          `pre-restart root family bound a snapshot variant (${rootVariant})`,
-        );
-        const rootConfigBefore = await driver.control(`/config?sessionID=${rootID}`);
+        await driver.waitIdleChange(rootID, beforeRoot);
+        const rootSettingsBefore = await driver.control(`/settings?sessionID=${rootID}`);
+        const rootVariant = (await driver.sessionInfo(rootID))?.model?.variant as
+          | string
+          | undefined;
         const aux = (await driver.listSessions()).find((entry) => entry.parentID === rootID);
         check.truthy(aux !== undefined, "pre-restart auxiliary family exists");
         const auxID = aux?.id as string | undefined;
+        let auxSettingsBefore: any;
         let auxVariant: string | undefined;
-        let auxConfigBefore: any;
         if (auxID !== undefined) {
+          auxSettingsBefore = await driver.control(`/settings?sessionID=${auxID}`);
           auxVariant = (await driver.sessionInfo(auxID))?.model?.variant;
-          auxConfigBefore = await driver.control(`/config?sessionID=${auxID}`);
           check.equal(
-            auxConfigBefore.body?.capture?.snapshotId,
-            rootConfigBefore.body?.capture?.snapshotId,
-            "pre-restart auxiliary shares the root family snapshot",
+            auxSettingsBefore.body?.settingsId,
+            rootSettingsBefore.body?.settingsId,
+            "pre-restart auxiliary resolves the root family settings record",
           );
         }
 
@@ -893,78 +890,54 @@ export async function runCore(options: CoreRunOptions): Promise<CoreRunSummary> 
           control: controlAfterRestart,
         });
 
-        // Root replay: same persisted capture and same qualified variant/payload.
-        const beforeRoot2 = (await driverAfterRestart.sessionInfo(rootID))?.time?.idle;
-        const restartProviderBase = await driverAfterRestart.providerCount();
-        await api(`/api/session/${rootID}/prompt`, {
-          method: "POST",
-          body: JSON.stringify({ text: "post-restart replay" }),
-        });
-        const rootAfter = await driverAfterRestart.waitIdleChange(rootID, beforeRoot2);
+        // Root replay: same persisted settings record and same native model.
+        const rootSettingsAfter = await controlAfterRestart(`/settings?sessionID=${rootID}`);
         check.equal(
-          rootAfter?.model?.variant,
+          rootSettingsAfter.body?.settingsId,
+          rootSettingsBefore.body?.settingsId,
+          "persisted root family settings replayed after a real service restart",
+        );
+        check.equal(
+          JSON.stringify(rootSettingsAfter.body?.settings ?? null),
+          JSON.stringify(rootSettingsBefore.body?.settings ?? null),
+          "the root settings record is byte-identical after restart",
+        );
+        check.equal(
+          (await driverAfterRestart.sessionInfo(rootID))?.model?.variant,
           rootVariant,
-          "persisted root family capture replayed after a real service restart",
+          "the root session kept its native model across the restart",
         );
-        const rootVariantName =
-          typeof rootVariant === "string" ? rootVariant.replace(/.*\.seam-smart\./, "") : undefined;
-        const restartFresh = await driverAfterRestart.providerRequestsSince(restartProviderBase);
-        check.truthy(
-          restartFresh.some(
-            (record) =>
-              JSON.stringify(record.body ?? "").includes("post-restart replay") &&
-              (record.body as { smoke_variant?: unknown } | undefined)?.smoke_variant ===
-                rootVariantName,
-          ),
-          "the replayed root family dispatched its persisted variant payload after restart",
-        );
-        // Auxiliary replay: its configFor still resolves the same snapshot.
+        // Auxiliary replay: its resolution still projects the root record.
         if (auxID !== undefined) {
-          const auxConfigAfter = await controlAfterRestart(`/config?sessionID=${auxID}`);
+          const auxSettingsAfter = await controlAfterRestart(`/settings?sessionID=${auxID}`);
           check.equal(
-            auxConfigAfter.body?.capture?.snapshotId,
-            rootConfigBefore.body?.capture?.snapshotId,
-            "persisted auxiliary family capture replayed after restart",
+            auxSettingsAfter.body?.settingsId,
+            rootSettingsBefore.body?.settingsId,
+            "persisted auxiliary resolution replays the root family settings after restart",
           );
           check.equal(
             (await driverAfterRestart.sessionInfo(auxID))?.model?.variant,
             auxVariant,
-            "auxiliary child kept its qualified variant after restart",
-          );
-          const auxVariantName =
-            typeof auxVariant === "string" ? auxVariant.replace(/.*\.seam-smart\./, "") : undefined;
-          // Drive the auxiliary family directly after restart so its persisted
-          // capture/variant must dispatch deterministically (a title request is
-          // not guaranteed for an already-titled session).
-          const auxProviderBase = await driverAfterRestart.providerCount();
-          await api(`/api/session/${auxID}/prompt`, {
-            method: "POST",
-            body: JSON.stringify({ text: "aux post-restart replay marker" }),
-          }).catch(() => undefined);
-          let auxDispatched = false;
-          const auxDeadline = Date.now() + 20_000;
-          while (!auxDispatched && Date.now() < auxDeadline) {
-            const fresh = await driverAfterRestart.providerRequestsSince(auxProviderBase);
-            auxDispatched = fresh.some(
-              (record) =>
-                JSON.stringify(record.body ?? "").includes("aux post-restart replay marker") &&
-                (record.body as { smoke_variant?: unknown } | undefined)?.smoke_variant ===
-                  auxVariantName,
-            );
-            if (!auxDispatched) await delay(500);
-          }
-          check.truthy(
-            auxDispatched,
-            "the auxiliary family dispatched its persisted variant payload after restart",
+            "auxiliary child kept its role-resolved model after restart",
           );
         }
-        detail = "persisted root and auxiliary family captures survived a real host restart";
+        // A fresh family born after the restart resolves the same effective config.
+        const fresh = await driverAfterRestart.createSession();
+        await delay(1200);
+        const freshSettings = await controlAfterRestart(`/settings?sessionID=${fresh}`);
+        check.equal(
+          freshSettings.body?.settings?.roles?.smart,
+          rootSettingsBefore.body?.settings?.roles?.smart,
+          "a post-restart family births the same effective role settings",
+        );
+        detail = "persisted root and auxiliary family settings survived a real host restart";
         observed = {
           rootID,
           rootVariant,
-          rootAfterVariant: rootAfter?.model?.variant,
           auxID,
           auxVariant,
+          settingsIdBefore: rootSettingsBefore.body?.settingsId,
+          settingsIdAfter: rootSettingsAfter.body?.settingsId,
           restarted: true,
         };
       } catch (error) {
@@ -974,9 +947,9 @@ export async function runCore(options: CoreRunOptions): Promise<CoreRunSummary> 
       if (status === "pass" && check.failed.length > 0) status = "fail";
       results.push({
         id: "replay-restart",
-        title: "Durable root and auxiliary family replay after a real service restart",
+        title: "Durable root and auxiliary settings replay after a real service restart",
         phase: "T-003",
-        parity: ["runtime.snapshot-persist", "runtime.lineage"],
+        parity: ["runtime.settings-persist", "runtime.lineage"],
         status,
         detail,
         assertions: check.passed,

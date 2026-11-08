@@ -1,0 +1,77 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-SESSION-OWNED-SETTINGS>
+    <Summary>Replace the family snapshot-plus-guard subsystem with session-owned settings stored as native session metadata: the first request of a family root lazily records one resolved settings record under the metadata key `vvoc:settings`, every member of that family resolves behavior (roles, orchestration profile, plugin toggles) from the root's record until an explicit change command rewrites it, new families and explicitly updated families resolve the current effective vvoc configuration, and the entire binding-store, snapshot, guard, rebind-marker, and garbage-collection machinery is deleted with its consumers moved onto one family-settings resolver.</Summary>
+    <Problem>The snapshot subsystem freezes the effective configuration into a content-addressed snapshot at a family's first workload and then proves, on every dispatch, that reality still matches that frozen copy (family-qualified model variants, first-work admission tolerance, explicit-selection tracking, plugin-switch bookkeeping, rebind markers). Each special case is a future bug: September-November 2026 recorded about 39 runtime incidents ("Resolved ... does not match the captured family selection", "Snapshot state for family ... is invalid", "Refusing unbound ... dispatch") plus a host-upgrade incident that broke session startup. The root cause is structural: a second source of truth that must be continuously reconciled with reality.</Problem>
+    <Goals>
+      <Goal>Store one narrow resolved settings record on the family ROOT session: metadata key `vvoc:settings`, value `{version:1, preset?, roles, profile, plugins}` where roles maps role ids to model selection strings and plugins maps plugin names to booleans, all with resolved values (never preset names for the governed fields, never credential values).</Goal>
+      <Goal>Write records only through read-modify-write: read the full metadata map, merge only the `vvoc:settings` key, write the whole map back, so foreign metadata keys always survive.</Goal>
+      <Goal>Resolve per request by walking the parentID/forkSessionID lineage to the family root and reading its `vvoc:settings`; a root without a record resolves the current effective vvoc configuration. Children and auxiliary children never carry their own copy.</Goal>
+      <Goal>Give every settings-consuming plugin one resolver surface (family id, resolved settings, projected effective configuration with live credentials) so orchestration profile, plugin toggles, workflow family policy, model roles for children, Guardian, and context-inspection stay behavior-compatible without a guard.</Goal>
+      <Goal>Keep the family root's model fully native: vvoc never switches or validates it again. Roles apply to children and auxiliary children at creation (auxiliary import payload model; one-shot creation reconciliation for host-created children). The model-roles toggle remains the master switch for applying role overrides at creation.</Goal>
+      <Goal>Provide explicit change commands that rewrite only the named family's root metadata: TUI `/vv-settings` replacing `/vv-rebind`, and CLI `vvoc session set --session &lt;id&gt;` with preset/profile/role/plugin actions and a pull-current-defaults action. Remove the `--force` flags from preset/role/plugin-toggle commands together with the rebind marker mechanism.</Goal>
+      <Goal>Migrate exactly once on the first start of the new version: existing family bindings convert into root metadata records for live roots, then the bindings/snapshots/rebind directories are deleted; a failed conversion keeps the directories and retries on the next start; a completed migration is a no-op.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>The metadata write semantics are REPLACE of the whole map, so every write goes through the RMW helper and no other vvoc code path may call session update with metadata without reading first.</Constraint>
+      <Constraint>The settings record never carries credential values; credentials (web apiKeys, secrets-redaction seed) keep coming from the live effective configuration at every resolution.</Constraint>
+      <Constraint>Resolution failure modes are fail-soft: an undecodable or missing record falls back to the current effective configuration with a bounded diagnostic; lineage cycles or depth overruns fail the resolution, never the session.</Constraint>
+      <Constraint>Family plugin toggle resolution keeps the resolved boolean only; schedule/mode detail inside object-valued plugin entries always comes from the live configuration.</Constraint>
+      <Constraint>Orchestration, work items, result protocol, presets, and per-model tool routing keep their behavior; only the resolution source changes.</Constraint>
+      <Constraint>The context-inspection RPC keeps its wire DTO; the server-side policy source becomes the projected family settings view with content-derived settings identity and the same value-free error codes and fail-soft behavior.</Constraint>
+      <Constraint>Every touched source file keeps its GRACE module contract, map, and change-summary anchors accurate.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>No GUI settings panels.</NonGoal>
+      <NonGoal>No change to preset/role CLI semantics beyond removing `--force` and the rebind plumbing.</NonGoal>
+      <NonGoal>No change to workflow protocol, work items, or the tracked result protocol.</NonGoal>
+      <NonGoal>No Telegram bridge behavior change.</NonGoal>
+      <NonGoal>No build-pin dependency updates; the e2e host pin discussion is limited to the harness acceptance version.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>AC-01: A family whose root carries preset X settings keeps resolving X (orchestration policy text, child role models) after the project configuration changes to Y; a brand-new session resolves Y. Covered by the rewritten workflow integration test and the new session-settings tests.</Criterion>
+      <Criterion>AC-02: Re-acquiring the runtime against the same persisted sessions resolves the same settings; a fresh resolution after restart equals the pre-restart resolution (metadata persistence in the host database).</Criterion>
+      <Criterion>AC-03: `/vv-settings` and `vvoc session set` change only the named family's root metadata; another family and a fresh session resolve unchanged values.</Criterion>
+      <Criterion>AC-04: Guard code no longer exists: grep for SnapshotAdmissionError|SnapshotUnboundError|SnapshotStoreError across src/ is empty, as is grep for requestRebind|REBIND_COMMAND_ID|firstWorkPending.</Criterion>
+      <Criterion>AC-05: Migration converts existing fixture bindings into root metadata exactly once; a second start performs no work and the legacy directories are gone; a failed write keeps the directories.</Criterion>
+      <Criterion>AC-06: Read-modify-write preserves foreign metadata keys (a user key written before birth and before an explicit change survives both).</Criterion>
+      <Criterion>AC-07: The e2e-v2 harness binding/rebind parity rows and strings are rewritten for session settings and the harness unit tests pass; the host pin question is resolved by live evidence for 2.2.6 or an explicit residual note with exact reasoning.</Criterion>
+      <Criterion>AC-08: bun run check, bun run build, grace lint --path ., grace status --path ., and the relevant targeted tests pass with fresh output.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-NATIVE-RUNTIME />
+      <M-E2E-V2-HARNESS />
+      <M-PLUGIN-MODEL-ROLES />
+      <M-CLI-PRESET />
+      <M-CLI-ROLE />
+      <M-CLI-PLUGIN-TOGGLE />
+      <M-CLI-COMMANDS />
+      <M-PLUGIN-CONTEXT-TUI />
+      <M-PLUGIN-WORKFLOW />
+      <M-PLUGIN-GUARDIAN />
+      <M-PLUGIN-HASHLINE-EDIT />
+      <M-PLUGIN-SECRETS-REDACTION />
+      <M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+      <DF-ROLE-RESOLUTION />
+      <DF-GUARDIAN-REVIEW />
+      <DF-SYSTEM-CONTEXT />
+      <DF-CONTEXT-INSPECTION />
+      <DF-SECRETS-REDACTION />
+      <DF-ORCHESTRATION-PROFILE />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/runtime/session-settings.test.ts src/runtime/context.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun test src/plugins/workflow.integration.test.ts src/plugins/model-roles.integration.test.ts src/commands</ExpectedCommand>
+      <ExpectedCommand>bun test scripts/e2e-v2.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>grace lint --path .</ExpectedCommand>
+      <ExpectedCommand>grace status --path .</ExpectedCommand>
+      <ExpectedEvidence>Fresh deterministic tests for lazy birth, child resolution through the root, explicit-change isolation, RMW foreign-key preservation, migration one-shot with directory cleanup, and restart parity; fresh grep output proving the guard vocabulary is gone; fresh full-gate output; an explicit residual note when the 2.2.6 host pin cannot be verified live in this environment.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>The native host writes arbitrary JSON session metadata through `session.update`/PATCH /api/session/{id} and persists it (verified on live OpenCode 2.2.6 by the package owner); the seam `NativeSnapshotContext.session.update` is widened to carry metadata and stays provable against the pinned host types.</Assumption>
+      <Assumption>The approved factory task constitutes the owner's explicit authorization to move this bundle to approved and execute it; recorded here per the GRACE approval provenance rule.</Assumption>
+      <Assumption>The pinned @opencode/* dependencies at 2.2.5 expose the same metadata session-update surface as the live 2.2.6 host the owner verified; the compile-time seam proof is the in-repo evidence for this.</Assumption>
+    </Assumptions>
+  </C-SESSION-OWNED-SETTINGS>
+</GraceChangeSpec>

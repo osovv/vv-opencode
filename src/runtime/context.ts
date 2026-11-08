@@ -1,9 +1,9 @@
 // FILE: src/runtime/context.ts
-// VERSION: 1.1.0
+// VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Acquire, share by exact plugin-context identity, and release the lifecycle-managed native runtime, family-binding service, and centralized native runtime (client/permissions/bindings/config/model/auxiliary) consumed by every later native plugin.
-//   SCOPE: Context-identity reference-counted registries, per-acquisition idempotent leases, lazy authenticated-client caching, permission-service exposure, native model/agent overlay capture, default-model transform, config.updated reconfiguration, coherent first-work binding, rehydrated guard/variants, one-shot first-work admission tolerance for a dispatch resolved before the binding switch lands, session-deletion cleanup, cross-context coordination, the read-only context-inspection RPC, and idempotent teardown without stopping the host. No candidate staging, accepted-input publication, service discovery until a client is requested, location-only sharing, global configuration singleton, parallel fake runtime, or V1 compatibility facade.
-//   DEPENDS: [node:crypto, @opencode/plugin, src/lib/config-layers.ts, src/runtime/client.ts, src/runtime/coordination.ts, src/runtime/context-inspection.ts, src/runtime/model-registry.ts, src/runtime/permissions.ts, src/runtime/snapshot-config.ts, src/runtime/snapshot-store.ts, src/runtime/snapshots.ts, src/runtime/types.ts]
+//   PURPOSE: Acquire, share by exact plugin-context identity, and release the lifecycle-managed native runtime and the centralized native runtime (client/permissions/settings/config/model/auxiliary) consumed by every later native plugin, resolving session-owned family settings from the family root's metadata.
+//   SCOPE: Context-identity reference-counted registries, per-acquisition idempotent leases, lazy authenticated-client caching, permission-service exposure, native model/agent overlay capture, default-model transform, config.updated reconfiguration, lazy family-settings birth and resolution through host-verified lineage with read-modify-write metadata writes, one-shot creation reconciliation for host-created children, session-deletion cache hygiene, cross-context coordination, the read-only context-inspection RPC, and idempotent teardown without stopping the host. No candidate staging, no dispatch guard, no family snapshot store, no service discovery until a client is requested, no location-only sharing, no global configuration singleton, and no V1 compatibility facade.
+//   DEPENDS: [node:crypto, @opencode/plugin, src/lib/config-layers.ts, src/runtime/client.ts, src/runtime/coordination.ts, src/runtime/context-inspection.ts, src/runtime/model-registry.ts, src/runtime/permissions.ts, src/runtime/session-settings.ts, src/runtime/snapshot-config.ts, src/runtime/types.ts]
 //   LINKS: [M-NATIVE-RUNTIME, V-M-NATIVE-RUNTIME]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -11,21 +11,20 @@
 //
 // START_MODULE_MAP
 //   acquireRuntime - Return a per-acquisition release lease for the runtime shared by one exact plugin context.
-//   acquireSnapshotService - Return a per-acquisition release lease for the family-binding service shared by one exact plugin context and dependency instance.
 //   NativeSessionInfoLike - Structural native session info used for lineage and provenance.
-//   NativeSnapshotHookEvents - Structural native hook event map used by the shared runtime.
-//   NativeSnapshotContext - Narrow structural native Plugin.Context used to acquire the shared snapshot runtime.
+//   NativeHookEvents - Structural native hook event map used by the shared runtime.
+//   NativeSnapshotContext - Narrow structural native Plugin.Context used to acquire the shared runtime.
 //   NativeRegistration - Releasable native registration handle.
 //   NativeForkClient - Structural full client for forks and parented imports.
-//   NativeSnapshotRuntimeOptions - Optional injectable native boundaries for the shared snapshot runtime.
-//   NativeSnapshotRuntime - Documented shared native runtime: client, permissions, family bindings, effective config, model reload, role override, first-work gateway and refresh.
-//   acquireNativeSnapshotRuntime - Acquire the shared native snapshot runtime for an actual Plugin.Context.
+//   NativeSnapshotRuntimeOptions - Optional injectable native boundaries for the shared runtime.
+//   NativeSnapshotRuntime - Documented shared native runtime: client, permissions, family settings, auxiliary work, effective config, role override, refresh.
+//   acquireNativeSnapshotRuntime - Acquire the shared native runtime for an actual Plugin.Context.
 //   rebuildAgentBindings - Recompute agent bindings from a freshly read policy without trusting a cached vvoc-applied selection.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [Direct fix follow-up - The pump-missed user-choice capture in bindFor now ends the first-work tolerance too, keeping every explicit-choice path symmetric with the event pump so a stale window can never admit a later bare-base dispatch.]
-//   PREVIOUS: [Direct fix - First-work admission tolerance: the host may resolve a dispatch against the unqualified role base before the prompt hook's binding switch lands, so the guard now accepts that one bare-base resolution for a session this runtime just bound and switched, instead of killing the session's first turn with SnapshotAdmissionError.]
+//   LAST_CHANGE: [C-SESSION-OWNED-SETTINGS T-002 - Replaced the family-binding snapshot service and dispatch guard with session-owned settings: lazy root birth, lineage resolution, RMW metadata writes, one-shot creation reconciliation, and the legacy-binding migration.]
+//   PREVIOUS: [Direct fix follow-up - The pump-missed user-choice capture in bindFor now ends the first-work tolerance too, keeping every explicit-choice path symmetric with the event pump so a stale window can never admit a later bare-base dispatch.]
 // END_CHANGE_SUMMARY
 
 import { randomBytes } from "node:crypto";
@@ -39,42 +38,41 @@ import {
   ROLE_REFERENCE_PREFIX,
 } from "../lib/model-roles.js";
 import { acquireNativeClient, nativeRuntimeDeps, type NativeClientAcquisition } from "./client.js";
-import { coordinateHost } from "./coordination.js";
-import {
-  applyAgentPolicies,
-  applyVariantRegistrations,
-  buildVariantRegistrations,
-  mergeModelBodyOverlay,
-  mergeModelHeadersOverlay,
-  primarySelection,
-  qualifySelection,
-} from "./model-registry.js";
+import { coordinateHost, type HostCoordination } from "./coordination.js";
+import { applyAgentPolicies } from "./model-registry.js";
 import { createPermissionService } from "./permissions.js";
 import {
   canonicalModelVariant,
-  classifyInitialSelection,
-  decodeModelSelectedEvent,
   decodeSessionCreatedEvent,
   effectiveRuntimeConfig,
   isConfigUpdateEvent,
-  normalizeModelSelection,
   parseRoleSelections,
 } from "./snapshot-config.js";
 import { registerContextInspectionRpc } from "./context-inspection.js";
-import { FileBindingStore } from "./snapshot-store.js";
-import { createSnapshotService, type SnapshotServiceDeps } from "./snapshots.js";
+import {
+  INTERNAL_PRIMARY_AGENTS,
+  isFamilyRootView,
+  mergeSettingsIntoMetadata,
+  migrateFamilyBindings,
+  fileLegacyBindingsReader,
+  projectFamilyConfig,
+  readSettingsFromMetadata,
+  resolveSessionFamily,
+  settingsFromConfig,
+  settingsId,
+  type FamilySettings,
+  type FamilySettingsService,
+  type FamilySettingsView,
+} from "./session-settings.js";
+import { createAuxiliaryService } from "./auxiliary.js";
 import {
   RuntimeDisposedError,
-  SnapshotAdmissionError,
-  SnapshotUnboundError,
   decodeAuxiliaryMetadata,
   decodeImportedSessionID,
   runtimeIdentity,
-  type AdmissionOutcome,
   type AgentEditorLike,
   type AgentPolicyBinding,
   type AuxiliaryService,
-  type CapturedModelSettings,
   type EffectiveRuntimeConfig,
   type ModelEditorLike,
   type ModelSelection,
@@ -88,10 +86,6 @@ import {
   type RuntimeIdentity,
   type RuntimeLease,
   type RuntimeLocation,
-  type SnapshotAdmissionRequest,
-  type SnapshotLease,
-  type SnapshotService,
-  type VariantRegistration,
 } from "./types.js";
 
 // START_BLOCK_RUNTIME_REGISTRY
@@ -244,52 +238,7 @@ export function acquireRuntime<Context extends RuntimeContext, Client extends Ru
 }
 // END_BLOCK_ACQUIRE_RUNTIME
 
-// START_BLOCK_SNAPSHOT_REGISTRY
-interface ManagedSnapshotEntry {
-  readonly service: SnapshotService;
-  refs: number;
-  disposed: boolean;
-}
-
-const snapshotServices = new Map<string, ManagedSnapshotEntry>();
-
-/**
- * Return a per-acquisition release lease for the snapshot service shared by one
- * exact plugin context object and dependency instance. Distinct contexts never
- * share a service, so per-location policies cannot leak across projects.
- */
-export function acquireSnapshotService<Context extends RuntimeContext>(
-  context: Context,
-  deps: SnapshotServiceDeps,
-): SnapshotLease {
-  const key = `${objectId(contextIds, context)}:${objectId(depsIds, deps)}`;
-  let entry = snapshotServices.get(key);
-  if (entry === undefined) {
-    entry = { service: createSnapshotService(deps), refs: 0, disposed: false };
-    snapshotServices.set(key, entry);
-  }
-  const owned = entry;
-  owned.refs += 1;
-
-  let released = false;
-  return {
-    snapshots: owned.service,
-    release: async () => {
-      if (released) return;
-      released = true;
-      if (owned.disposed) return;
-      owned.refs -= 1;
-      if (owned.refs <= 0) {
-        owned.disposed = true;
-        snapshotServices.delete(key);
-        owned.service.dispose();
-      }
-    },
-  };
-}
-// END_BLOCK_SNAPSHOT_REGISTRY
-
-// START_BLOCK_NATIVE_SNAPSHOT_RUNTIME
+// START_BLOCK_NATIVE_RUNTIME
 /** Structural native session info used for lineage and provenance. */
 export interface NativeSessionInfoLike {
   readonly id: string;
@@ -310,21 +259,13 @@ export interface NativeSessionInfoLike {
 }
 
 /** Structural native hook events used by the shared runtime. */
-export interface NativeSnapshotHookEvents {
-  prompt: { readonly sessionID: string; readonly messageID?: string | undefined };
+export interface NativeHookEvents {
   context: { readonly sessionID: string; readonly agent?: string | undefined };
-  generate: { readonly sessionID: string };
   title: { readonly sessionID: string; result?: string | undefined; messages?: unknown };
-  "model.request": {
-    readonly sessionID: string;
-    readonly model: unknown;
-    readonly agent?: string | undefined;
-    readonly kind: string;
-  };
 }
 
 /**
- * Narrow structural native `Plugin.Context` used to acquire the shared snapshot
+ * Narrow structural native `Plugin.Context` used to acquire the shared
  * runtime. A real `Plugin.Context` satisfies it, so the runtime is keyed by the
  * actual context object and later plugins share one instance.
  */
@@ -347,14 +288,22 @@ export interface NativeSnapshotContext extends RuntimeContext {
         readonly variant?: string;
       };
     }): Promise<void>;
-    update(input: { readonly sessionID: string; readonly title: string }): Promise<void>;
+    /**
+     * Host-persisted session update. Metadata is REPLACE of the whole map, so
+     * callers must merge through the settings read-modify-write helper.
+     */
+    update(input: {
+      readonly sessionID: string;
+      readonly title?: string | undefined;
+      readonly metadata?: Record<string, unknown> | undefined;
+    }): Promise<void>;
     generate(input: {
       readonly sessionID: string;
       readonly prompt: string;
     }): Promise<{ readonly text: string }>;
-    hook<Name extends keyof NativeSnapshotHookEvents>(
+    hook<Name extends keyof NativeHookEvents>(
       name: Name,
-      callback: (event: NativeSnapshotHookEvents[Name]) => void | Promise<void>,
+      callback: (event: NativeHookEvents[Name]) => void | Promise<void>,
     ): Promise<NativeRegistration>;
   };
   readonly event: {
@@ -399,10 +348,9 @@ export interface NativeForkClient extends RuntimeClient {
   };
 }
 
-/** Optional injectable native boundaries for the shared snapshot runtime (tests only). */
+/** Optional injectable native boundaries for the shared runtime (tests only). */
 export interface NativeSnapshotRuntimeOptions<Client extends NativeForkClient = OpenCodeClient> {
   readonly runtimeDeps?: RuntimeDeps<Client> | undefined;
-  readonly store?: FileBindingStore | undefined;
   readonly now?: (() => number) | undefined;
 }
 
@@ -410,28 +358,21 @@ export interface NativeSnapshotRuntimeOptions<Client extends NativeForkClient = 
 export interface NativeSnapshotRuntime<Client extends NativeForkClient = OpenCodeClient> {
   /** Native runtime with lazy authenticated full client and resource permissions. */
   readonly runtime: NativeRuntime<NativeSnapshotContext, Client>;
-  /** Family-binding/config/model/auxiliary service. */
-  readonly snapshots: SnapshotService;
-  /**
-   * Supported bind-on-first-work gateway for owned direct generate/synthetic work.
-   * It persists the credential-free family revision, materializes the qualified
-   * live overlay, and switches before native model resolution. Unbound raw
-   * external generate remains fail-closed.
-   */
-  admitWorkload(request: SnapshotAdmissionRequest): Promise<AdmissionOutcome>;
-  /** Snapshot-bound auxiliary generation. */
+  /** Session-owned family settings service (lazy birth, lineage resolution, projections). */
+  readonly settings: FamilySettingsService;
+  /** Family-settings-bound auxiliary generation (titles, compaction, Guardian). */
   readonly auxiliary: AuxiliaryService;
   /** Lazily authenticated same-instance full native client (genuine OpenCodeClient by default). */
   client(): Promise<Client>;
   /** Resource permission service bound to this runtime's client. */
   readonly permissions: PermissionService;
-  /** Current effective vvoc configuration plus captured native overlays. */
+  /** Current effective vvoc configuration (live, never family-frozen). */
   effectiveConfig(): EffectiveRuntimeConfig;
-  /** Enable or disable role overriding (agent models and default model) without disabling capture/guard. */
+  /** Enable or disable role overriding for newly created sessions without affecting resolution. */
   setRoleOverride(enabled: boolean): Promise<void>;
-  /** Reload rehydrated family bindings, variant registrations and native transforms. */
+  /** Reload native transforms after role-override or config changes. */
   refresh(): Promise<void>;
-  /** Last config-watcher failure, surfaced instead of being silently swallowed. */
+  /** Last contained runtime failure, surfaced instead of being silently swallowed. */
   lastConfigError(): string | undefined;
   /** Idempotent per-lease release; disposes shared state only for the last lease. */
   release(): Promise<void>;
@@ -451,11 +392,13 @@ function toSelection(ref: unknown): ModelSelection | undefined {
   if (typeof ref !== "object") return undefined;
   const record = ref as { id?: unknown; providerID?: unknown; variant?: unknown };
   if (record.id === undefined || record.providerID === undefined) return undefined;
-  return normalizeModelSelection({
+  const variant =
+    record.variant === undefined || record.variant === null ? undefined : String(record.variant);
+  return {
     providerID: String(record.providerID),
     modelID: String(record.id),
-    ...(record.variant === undefined ? {} : { variant: String(record.variant) }),
-  });
+    ...(variant === undefined ? {} : { variant: canonicalModelVariant(variant) }),
+  };
 }
 
 function sameModelSelection(
@@ -480,188 +423,6 @@ function toRef(selection: ModelSelection): {
     providerID: selection.providerID,
     ...(selection.variant === undefined ? {} : { variant: selection.variant }),
   };
-}
-
-function cloneOverlay(
-  value: Readonly<Record<string, unknown>> | undefined,
-): Record<string, unknown> | undefined {
-  return value === undefined ? undefined : { ...value };
-}
-
-/** True for a snapshot-qualified variant previously materialized by this runtime. */
-function isManagedVariantID(
-  variantID: string,
-  modelID: string,
-  ownVariantIds: ReadonlySet<string>,
-): boolean {
-  if (ownVariantIds.has(variantID)) return true;
-  const prefix = variantID.slice(0, 16);
-  const suffix = variantID.slice(16);
-  return (
-    /^[0-9a-f]{16}$/.test(prefix) && (suffix === `.${modelID}` || suffix.startsWith(`.${modelID}.`))
-  );
-}
-
-function wantedModelKeys(config: EffectiveRuntimeConfig): Set<string> {
-  const keys = new Set<string>();
-  for (const selection of Object.values(parseRoleSelections(config.roles))) {
-    keys.add(`${selection.providerID}/${selection.modelID}`);
-  }
-  if (config.rootDefault !== undefined) {
-    keys.add(`${config.rootDefault.providerID}/${config.rootDefault.modelID}`);
-  }
-  if (config.nativeDefault !== undefined) {
-    keys.add(`${config.nativeDefault.providerID}/${config.nativeDefault.modelID}`);
-  }
-  // Custom/literal agent models outside the role map still need their overlay captured.
-  for (const binding of config.agentBindings ?? []) {
-    if (binding.selection !== undefined) {
-      keys.add(`${binding.selection.providerID}/${binding.selection.modelID}`);
-    }
-  }
-  return keys;
-}
-
-function captureModelSettings(
-  editor: ModelEditorLike,
-  wanted: ReadonlySet<string>,
-  ownVariantIds: ReadonlySet<string>,
-): CapturedModelSettings[] {
-  const captured: CapturedModelSettings[] = [];
-  for (const model of editor.list()) {
-    const providerID = String(model.providerID);
-    // The wire/route id (`Model.Info.id`) is what sessions and requests reference,
-    // which differs from the catalog `modelID` for aliased models.
-    const modelID = String(model.id);
-    if (wanted.size > 0 && !wanted.has(`${providerID}/${modelID}`)) continue;
-    captured.push({
-      providerID,
-      modelID,
-      ...(model.settings === undefined ? {} : { settings: cloneOverlay(model.settings) }),
-      ...(model.body === undefined ? {} : { body: cloneOverlay(model.body) }),
-      ...(model.headers === undefined ? {} : { headers: { ...model.headers } }),
-    });
-    for (const variant of model.variants) {
-      // Never re-capture vvoc-generated variants as native overlays (no accumulation).
-      if (isManagedVariantID(String(variant.id), modelID, ownVariantIds)) continue;
-      captured.push({
-        providerID,
-        modelID,
-        variant: String(variant.id),
-        ...(variant.settings === undefined ? {} : { settings: cloneOverlay(variant.settings) }),
-        ...(variant.body === undefined ? {} : { body: cloneOverlay(variant.body) }),
-        ...(variant.headers === undefined ? {} : { headers: { ...variant.headers } }),
-      });
-    }
-  }
-  return captured;
-}
-
-/** Resolve one raw OpenCode model string (role reference or literal) to a selection. */
-function resolveRawIntent(
-  raw: string,
-  roleModels: Readonly<Record<string, ModelSelection>>,
-): { role?: string; selection?: ModelSelection } {
-  const trimmed = raw.trim();
-  if (isRoleReference(trimmed)) {
-    const role = trimmed.slice(ROLE_REFERENCE_PREFIX.length);
-    const selection = roleModels[role];
-    return { role, ...(selection === undefined ? {} : { selection }) };
-  }
-  try {
-    const parsed = parseModelSelectionWithVariant(trimmed);
-    return {
-      selection: {
-        providerID: parsed.provider,
-        modelID: parsed.model,
-        ...(parsed.variant === undefined ? {} : { variant: parsed.variant }),
-      },
-    };
-  } catch {
-    return {};
-  }
-}
-
-function captureAgentBindings(
-  editor: AgentEditorLike,
-  config: EffectiveRuntimeConfig,
-): AgentPolicyBinding[] {
-  const roleModels = parseRoleSelections(config.roles);
-  const rawAgents = config.rawIntent?.agents ?? {};
-  const bindings = new Map<string, AgentPolicyBinding>();
-
-  const record = (
-    agentID: string,
-    role: string | undefined,
-    selection: ModelSelection | undefined,
-  ): void => {
-    bindings.set(agentID, {
-      agentID,
-      ...(role === undefined ? {} : { role }),
-      ...(selection === undefined ? {} : { selection }),
-    });
-  };
-
-  for (const agent of editor.list()) {
-    const agentID = String(agent.id);
-    const role = config.agentRoles[agentID];
-    const literal = toSelection(agent.model);
-    const selection = literal ?? (role === undefined ? undefined : roleModels[role]);
-    record(agentID, role, selection);
-  }
-  // Raw OpenCode intent survives host normalization and overrides the native view.
-  for (const [agentID, raw] of Object.entries(rawAgents)) {
-    const resolved = resolveRawIntent(raw, roleModels);
-    const native = bindings.get(agentID);
-    record(agentID, resolved.role ?? native?.role, resolved.selection ?? native?.selection);
-  }
-  return [...bindings.values()];
-}
-
-/**
- * Recompute agent bindings from a freshly read config without trusting a cached
- * selection that vvoc itself may have applied under a previous role set. A
- * vvoc-role-managed agent's selection is recomputed from the current role model,
- * raw OpenCode intent still wins, and an agent with no role keeps its genuine
- * native literal. This is what makes `vvoc.json` role changes take effect on the
- * first unbound workload even when the host emits no `config.updated`.
- */
-export function rebuildAgentBindings(
-  cached: ReadonlyArray<AgentPolicyBinding>,
-  config: EffectiveRuntimeConfig,
-): AgentPolicyBinding[] {
-  const roleModels = parseRoleSelections(config.roles);
-  const rawAgents = config.rawIntent?.agents ?? {};
-  const byAgent = new Map<string, AgentPolicyBinding>();
-  for (const binding of cached) byAgent.set(binding.agentID, binding);
-  for (const agentID of Object.keys(config.agentRoles)) {
-    if (!byAgent.has(agentID)) byAgent.set(agentID, { agentID });
-  }
-  const result = new Map<string, AgentPolicyBinding>();
-  for (const [agentID, binding] of byAgent) {
-    const role = config.agentRoles[agentID] ?? binding.role;
-    const roleSelection = role === undefined ? undefined : roleModels[role];
-    // A role-managed agent's authority is the current role model; the cached
-    // selection may already carry a vvoc-applied model from an older role set.
-    const selection = roleSelection ?? binding.selection;
-    result.set(agentID, {
-      agentID,
-      ...(role === undefined ? {} : { role }),
-      ...(selection === undefined ? {} : { selection }),
-    });
-  }
-  for (const [agentID, raw] of Object.entries(rawAgents)) {
-    const resolved = resolveRawIntent(raw, roleModels);
-    const native = result.get(agentID) ?? byAgent.get(agentID);
-    const role = resolved.role ?? native?.role;
-    const selection = resolved.selection ?? native?.selection;
-    result.set(agentID, {
-      agentID,
-      ...(role === undefined ? {} : { role }),
-      ...(selection === undefined ? {} : { selection }),
-    });
-  }
-  return [...result.values()];
 }
 
 function readDefaultModel(editor: ModelEditorLike): ModelSelection | undefined {
@@ -745,73 +506,115 @@ function extractMessageText(content: unknown): string {
   return parts.join("\n");
 }
 
-/** Selection the family expects for a given request kind and session agent. */
-function expectedSelection(
-  capture: import("./types.js").FamilyCapture,
-  agentID: string | undefined,
-): ModelSelection | undefined {
-  // An explicit family choice is the session's model and must not be overridden
-  // by an agent-role binding.
-  if (capture.intent.mode === "explicit" && capture.modelOverride !== undefined) {
-    return qualifySelection(capture, capture.modelOverride);
+/** Resolve one raw OpenCode model string (role reference or literal) to a selection. */
+function resolveRawIntent(
+  raw: string,
+  roleModels: Readonly<Record<string, ModelSelection>>,
+): { role?: string; selection?: ModelSelection } {
+  const trimmed = raw.trim();
+  if (isRoleReference(trimmed)) {
+    const role = trimmed.slice(ROLE_REFERENCE_PREFIX.length);
+    const selection = roleModels[role];
+    return { role, ...(selection === undefined ? {} : { selection }) };
   }
-  if (agentID !== undefined) {
-    const binding = capture.agents.find((agent) => agent.agentID === agentID);
-    if (binding?.selection !== undefined) {
-      return qualifySelection(capture, binding.selection);
-    }
+  try {
+    const parsed = parseModelSelectionWithVariant(trimmed);
+    return {
+      selection: {
+        providerID: parsed.provider,
+        modelID: parsed.model,
+        ...(parsed.variant === undefined ? {} : { variant: parsed.variant }),
+      },
+    };
+  } catch {
+    return {};
   }
-  const base = primarySelection(capture);
-  return base === undefined ? undefined : qualifySelection(capture, base);
 }
 
-function selectionMatches(
-  actual: ModelSelection | undefined,
-  expected: ModelSelection | undefined,
-): boolean {
-  if (expected === undefined) return true;
-  if (actual === undefined) return false;
-  // Identity plus variant: a resolved request must use the captured variant exactly.
-  return sameModelSelection(actual, expected);
-}
+function captureAgentBindings(
+  editor: AgentEditorLike,
+  config: EffectiveRuntimeConfig,
+): AgentPolicyBinding[] {
+  const roleModels = parseRoleSelections(config.roles);
+  const rawAgents = config.rawIntent?.agents ?? {};
+  const bindings = new Map<string, AgentPolicyBinding>();
 
-/** Map a family-qualified variant id back to its native source variant. */
-function sourceVariantOf(
-  capture: import("./types.js").FamilyCapture,
-  selection: ModelSelection | undefined,
-): string | undefined {
-  if (selection?.variant === undefined) return undefined;
-  const known = capture.variants.find((variant) => variant.id === selection.variant);
-  return known?.sourceVariant ?? selection.variant;
+  const record = (
+    agentID: string,
+    role: string | undefined,
+    selection: ModelSelection | undefined,
+  ): void => {
+    bindings.set(agentID, {
+      agentID,
+      ...(role === undefined ? {} : { role }),
+      ...(selection === undefined ? {} : { selection }),
+    });
+  };
+
+  for (const agent of editor.list()) {
+    const agentID = String(agent.id);
+    const role = config.agentRoles[agentID];
+    const literal = toSelection(agent.model);
+    const selection = literal ?? (role === undefined ? undefined : roleModels[role]);
+    record(agentID, role, selection);
+  }
+  // Raw OpenCode intent survives host normalization and overrides the native view.
+  for (const [agentID, raw] of Object.entries(rawAgents)) {
+    const resolved = resolveRawIntent(raw, roleModels);
+    const native = bindings.get(agentID);
+    record(agentID, resolved.role ?? native?.role, resolved.selection ?? native?.selection);
+  }
+  return [...bindings.values()];
 }
 
 /**
- * True when two selections denote the same model and the same source variant,
- * accepting the native variant id and its family-qualified id as equivalent.
- * The host may resolve either form depending on whether the session model was
- * rewritten through the family switch, and both denote the same request body.
+ * Recompute agent bindings from a freshly read config without trusting a cached
+ * selection that vvoc itself may have applied under a previous role set. A
+ * vvoc-role-managed agent's selection is recomputed from the current role model,
+ * raw OpenCode intent still wins, and an agent with no role keeps its genuine
+ * native literal. This is what makes `vvoc.json` role changes take effect for
+ * newly created sessions even when the host emits no `config.updated`.
  */
-function sameSourceSelection(
-  capture: import("./types.js").FamilyCapture,
-  actual: ModelSelection | undefined,
-  expected: ModelSelection | undefined,
-): boolean {
-  if (actual === undefined || expected === undefined) return false;
-  return (
-    actual.providerID === expected.providerID &&
-    actual.modelID === expected.modelID &&
-    sourceVariantOf(capture, actual) === sourceVariantOf(capture, expected)
-  );
+export function rebuildAgentBindings(
+  cached: ReadonlyArray<AgentPolicyBinding>,
+  config: EffectiveRuntimeConfig,
+): AgentPolicyBinding[] {
+  const roleModels = parseRoleSelections(config.roles);
+  const rawAgents = config.rawIntent?.agents ?? {};
+  const byAgent = new Map<string, AgentPolicyBinding>();
+  for (const binding of cached) byAgent.set(binding.agentID, binding);
+  for (const agentID of Object.keys(config.agentRoles)) {
+    if (!byAgent.has(agentID)) byAgent.set(agentID, { agentID });
+  }
+  const result = new Map<string, AgentPolicyBinding>();
+  for (const [agentID, binding] of byAgent) {
+    const role = config.agentRoles[agentID] ?? binding.role;
+    const roleSelection = role === undefined ? undefined : roleModels[role];
+    // A role-managed agent's authority is the current role model; the cached
+    // selection may already carry a vvoc-applied model from an older role set.
+    const selection = roleSelection ?? binding.selection;
+    result.set(agentID, {
+      agentID,
+      ...(role === undefined ? {} : { role }),
+      ...(selection === undefined ? {} : { selection }),
+    });
+  }
+  for (const [agentID, raw] of Object.entries(rawAgents)) {
+    const resolved = resolveRawIntent(raw, roleModels);
+    const native = result.get(agentID) ?? byAgent.get(agentID);
+    const role = resolved.role ?? native?.role;
+    const selection = resolved.selection ?? native?.selection;
+    result.set(agentID, {
+      agentID,
+      ...(role === undefined ? {} : { role }),
+      ...(selection === undefined ? {} : { selection }),
+    });
+  }
+  return [...result.values()];
 }
+// END_BLOCK_NATIVE_RUNTIME
 
-/** The model a family expects for host title work: the captured fast/small role. */
-function titleExpectedSelection(
-  capture: import("./types.js").FamilyCapture,
-): ModelSelection | undefined {
-  const small = capture.roleModels.fast;
-  return small === undefined ? undefined : qualifySelection(capture, small);
-}
-
+// START_BLOCK_RUNTIME_INITIALIZATION
 function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
   ctx: NativeSnapshotContext,
   options: NativeSnapshotRuntimeOptions<Client> | undefined,
@@ -840,127 +643,25 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
       const state: {
         config: EffectiveRuntimeConfig;
         agentBindings: AgentPolicyBinding[];
-        modelSettings: CapturedModelSettings[];
         nativeDefault: ModelSelection | undefined;
-        registrations: VariantRegistration[];
-        pendingRegistrations: Map<string, VariantRegistration[]>;
-        materializedVariants: Set<string>;
-        ownVariantIds: Set<string>;
         roleOverride: boolean;
         configError: string | undefined;
-        creationModels: Map<string, ModelSelection | undefined>;
-        creationDefaults: Map<string, ModelSelection | undefined>;
-        explicitSelections: Map<string, ModelSelection>;
-        pluginSwitches: Map<string, ModelSelection>;
-        suppressedTitles: Set<string>;
-        firstWorkPending: Set<string>;
       } = {
         config: base,
         agentBindings: [],
-        modelSettings: [],
         nativeDefault: undefined,
-        registrations: [],
-        // Per-family pending materialization so concurrent families cannot overwrite
-        // each other's in-flight variant registrations.
-        pendingRegistrations: new Map(),
-        materializedVariants: new Set(),
-        ownVariantIds: new Set(),
         roleOverride: false,
         configError: undefined,
-        creationModels: new Map(),
-        creationDefaults: new Map(),
-        explicitSelections: new Map(),
-        pluginSwitches: new Map(),
-        suppressedTitles: new Set(),
-        // Sessions this runtime just bound and switched at first work. The host may
-        // resolve the dispatch against the pre-binding role base while the hook's
-        // own switch is still landing, so the guard tolerates exactly that one
-        // bare-base resolution instead of failing the session's first turn.
-        firstWorkPending: new Set(),
       };
-
-      const store = options?.store ?? new FileBindingStore({ scopeKey: ctx.location.project.id });
 
       /**
-       * Read the host's final native model collection. A model transform registered
-       * by this plugin may run before later config transforms, so a transform-local
-       * editor is neither the capture source nor proof a variant survived; the
-       * host's final list is. Returns undefined when the host exposes no list call.
+       * Structural host session read used by lineage resolution, birth, and
+       * migration. Returns the checked session view shape.
        */
-      async function readFinalModelEntries(): Promise<
-        ReadonlyArray<Record<string, unknown>> | undefined
-      > {
-        const list = (ctx.model as { list?: (input?: unknown) => Promise<unknown> }).list;
-        if (typeof list !== "function") return undefined;
-        let raw: unknown;
-        try {
-          raw = await list.call(ctx.model);
-        } catch {
-          return undefined;
-        }
-        const data =
-          isRecord(raw) && Array.isArray((raw as { data?: unknown }).data)
-            ? (raw as { data: unknown[] }).data
-            : Array.isArray(raw)
-              ? raw
-              : [];
-        return data.filter(isRecord);
-      }
-
-      const readFinalOverlays = async (
-        config: EffectiveRuntimeConfig,
-      ): Promise<CapturedModelSettings[] | undefined> => {
-        const entries = await readFinalModelEntries();
-        if (entries === undefined) return undefined;
-        const wanted = wantedModelKeys(config);
-        const captured: CapturedModelSettings[] = [];
-        const overlay = (
-          providerID: string,
-          modelID: string,
-          variant: string | undefined,
-          base: Record<string, unknown>,
-          source: Record<string, unknown>,
-        ): CapturedModelSettings => {
-          const settings = mergeModelBodyOverlay(
-            isRecord(base.settings) ? base.settings : undefined,
-            isRecord(source.settings) ? source.settings : undefined,
-          );
-          const body = mergeModelBodyOverlay(
-            isRecord(base.body) ? base.body : undefined,
-            isRecord(source.body) ? source.body : undefined,
-          );
-          const headers = mergeModelHeadersOverlay(
-            isRecord(base.headers) ? (base.headers as Record<string, string>) : undefined,
-            isRecord(source.headers) ? (source.headers as Record<string, string>) : undefined,
-          );
-          return {
-            providerID,
-            modelID,
-            ...(variant === undefined ? {} : { variant }),
-            ...(settings === undefined ? {} : { settings }),
-            ...(body === undefined ? {} : { body }),
-            ...(headers === undefined ? {} : { headers }),
-          };
-        };
-        for (const entry of entries) {
-          const providerID = entry.providerID;
-          const modelID = entry.id;
-          if (typeof providerID !== "string" || typeof modelID !== "string") continue;
-          if (wanted.size > 0 && !wanted.has(`${providerID}/${modelID}`)) continue;
-          captured.push(overlay(providerID, modelID, undefined, entry, entry));
-          if (Array.isArray(entry.variants)) {
-            for (const variant of entry.variants) {
-              if (!isRecord(variant) || typeof variant.id !== "string") continue;
-              // Never re-capture our own generated variants (no accumulation).
-              if (isManagedVariantID(variant.id, modelID, state.ownVariantIds)) continue;
-              // Each source variant gets the base merged with THAT variant's own
-              // native overlay, so two source variants of one model stay distinct.
-              captured.push(overlay(providerID, modelID, variant.id, entry, variant));
-            }
-          }
-        }
-        return captured;
-      };
+      const readSession = async (
+        sessionID: string,
+      ): Promise<import("./types.js").NativeSessionView> =>
+        toSessionView(await ctx.session.get({ sessionID }));
 
       const readConfig = async (directory: string): Promise<EffectiveRuntimeConfig> => {
         const vvoc = effectiveRuntimeConfig(await loadEffectiveVvocConfig({ cwd: directory }));
@@ -976,19 +677,12 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
           ...vvoc,
           ...(rawIntent === undefined ? {} : { rawIntent }),
         });
-        const baseConfig: EffectiveRuntimeConfig = {
+        return {
           ...vvoc,
           ...(rawIntent === undefined ? {} : { rawIntent }),
           ...(rootResolved === undefined ? {} : { rootDefault: rootResolved }),
           agentBindings,
-          modelSettings: state.modelSettings,
-          ...(state.nativeDefault === undefined ? {} : { nativeDefault: state.nativeDefault }),
         };
-        // Capture the final native model overlay (post config-transform) when the
-        // host exposes it, so a snapshot variant reflects the real request payload.
-        const overlays = await readFinalOverlays(baseConfig);
-        if (overlays !== undefined) state.modelSettings = overlays;
-        return { ...baseConfig, modelSettings: state.modelSettings };
       };
 
       // Initialize the live config with raw OpenCode intent before any transform runs.
@@ -1013,9 +707,7 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
         const parent = await ctx.session.get({ sessionID: input.parentID });
         const projectID = parent.projectID === undefined ? "" : String(parent.projectID);
         if (projectID.length === 0) {
-          throw new SnapshotAdmissionError(
-            "Auxiliary child import requires the parent session project id.",
-          );
+          throw new Error("Auxiliary child import requires the parent session project id.");
         }
         const sessionID = `ses_${randomBytes(16).toString("hex")}`;
         const now = Date.now();
@@ -1050,9 +742,7 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
         const imported = await client.session.import(payload);
         const importedID = decodeImportedSessionID(imported);
         if (importedID === undefined || importedID !== sessionID) {
-          throw new SnapshotAdmissionError(
-            "Native session import did not return the expected auxiliary child id.",
-          );
+          throw new Error("Native session import did not return the expected auxiliary child id.");
         }
         // The parent binding must be durable before the child is used.
         for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -1060,323 +750,228 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
           if (view.parentID === input.parentID) return { sessionID };
           await new Promise((resolve) => setTimeout(resolve, 100));
         }
-        throw new SnapshotAdmissionError(
-          "Imported auxiliary child did not persist its parent lineage.",
+        throw new Error("Imported auxiliary child did not persist its parent lineage.");
+      };
+
+      // START_BLOCK_SETTINGS_SERVICE
+      /**
+       * Per-family RMW serialization. Distinct plugin contexts copied from one
+       * host share the native app/location object identity, so their settings
+       * services share one per-family lock without sharing any client,
+       * registration, or disposal.
+       */
+      const coordination: HostCoordination | undefined = coordinateHost({
+        app: ctx.app,
+        location: ctx.location,
+      });
+      const familyLocks = new Map<string, Promise<unknown>>();
+      const withFamilyLock = <T>(familyId: string, run: () => Promise<T>): Promise<T> => {
+        if (coordination !== undefined) return coordination.withFamilyLock(familyId, run);
+        const previous = familyLocks.get(familyId) ?? Promise.resolve();
+        const next = previous.then(run, run);
+        familyLocks.set(
+          familyId,
+          next.then(
+            () => undefined,
+            () => undefined,
+          ),
         );
+        return next;
       };
 
-      const deps: SnapshotServiceDeps = {
-        store,
-        location: runtimeIdentity(ctx.location),
-        ...(options?.now === undefined ? {} : { now: options.now }),
-        // Distinct plugin contexts copied from one host share the native app/location
-        // object identity, so their snapshot services share one per-family
-        // publication lock without sharing any client, registration or disposal.
-        coordination: coordinateHost({ app: ctx.app, location: ctx.location }),
-        loadConfig: async (directory) => {
-          const fresh = await readConfig(directory);
-          state.config = fresh;
-          return fresh;
-        },
-        readSession: async (sessionID) => toSessionView(await ctx.session.get({ sessionID })),
-        readSessionModel: async (sessionID) =>
-          toSelection((await ctx.session.get({ sessionID })).model),
-        switchModel: ({ sessionID, model }) =>
-          ctx.session.switchModel({ sessionID, model: toRef(model) }),
-        auxiliarySession: {
-          create: importAuxiliaryChild,
-          switchModel: async ({ sessionID, model }) => {
-            await ctx.session.switchModel({ sessionID, model: toRef(model) });
-          },
-          generate: (input) => ctx.session.generate(input),
-        },
+      // Lineage and birth caches: lineage is stable for a session's lifetime,
+      // and the born fact is cached per process so the birth check stays one
+      // read per session ever.
+      const familyRoots = new Map<string, string>();
+      const bornRoots = new Set<string>();
+      const birthInFlight = new Map<string, Promise<FamilySettings | undefined>>();
+      const reconciledChildren = new Set<string>();
+
+      const diagnostic = (message: string): void => {
+        // Messages are static and bounded: never include paths, parsed state, or credentials.
+        state.configError = message.slice(0, 240);
       };
-      const snapshots = createSnapshotService(deps);
 
-      const allPending = (): VariantRegistration[] =>
-        [...state.pendingRegistrations.values()].flat();
+      const familyOf = async (sessionID: string): Promise<string> => {
+        const cached = familyRoots.get(sessionID);
+        if (cached !== undefined) return cached;
+        const root = await resolveSessionFamily({ sessionID, readSession });
+        familyRoots.set(sessionID, root);
+        return root;
+      };
 
-      const applyVariants = (editor: ModelEditorLike): number =>
-        applyVariantRegistrations(editor, [...state.registrations, ...allPending()]);
+      const buildView = (
+        familyId: string,
+        settings: FamilySettings,
+        source: FamilySettingsView["source"],
+        root: import("./types.js").NativeSessionView,
+      ): FamilySettingsView | undefined => {
+        let roleModels;
+        try {
+          roleModels = parseRoleSelections(settings.roles);
+        } catch {
+          // A corrupt role binding must not fail the request path; the live
+          // configuration resolves instead, with a bounded diagnostic.
+          diagnostic("Family settings roles are invalid; resolving the live configuration.");
+          return undefined;
+        }
+        return {
+          familyId,
+          locationDirectory: root.locationDirectory,
+          ...(root.model === undefined ? {} : { rootModel: root.model }),
+          settings,
+          vvoc: projectFamilyConfig(settings, state.config.vvoc),
+          roleModels,
+          source,
+          settingsId: settingsId(settings),
+        };
+      };
 
-      const refresh = async (): Promise<void> => {
-        state.registrations = buildVariantRegistrations(await snapshots.captures());
-        await ctx.model.reload();
-        await ctx.agent.reload();
+      const fallbackView = (familyId: string): FamilySettingsView | undefined =>
+        buildView(familyId, settingsFromConfig(state.config.vvoc), "config", { id: familyId });
+
+      /**
+       * Birth a root family record under the per-family lock: re-read the
+       * fresh metadata, skip when another writer won the race, otherwise
+       * resolve the current effective configuration and read-modify-write only
+       * the settings key. The current request keeps using the in-memory value.
+       */
+      const birthRoot = async (familyId: string): Promise<FamilySettings | undefined> => {
+        const pending = birthInFlight.get(familyId);
+        if (pending !== undefined) return pending;
+        const run = withFamilyLock(familyId, async () => {
+          const fresh = await readSession(familyId);
+          const existing = readSettingsFromMetadata(fresh.metadata);
+          if (existing !== undefined && "settings" in existing) {
+            bornRoots.add(familyId);
+            return existing.settings;
+          }
+          if (existing !== undefined && "error" in existing) {
+            diagnostic("Existing family settings are invalid; rebirthing from the live config.");
+          }
+          // The birth record must reflect the CURRENT effective configuration:
+          // vvoc.json edits emit no host config.updated event, so the cached
+          // config can be stale exactly when a family is born right after a
+          // config change. The read is once per family and under the family
+          // lock; a failed fresh read falls back to the last fully read config.
+          let effective = state.config;
+          try {
+            effective = await readConfig(ctx.location.directory);
+          } catch {
+            diagnostic("Fresh config read failed at birth; using the cached effective config.");
+          }
+          const settings = settingsFromConfig(effective.vvoc);
+          const merged = mergeSettingsIntoMetadata(fresh.metadata, settings);
+          try {
+            await ctx.session.update({ sessionID: familyId, metadata: merged });
+            bornRoots.add(familyId);
+            return settings;
+          } catch (error) {
+            // Fail soft: the family keeps resolving the live configuration and
+            // the next request retries the birth.
+            diagnostic(`Family settings birth failed: ${describePumpError(error).slice(0, 160)}`);
+            return undefined;
+          }
+        });
+        birthInFlight.set(familyId, run);
+        try {
+          return await run;
+        } finally {
+          birthInFlight.delete(familyId);
+        }
+      };
+
+      const resolveSettings = async (
+        sessionID: string,
+      ): Promise<FamilySettingsView | undefined> => {
+        let familyId: string;
+        try {
+          familyId = await familyOf(sessionID);
+        } catch (error) {
+          diagnostic(`Family resolution failed: ${describePumpError(error).slice(0, 160)}`);
+          return undefined;
+        }
+        let root: import("./types.js").NativeSessionView;
+        try {
+          root = await readSession(familyId);
+        } catch {
+          return fallbackView(familyId);
+        }
+        const read = readSettingsFromMetadata(root.metadata);
+        if (read !== undefined && "settings" in read) {
+          bornRoots.add(familyId);
+          const view = buildView(familyId, read.settings, "metadata", root);
+          return view ?? fallbackView(familyId);
+        }
+        if (read !== undefined && "error" in read) {
+          diagnostic("Family settings are invalid; resolving the live configuration.");
+        }
+        if (!bornRoots.has(familyId) && isFamilyRootView(root)) {
+          const born = await birthRoot(familyId);
+          if (born !== undefined) {
+            const view = buildView(familyId, born, "metadata", root);
+            return view ?? fallbackView(familyId);
+          }
+        }
+        return fallbackView(familyId);
+      };
+
+      const settingsService: FamilySettingsService = {
+        familyOf,
+        resolve: resolveSettings,
+        configFor: resolveSettings,
+        dispose() {
+          familyRoots.clear();
+          bornRoots.clear();
+          birthInFlight.clear();
+          reconciledChildren.clear();
+          familyLocks.clear();
+        },
       };
 
       /**
-       * Read the final native model collection after a reload. A model transform
-       * registered by this plugin may run before later config transforms, so a
-       * transform-local editor is not proof the variant survived; the host's final
-       * model list is. Returns undefined when the host exposes no list call (tests).
+       * One-shot creation reconciliation: a host-created child of a role-managed
+       * family adopts the family's role model exactly once at creation. There is
+       * no later validation; an explicit model choice after creation is never
+       * touched.
        */
-      const materializeBinding = async (
-        capture: import("./types.js").FamilyCapture,
-        selection: ModelSelection,
-      ): Promise<void> => {
-        if (selection.variant === undefined) return;
-        // Materialize this family's qualified live variant before its first switch.
-        state.pendingRegistrations.set(capture.snapshotId, buildVariantRegistrations([capture]));
-        await ctx.model.reload();
-        const finalEntries = await readFinalModelEntries();
-        const exists =
-          finalEntries === undefined
-            ? state.materializedVariants.has(selection.variant)
-            : finalEntries.some((entry) => {
-                if (entry.providerID !== selection.providerID || entry.id !== selection.modelID) {
-                  return false;
-                }
-                return (
-                  Array.isArray(entry.variants) &&
-                  entry.variants.some(
-                    (variant) => isRecord(variant) && String(variant.id) === selection.variant,
-                  )
-                );
-              });
-        if (!exists) {
-          state.pendingRegistrations.delete(capture.snapshotId);
-          await ctx.model.reload();
-          throw new SnapshotAdmissionError(
-            `Captured variant ${selection.variant} is not materializable on ${selection.providerID}/${selection.modelID}.`,
-          );
-        }
+      const reconcileCreatedChild = async (created: {
+        readonly sessionID: string;
+        readonly model?: ModelSelection | undefined;
+      }): Promise<void> => {
+        if (!state.roleOverride) return;
+        if (reconciledChildren.has(created.sessionID)) return;
+        reconciledChildren.add(created.sessionID);
+        const view = await readSession(created.sessionID).catch(() => undefined);
+        if (view === undefined) return;
+        const auxiliary = decodeAuxiliaryMetadata(view.metadata);
+        if (auxiliary !== undefined) return;
+        if (view.agent !== undefined && INTERNAL_PRIMARY_AGENTS.has(view.agent)) return;
+        const role = view.agent === undefined ? undefined : state.config.agentRoles[view.agent];
+        if (role === undefined) return;
+        const settings = await resolveSettings(created.sessionID);
+        if (settings === undefined) return;
+        const expected = settings.roleModels[role];
+        if (expected === undefined) return;
+        if (sameModelSelection(created.model ?? view.model, expected)) return;
+        await ctx.session.switchModel({ sessionID: created.sessionID, model: toRef(expected) });
       };
-
-      const switchSession = async (sessionID: string, selection: ModelSelection): Promise<void> => {
-        state.pluginSwitches.set(sessionID, selection);
-        await ctx.session.switchModel({ sessionID, model: toRef(selection) });
-      };
-
-      /** First-work selection for a session's agent from the live policy. */
-      const bindingTarget = (agentID: string | undefined): ModelSelection | undefined => {
-        const bindings = state.config.agentBindings ?? [];
-        if (agentID !== undefined) {
-          const binding = bindings.find((agent) => agent.agentID === agentID);
-          if (binding?.selection !== undefined) return binding.selection;
-        }
-        const roleModels = parseRoleSelections(state.config.roles);
-        if (roleModels.default !== undefined) return roleModels.default;
-        if (state.config.rootDefault !== undefined) return state.config.rootDefault;
-        for (const selection of Object.values(roleModels)) return selection;
-        for (const binding of bindings) {
-          if (binding.selection !== undefined) return binding.selection;
-        }
-        return state.config.nativeDefault;
-      };
-
-      /**
-       * One coherent workload selection for a bound family. An explicit post-bind
-       * user choice always wins; role overriding disabled means the host's current
-       * model is already the policy. Otherwise the agent's captured binding, then
-       * the family primary, with the family's captured variant qualified.
-       */
-      const expectedForSession = (
-        capture: import("./types.js").FamilyCapture,
-        agentID: string | undefined,
-        sessionID: string,
-        metadata?: Readonly<Record<string, unknown>> | undefined,
-      ): ModelSelection | undefined => {
-        // A real parented auxiliary child recovers its intended role from
-        // host-owned metadata, not an in-process exemption.
-        const auxiliary = decodeAuxiliaryMetadata(metadata);
-        if (auxiliary !== undefined) {
-          const base =
-            auxiliary.role === undefined
-              ? primarySelection(capture)
-              : capture.roleModels[auxiliary.role];
-          return base === undefined ? undefined : qualifySelection(capture, base);
-        }
-        if (!state.roleOverride) return capture.modelOverride ?? capture.rootSelection;
-        const explicit = state.explicitSelections.get(sessionID);
-        // An explicit user choice wins, but the host resolves the request against the
-        // family-qualified variant id after the first-work switch, so the expectation
-        // must use the same qualification or the guard rejects the resolved request.
-        if (explicit !== undefined) return qualifySelection(capture, explicit);
-        return expectedSelection(capture, agentID);
-      };
-
-      const bindFor = async (sessionID: string): Promise<void> => {
-        await ensureTransforms();
-        const view = toSessionView(await ctx.session.get({ sessionID }));
-        const sessionModel = view.model;
-        const pluginSwitch = state.pluginSwitches.get(sessionID);
-        const ownSwitch =
-          pluginSwitch !== undefined && sameModelSelection(sessionModel, pluginSwitch);
-        // The default captured at creation, never the possibly-changed current default.
-        const creationDefault = state.creationDefaults.get(sessionID) ?? state.nativeDefault;
-        const intent = ownSwitch
-          ? ({ mode: "implicit", source: "switch" } as const)
-          : classifyInitialSelection({ sessionModel, creationDefault });
-        if (intent.mode === "explicit" && intent.literal !== undefined) {
-          // Creation provenance is an explicit host selection just like a later
-          // model-selected event, so preserve it through the model guard.
-          state.explicitSelections.set(sessionID, intent.literal);
-        }
-
-        const existing = await snapshots.policy(sessionID);
-        if (existing !== undefined) {
-          // A bound family owns an immutable capture, so its policy/model handling
-          // never consults the mutable current config. Resolve it before any fresh
-          // read: an invalid on-disk vvoc must not fail an already-bound family.
-          // A session model that changed outside our own switch is a user choice and
-          // must survive, even if the event pump has not recorded it yet.
-          const baseExpected = expectedSelection(existing, view.agent);
-          if (
-            !ownSwitch &&
-            baseExpected !== undefined &&
-            sessionModel !== undefined &&
-            !sameModelSelection(sessionModel, baseExpected) &&
-            !sameModelSelection(sessionModel, pluginSwitch)
-          ) {
-            state.explicitSelections.set(sessionID, normalizeModelSelection(sessionModel));
-            // Every recorded user choice ends the first-work tolerance, exactly
-            // like the event-pump path: a later bare-base dispatch is genuine
-            // drift again, never silently admitted through a stale window.
-            state.firstWorkPending.delete(sessionID);
-          }
-          if (!state.roleOverride || state.explicitSelections.has(sessionID)) return;
-          const target = expectedForSession(existing, view.agent, sessionID);
-          if (target !== undefined && !sameModelSelection(sessionModel, target)) {
-            state.firstWorkPending.add(sessionID);
-            await switchSession(sessionID, target);
-          }
-          return;
-        }
-        // Only a truly unbound family needs the freshest current config:
-        // vvoc.json changes do not emit a host `config.updated`, and a stale
-        // family target would otherwise bind the previous role selection. The
-        // SAME immutable value is passed into the service so its projection cannot
-        // re-read a different vvoc snapshot than the target was derived from.
-        const admissionConfig = await readConfig(ctx.location.directory);
-        state.config = admissionConfig;
-        const explicitSelection = intent.mode === "explicit" ? intent.literal : undefined;
-        const target = explicitSelection ?? bindingTarget(view.agent);
-        const base = state.roleOverride ? target : (sessionModel ?? target);
-        // The agent-aware resolved target drives binding, not the capture's default
-        // role; when role overriding is off the session's current model is bound.
-        const selectionOverride =
-          explicitSelection === undefined && base !== undefined ? base : undefined;
-        // The admission below switches this session onto the family selection; a
-        // dispatch the host resolved before that switch lands carries the bare
-        // role base, so the guard gets a one-shot tolerance for this session.
-        state.firstWorkPending.add(sessionID);
-        const outcome = await snapshots.admitOwned(
-          {
-            sessionID,
-            directory: ctx.location.directory,
-            location: runtimeIdentity(ctx.location),
-            admissionConfig,
-            ...(explicitSelection === undefined ? {} : { explicit: explicitSelection }),
-            ...(selectionOverride === undefined ? {} : { selectionOverride }),
-            force: state.roleOverride,
-          },
-          async (capture, selection) => {
-            await materializeBinding(capture, selection);
-            state.pluginSwitches.set(sessionID, selection);
-          },
-        );
-        if (outcome.status === "rejected") {
-          throw new SnapshotAdmissionError(
-            outcome.error ?? `Binding for ${sessionID} did not produce a persisted policy.`,
-          );
-        }
-        if (outcome.status === "bound") {
-          await refresh();
-          state.pendingRegistrations.clear();
-        }
-      };
-
-      const guardResolvedModel = async (
-        sessionID: string,
-        agentID: string | undefined,
-        actual: ModelSelection | undefined,
-        kind: string,
-      ): Promise<void> => {
-        await ensureTransforms();
-        if (kind === "title" && state.suppressedTitles.has(sessionID)) {
-          // The title hook already supplied the result; the host still runs this
-          // hook before it checks `result`, so a refused dispatch here would fail
-          // a title that never reaches the provider.
-          state.suppressedTitles.delete(sessionID);
-          return;
-        }
-        const view = toSessionView(await ctx.session.get({ sessionID }));
-        const effectiveAgent = agentID ?? view.agent;
-        const familyId = await snapshots.familyOf(sessionID);
-        const capture = await snapshots.policy(sessionID);
-        if (capture !== undefined) {
-          const expected =
-            kind === "title"
-              ? titleExpectedSelection(capture)
-              : expectedForSession(capture, effectiveAgent, sessionID, view.metadata);
-          // The first post-binding dispatch ends the first-work window whether
-          // it resolves clean or not: after it, sessions resolve their switched
-          // family model, so any bare-base dispatch is genuine drift again.
-          const firstWork = state.firstWorkPending.delete(sessionID);
-          if (
-            !selectionMatches(actual, expected) &&
-            !sameSourceSelection(capture, actual, expected)
-          ) {
-            // A dispatch resolved before this runtime's own first-work switch
-            // carries the bare role base of the very selection the switch just
-            // materialized. Accept that one pre-binding resolution; every later
-            // bare-base dispatch still rejects as drift.
-            if (
-              firstWork &&
-              actual !== undefined &&
-              expected !== undefined &&
-              actual.providerID === expected.providerID &&
-              actual.modelID === expected.modelID &&
-              actual.variant === undefined
-            ) {
-              return;
-            }
-            const describeSelection = (selection: ModelSelection | undefined): string =>
-              selection === undefined
-                ? "unresolved"
-                : `${selection.providerID}/${selection.modelID}${selection.variant === undefined ? "" : `#${selection.variant}`}`;
-            throw new SnapshotAdmissionError(
-              `Resolved ${kind} model ${describeSelection(actual)} does not match the captured family selection ${describeSelection(expected)} for ${familyId}.`,
-            );
-          }
-          return;
-        }
-        throw new SnapshotUnboundError(
-          `Refusing unbound ${kind} dispatch for session ${sessionID} before first-work family binding.`,
-        );
-      };
+      // END_BLOCK_SETTINGS_SERVICE
 
       const modelTransform = (editor: ModelEditorLike): void => {
-        const own = new Set(
-          [...state.registrations, ...allPending()].map((registration) => registration.variant.id),
-        );
-        state.ownVariantIds = own;
-        state.modelSettings = captureModelSettings(editor, wantedModelKeys(state.config), own);
         state.nativeDefault = readDefaultModel(editor) ?? state.nativeDefault;
-        applyVariants(editor);
-        // Cheap transform-local readback; the final-list readback happens before switch.
-        state.materializedVariants = new Set(
-          [...state.registrations, ...allPending()].flatMap((registration) => {
-            const model = editor.get(registration.providerID, registration.modelID);
-            return model !== undefined &&
-              model.variants.some((variant) => String(variant.id) === registration.variant.id)
-              ? [registration.variant.id]
-              : [];
-          }),
-        );
         if (!state.roleOverride) return;
         const defaultRole = parseRoleSelections(state.config.roles).default;
         if (defaultRole !== undefined) {
           editor.default.set(defaultRole.providerID, defaultRole.modelID);
         }
       };
-      // Global agent transform represents current unbound candidates only; family
-      // variants are applied per-session at switch time, never from another family.
+      // The agent transform applies role policies to agent definitions, so
+      // newly created sessions resolve their role model natively at creation.
       const agentTransform = (editor: AgentEditorLike): void => {
         state.agentBindings = captureAgentBindings(editor, state.config);
         if (state.roleOverride) {
-          applyAgentPolicies(editor, state.agentBindings, []);
+          applyAgentPolicies(editor, state.agentBindings);
         }
       };
 
@@ -1389,7 +984,7 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
       /**
        * Eager registration gives the role toggle an immediate visible effect during
        * setup; post config plugins register after it, so it also needs a suffix
-       * registration after activation that appends last and keeps our variants.
+       * registration after activation that appends last.
        */
       const ensureEagerTransforms = async (): Promise<void> => {
         if (eagerTransformsRegistered) return;
@@ -1405,34 +1000,28 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
         await ctx.model.reload();
         await ctx.agent.reload();
       };
-      owned.push(await ctx.session.hook("prompt", (event) => bindFor(event.sessionID)));
-      // `context` and `generate` resolve their model before (or around) the hook,
-      // so neither can bind; owned generate/synthetic work uses admitWorkload.
-      owned.push(
-        await ctx.session.hook("generate", async (event) => {
-          const view = toSessionView(await ctx.session.get({ sessionID: event.sessionID }));
-          await guardResolvedModel(event.sessionID, view.agent, view.model, "generate");
-        }),
-      );
-      owned.push(
-        await ctx.session.hook("model.request", async (event) => {
-          // The model is already resolved here: only validate/commit, never re-stage.
-          await guardResolvedModel(
-            event.sessionID,
-            event.agent,
-            toSelection(event.model),
-            event.kind,
-          );
-        }),
-      );
+
       const rawSmallModel = state.config.rawIntent?.smallModel;
       const smallModelRole =
         rawSmallModel !== undefined && isRoleReference(rawSmallModel)
           ? rawSmallModel.trim().slice(ROLE_REFERENCE_PREFIX.length)
           : getBuiltInRoleBindings().opencodeDefaults.smallModel;
+      const auxiliary = createAuxiliaryService({
+        familyOf,
+        policy: resolveSettings,
+        session: {
+          create: importAuxiliaryChild,
+          switchModel: async ({ sessionID, model }) => {
+            await ctx.session.switchModel({ sessionID, model: toRef(model) });
+          },
+          generate: (input) => ctx.session.generate(input),
+        },
+        fallbackDirectory: ctx.location.directory,
+      });
+
       owned.push(
         await ctx.session.hook("title", async (event) => {
-          const title = await snapshots.auxiliary.title({
+          const title = await auxiliary.title({
             sessionID: event.sessionID,
             result: event.result,
             messages: extractTitleMessages(event.messages),
@@ -1440,59 +1029,49 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
           });
           if (title !== undefined && event.result !== title) {
             event.result = title;
-            // The host runs model.request before it checks `result`, so remember
-            // that this title provider dispatch is suppressed and must not refuse.
-            state.suppressedTitles.add(event.sessionID);
           }
         }),
       );
 
-      // One native event pump: creation provenance, explicit choice capture, config
-      // refresh, and family-deletion cleanup share a single subscription. Failures
-      // are contained per event so later updates still recover runtime health.
+      // Lazy settings birth on the first context hook of a session. The hook is
+      // fail-soft: resolution problems never fail a model request, and plugin
+      // consumers resolve independently anyway.
+      owned.push(
+        await ctx.session.hook("context", async (event) => {
+          try {
+            await ensureTransforms();
+            await resolveSettings(event.sessionID);
+          } catch {
+            // Never fail a model request from settings work.
+          }
+        }),
+      );
+
+      // One native event pump: creation reconciliation and config refresh share a
+      // single subscription. Failures are contained per event so later updates
+      // still recover runtime health.
       const pump = (async () => {
         try {
           for await (const event of ctx.event.subscribe({ signal: lifecycle.signal })) {
             try {
               const created = decodeSessionCreatedEvent(event);
               if (created !== undefined) {
-                state.creationModels.set(created.sessionID, created.model);
-                // Record the default in force at creation, not a later changed default.
-                state.creationDefaults.set(created.sessionID, state.nativeDefault);
-              }
-              const selected = decodeModelSelectedEvent(event);
-              if (selected !== undefined) {
-                const pluginSwitch = state.pluginSwitches.get(selected.sessionID);
-                if (
-                  pluginSwitch === undefined ||
-                  !sameModelSelection(selected.model, pluginSwitch)
-                ) {
-                  // The host emits this only for a real change, so it is a user choice.
-                  state.explicitSelections.set(selected.sessionID, selected.model);
-                  // A user choice ends the first-work tolerance: later bare-base
-                  // dispatches are genuine drift again.
-                  state.firstWorkPending.delete(selected.sessionID);
-                }
+                await reconcileCreatedChild(created);
               }
               if (isConfigUpdateEvent(event)) {
                 // Assign only after a fully successful read so a partially read
                 // invalid config never becomes the mutable current config that
-                // already bound families consult.
+                // consumers consult; a successful read also clears the last
+                // contained failure.
                 state.config = await readConfig(ctx.location.directory);
-                await refresh();
-                // A successful config event is the recovery signal.
                 state.configError = undefined;
               }
               if (event.type === "session.deleted" && isRecord(event.data)) {
                 const sessionID = event.data.sessionID;
                 if (typeof sessionID === "string") {
-                  await snapshots.removeFamily(sessionID);
-                  state.creationModels.delete(sessionID);
-                  state.creationDefaults.delete(sessionID);
-                  state.explicitSelections.delete(sessionID);
-                  state.pluginSwitches.delete(sessionID);
-                  state.suppressedTitles.delete(sessionID);
-                  state.firstWorkPending.delete(sessionID);
+                  familyRoots.delete(sessionID);
+                  bornRoots.delete(sessionID);
+                  reconciledChildren.delete(sessionID);
                 }
               }
             } catch (error) {
@@ -1508,7 +1087,24 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
       })();
       void pump;
 
-      await refresh();
+      await ensureEagerTransforms();
+
+      // One-shot legacy migration: convert existing family bindings into root
+      // metadata, then prune the legacy directories. Fail-soft: any write
+      // failure keeps the directories for the next start.
+      try {
+        await migrateFamilyBindings({
+          reader: fileLegacyBindingsReader({ scopeKey: ctx.location.project.id }),
+          readSession,
+          writeSettings: async (sessionID, settings) => {
+            const fresh = await readSession(sessionID);
+            const merged = mergeSettingsIntoMetadata(fresh.metadata, settings);
+            await ctx.session.update({ sessionID, metadata: merged });
+          },
+        });
+      } catch (error) {
+        diagnostic(`Legacy migration deferred: ${describePumpError(error).slice(0, 160)}`);
+      }
 
       // Read-only native context-inspection RPC: projects the registered tool
       // catalog and an allowlisted family/current-runtime policy for the TUI.
@@ -1522,7 +1118,7 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
             session: { get: (input) => ctx.session.get(input) },
           },
           {
-            policy: (sessionID) => snapshots.policy(sessionID),
+            policy: (sessionID) => resolveSettings(sessionID),
             currentConfig: () => state.config,
             ...(options?.now === undefined ? {} : { now: options.now }),
           },
@@ -1531,40 +1127,24 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
 
       return {
         runtime,
-        snapshots,
-        auxiliary: snapshots.auxiliary,
+        settings: settingsService,
+        auxiliary,
         client: () => runtime.client(),
         permissions: runtime.permissions,
         effectiveConfig: () => state.config,
-        async admitWorkload(request) {
-          // Supported pre-admission gateway for owned direct generate/synthetic:
-          // bind, materialize the qualified live variant, and switch before the
-          // caller triggers native model resolution.
-          const admissionConfig = await readConfig(request.directory);
-          state.config = admissionConfig;
-          const outcome = await snapshots.admitOwned(
-            {
-              ...request,
-              admissionConfig,
-            },
-            async (capture, selection) => {
-              await materializeBinding(capture, selection);
-              state.pluginSwitches.set(request.sessionID, selection);
-            },
-          );
-          if (outcome.status === "bound") {
-            await refresh();
-            state.pendingRegistrations.clear();
-          }
-          return outcome;
-        },
         async setRoleOverride(enabled) {
           state.roleOverride = enabled;
-          // Immediate visible override; the suffix registration at first work
-          // appends after post config transforms and keeps the final state ours.
+          // Immediate visible override: re-run the already-registered
+          // transforms with the new state instead of waiting for the first
+          // request, without stacking duplicate registrations.
           await ensureEagerTransforms();
+          await ctx.model.reload();
+          await ctx.agent.reload();
         },
-        refresh,
+        refresh: async () => {
+          await ctx.model.reload();
+          await ctx.agent.reload();
+        },
         lastConfigError: () => state.configError,
         release: releaseRuntime,
       };
@@ -1576,7 +1156,7 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
   })();
 }
 
-/** Acquire the shared native snapshot runtime for an actual `Plugin.Context`. */
+/** Acquire the shared native runtime for an actual `Plugin.Context`. */
 export async function acquireNativeSnapshotRuntime<
   Client extends NativeForkClient = OpenCodeClient,
 >(
@@ -1626,4 +1206,4 @@ async function releaseNativeSnapshotRuntime(key: string, entry: NativeRuntimeEnt
   const runtime = entry.runtime ?? (await entry.init);
   await runtime.release();
 }
-// END_BLOCK_NATIVE_SNAPSHOT_RUNTIME
+// END_BLOCK_RUNTIME_INITIALIZATION

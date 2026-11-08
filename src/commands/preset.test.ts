@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-PRESET - declarative named preset workflows.
 //   SCOPE: Built-in profile mappings, preset rendering, atomic role/profile application, no-opencode rewrite guarantees, section preservation, invalid-write safety, and CLI output paths.
-//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/commands/preset.ts, src/commands/registered-cli.test-helpers.ts, src/lib/opencode.ts, src/lib/rebind-request.ts, src/lib/vvoc-config.ts]
+//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/commands/preset.ts, src/commands/registered-cli.test-helpers.ts, src/lib/opencode.ts, src/lib/vvoc-config.ts]
 //   LINKS: [M-CLI-PRESET, M-ORCHESTRATION-PROFILES, V-M-CLI-PRESET]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.6.0 - Routed registered-CLI subprocess coverage through the shared bounded, retried spawn helper with a documented per-test budget.]
+//   LAST_CHANGE: [C-SESSION-OWNED-SETTINGS T-004 - Dropped the force-rebind marker coverage together with the removed preset --force/--session flags.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -22,7 +22,6 @@ import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { applyPreset, formatPreset, listConfiguredPresets, resolvePreset } from "./preset.js";
-import { listRebindRequests, requestRebind } from "../lib/rebind-request.js";
 import { readVvocConfig, resolvePaths } from "../lib/opencode.js";
 import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
 import { REGISTERED_CLI_TEST_TIMEOUT_MS, runRegisteredCli } from "./registered-cli.test-helpers.js";
@@ -606,7 +605,7 @@ describe("applyPreset", () => {
         expect(result.stdout).toContain("orchestration: kept (balanced)");
         expect(result.stdout).toContain(`Target: ${paths.vvocConfigPath}`);
         expect(result.stdout).toContain(
-          "On OpenCode v1, restart OpenCode to apply the changed roles or orchestration profile. On OpenCode v2, the config watcher applies them without a restart; running sessions stay anchored to their starting preset.",
+          "The config watcher applies changed roles or the orchestration profile to new sessions; running session families keep the settings they were born with until an explicit `vvoc session set` or `/vv-settings` change.",
         );
         const vvocConfig = await readVvocConfig(paths);
         expect(vvocConfig?.roles.default).toBe("zai-coding-plan/glm-5.3-flash#max");
@@ -666,25 +665,4 @@ describe("applyPreset", () => {
     },
     REGISTERED_CLI_TEST_TIMEOUT_MS,
   );
-});
-
-describe("preset force rebind request", () => {
-  test("writes a project-scoped marker only when forced", async () => {
-    const dataDir = await mkdtemp(join(tmpdir(), "vvoc-rebind-"));
-    try {
-      expect(await requestRebind({ force: false, directory: "/p", dataDir })).toBeUndefined();
-      const request = await requestRebind({
-        force: true,
-        directory: "/p",
-        sessionId: "ses_1",
-        dataDir,
-      });
-      expect(request?.sessionId).toBe("ses_1");
-      const live = await listRebindRequests({ dataDir });
-      expect(live).toHaveLength(1);
-      expect(live[0]?.directory.endsWith("/p")).toBe(true);
-    } finally {
-      await rm(dataDir, { recursive: true, force: true });
-    }
-  });
 });
