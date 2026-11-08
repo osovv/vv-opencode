@@ -387,7 +387,7 @@ describe("verifyDelegatedCheckpoint", () => {
   });
 
   test("records reviewer outcomes with call binding and rejects stale callbacks", async () => {
-    const { runId } = await startedGeneration("binding");
+    const { runId, reviewWorkItemId } = await startedGeneration("binding");
     recordCheckpointReviewerLaunch(store, {
       runId,
       checkpointId: "CHECKPOINT-R-001",
@@ -404,6 +404,15 @@ describe("verifyDelegatedCheckpoint", () => {
     expect(mismatch.ok).toBe(false);
     if (!mismatch.ok) expect(mismatch.errorCode).toBe("CALLBACK_MISMATCH");
 
+    // A live launch keeps the reviewer in flight on the linked review item,
+    // so a relaunch attempt is still rejected while the reviewer works.
+    const tracked = store.beginTrackedLaunch({
+      sessionId: SESSION,
+      workItemId: reviewWorkItemId,
+      agent: "vv-code-reviewer",
+    });
+    expect(tracked.ok).toBe(true);
+
     const duplicate = recordCheckpointReviewerLaunch(store, {
       runId,
       checkpointId: "CHECKPOINT-R-001",
@@ -412,6 +421,61 @@ describe("verifyDelegatedCheckpoint", () => {
     });
     expect(duplicate.ok).toBe(false);
     if (!duplicate.ok) expect(duplicate.errorCode).toBe("ALREADY_LAUNCHED");
+  });
+
+  test("releases a provably dead reviewer binding after a transport-failed launch (issue #43)", async () => {
+    const { runId, reviewWorkItemId } = await startedGeneration("dead-binding");
+    recordCheckpointReviewerLaunch(store, {
+      runId,
+      checkpointId: "CHECKPOINT-R-001",
+      reviewer: "code",
+      callId: "rv-dead",
+    });
+    const tracked = store.beginTrackedLaunch({
+      sessionId: SESSION,
+      workItemId: reviewWorkItemId,
+      agent: "vv-code-reviewer",
+    });
+    expect(tracked.ok).toBe(true);
+    // The launch dies at transport: the tracked launch reverts the round and
+    // the reviewer leaves inFlightReviewers, but the checkpoint binding must
+    // not stay dead forever.
+    const reverted = store.revertReviewerLaunch({
+      sessionId: SESSION,
+      workItemId: reviewWorkItemId,
+      agent: "vv-code-reviewer",
+    });
+    expect(reverted.ok).toBe(true);
+
+    const relaunched = recordCheckpointReviewerLaunch(store, {
+      runId,
+      checkpointId: "CHECKPOINT-R-001",
+      reviewer: "code",
+      callId: "rv-fresh",
+    });
+    expect(relaunched.ok).toBe(true);
+
+    const recorded = recordCheckpointReviewerResult(store, {
+      runId,
+      checkpointId: "CHECKPOINT-R-001",
+      reviewer: "code",
+      callId: "rv-fresh",
+      status: "PASS",
+    });
+    expect(recorded.ok).toBe(true);
+    if (recorded.ok) expect(recorded.roundComplete).toBe(true);
+
+    // A completed review still rejects a relaunch of the same role (the
+    // original guard order — ALREADY_LAUNCHED before ALREADY_RECORDED — is
+    // preserved when a result is already recorded).
+    const afterResult = recordCheckpointReviewerLaunch(store, {
+      runId,
+      checkpointId: "CHECKPOINT-R-001",
+      reviewer: "code",
+      callId: "rv-3",
+    });
+    expect(afterResult.ok).toBe(false);
+    if (!afterResult.ok) expect(afterResult.errorCode).toBe("ALREADY_LAUNCHED");
   });
 
   test("FAIL settles the checkpoint as failed even after the review item closes", async () => {

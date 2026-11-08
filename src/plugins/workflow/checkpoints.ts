@@ -927,11 +927,37 @@ export function recordCheckpointReviewerLaunchInStore(
     };
   }
   if (active.review.reviewerCallIds[input.reviewer]) {
-    return {
-      ok: false,
-      errorCode: "ALREADY_LAUNCHED",
-      message: `ALREADY_LAUNCHED: ${input.reviewer} already launched for generation ${active.review.generation}`,
-    };
+    // A reviewer launch that dies at transport (a host-terminal error before
+    // any protocol report) used to leave its callId bound here forever: the
+    // tracked launch reverts the linked review item's round (the role leaves
+    // inFlightReviewers) but nothing released this binding, so the slot could
+    // never be relaunched — verify reports "incomplete" forever, recover
+    // refuses while the generation counts as live, and start refuses
+    // ALREADY_IN_REVIEW (issue #43). Release a provably dead binding: no
+    // result recorded for the role AND the linked review item's active round
+    // has the role out of flight. A live relaunch (role still in flight) and
+    // a completed review (result recorded) still reject exactly as before.
+    const linkedRecord = [...data.records.values()].find(
+      (entry) =>
+        entry.sessionId === active.run.sessionId &&
+        entry.workItemId === active.review.reviewWorkItemId,
+    );
+    const roleInFlight = Boolean(
+      linkedRecord?.currentRound &&
+      linkedRecord.currentRound.status === "active" &&
+      Array.isArray(linkedRecord.currentRound.inFlightReviewers) &&
+      linkedRecord.currentRound.inFlightReviewers.includes(input.reviewer),
+    );
+    const resultRecorded = Boolean(active.review.results[input.reviewer]);
+    if (!roleInFlight && !resultRecorded) {
+      delete active.review.reviewerCallIds[input.reviewer];
+    } else {
+      return {
+        ok: false,
+        errorCode: "ALREADY_LAUNCHED",
+        message: `ALREADY_LAUNCHED: ${input.reviewer} already launched for generation ${active.review.generation}`,
+      };
+    }
   }
   if (active.review.results[input.reviewer]) {
     return {
