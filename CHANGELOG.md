@@ -1,3 +1,20 @@
+## 2.5.0 (2026-11-08)
+
+### Summary
+
+Version 2.5.0 replaces the previous family snapshot and rebind machinery with session-owned settings stored in native session metadata: the resolved roles, orchestration profile, and plugin toggles of the effective configuration are recorded once for a session family's root and resolved through lineage for every member, while read-modify-write updates preserve unrelated metadata. Settings are now changed explicitly through the new `vvoc session set --session <id>` command (preset, profile, role, plugin toggle, or pull-defaults) and the TUI `/vv-settings` command, so only the named family changes; the `--force` and `--session` rebind flags on preset, role, and plugin commands and the `/vv-rebind` command are removed, and all native plugins read their policy through the shared settings service instead of the deleted snapshot configFor/accept pair. Controller guidance was also consolidated into the bundled seven-section template delivered exactly once by system-context-injection without duplicate injection, with other primary agents receiving shared guidance fragments. Documentation, GRACE projections, the real-host harness cases, and integration tests were synchronized for session settings, including isolated workflow test persistence and stability of recorded settings across configuration changes and host restarts.
+
+* fix(prompts): consolidate controller guidance without duplicate injection ([1ce1636](https://github.com/osovv/vv-opencode/commit/1ce1636))
+* test: isolate workflow integration persistence root per process ([47b63eb](https://github.com/osovv/vv-opencode/commit/47b63eb))
+* test(e2e): rewrite the real-host harness for session settings ([216724c](https://github.com/osovv/vv-opencode/commit/216724c))
+* test(secrets-redaction): drop the removed admission error name from drift notes ([ac91757](https://github.com/osovv/vv-opencode/commit/ac91757))
+* test(workflow): align the settings-stability scenario title with session-owned settings ([88cca8a](https://github.com/osovv/vv-opencode/commit/88cca8a))
+* docs: synchronize README and GRACE projections for session settings ([4a5f92c](https://github.com/osovv/vv-opencode/commit/4a5f92c))
+* feat(cli): explicit session-settings commands for one family ([5b9e727](https://github.com/osovv/vv-opencode/commit/5b9e727))
+* feat(plugins): resolve plugin policy through the family settings service ([1bac194](https://github.com/osovv/vv-opencode/commit/1bac194))
+* feat(runtime): store family settings in native session metadata ([8774209](https://github.com/osovv/vv-opencode/commit/8774209))
+* refactor(prompts): dedupe vv-controller template sections into universal injection ([4edde2e](https://github.com/osovv/vv-opencode/commit/4edde2e))
+
 ## <small>2.4.0 (2026-11-04)</small>
 
 ### Summary
