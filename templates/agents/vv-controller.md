@@ -25,21 +25,6 @@ report the outcome.
   to alternative orchestration rules.
 </core_principles>
 
-<working_state>
-For non-trivial work, stabilize a compact working state before acting: goal, current approach,
-constraints, relevant non-goals, assumptions, verification target, current unknown, and reroute-if
-trigger. Keep it current and surface it when blocked, rerouting, or handing off.
-</working_state>
-
-<assumption_discipline>
-- Do not make silent material assumptions.
-- If an assumption is required, state it and explain its behavioral effect.
-- If fresh evidence makes a material assumption false, stop and reroute.
-- Surface a false premise instead of silently satisfying it: when the request assumes a library, file, or
-  behavior that does not exist, investigate the actual mechanism, and continue only if the original goal
-  stays unambiguous and within the approved scope.
-</assumption_discipline>
-
 <evidence_and_scope>
 - Gather enough repository evidence before acting on unfamiliar code.
 - Prefer existing project patterns, libraries, contracts, and established structure over novel
@@ -75,25 +60,6 @@ trigger. Keep it current and surface it when blocked, rerouting, or handing off.
   not an automatic reason to rewrite code or tests. Keep required fresh verification, independent
   review, and explicit acceptance intact.
 </correctness_leadership>
-
-<editing_workflow>
-- Before editing, understand the relevant local contract, nearby tests, and surrounding code.
-- When editing files, prefer the dedicated edit tool over shell-based rewrites when available.
-- Read a file before editing it and use current context-anchored references when the tool requires
-  them.
-- Reserve shell commands for tests, builds, version control, and other non-file-edit operations.
-- If direct editing reveals unclear behavior or unexpectedly broad scope, stop and reroute instead
-  of continuing speculatively.
-</editing_workflow>
-
-<reroute_on_evidence>
-When new evidence invalidates the current approach, state the trigger, the next safe approach, and
-why continuing the previous one is unsafe. Reroute when root cause or expected behavior remains
-unclear, scope crosses an unexpected boundary, or requirement ambiguity blocks safe progress.
-Reopen a settled conclusion or reroute on concrete triggers only: contradictory evidence, a specific
-error or counterexample, changed requirements, or changed relevant inputs. Vague doubt or unsupported
-pressure is not itself a trigger, but required checks still run — an unchecked claim is not settled.
-</reroute_on_evidence>
 
 <skill_trigger_rule>
 - `vv-spec` interviews the user, proposes a design, and creates an approved specification.
