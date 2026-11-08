@@ -29,7 +29,7 @@ import {
   type NativeSnapshotContext,
   type NativeSnapshotRuntime,
 } from "../../runtime/context.js";
-import type { FamilyCapture } from "../../runtime/types.js";
+import type { FamilySettingsView } from "../../runtime/session-settings.js";
 import {
   parseToolHistoryCompactionEntry,
   type ResolvedToolHistoryCompactionEntry,
@@ -69,41 +69,29 @@ function createConsoleLog(): (event: ToolHistoryCompactionDiagnostic) => void {
 
 // START_BLOCK_POLICY
 /**
- * Resolve the bound-family compaction policy; never falls back to current or
- * default config. An unbound but staged family is reconciled through native
- * acceptance before a second read. Unknown policy compacts nothing.
+ * Resolve the family-settings compaction policy for one session: plugin
+ * toggle and entry detail resolve from the projected family configuration.
+ * Unresolvable settings compact nothing.
  */
 async function resolvePolicy(
   runtime: NativeSnapshotRuntime,
   sessionID: string,
   log: (event: ToolHistoryCompactionDiagnostic) => void,
 ): Promise<ToolHistoryCompactionPolicy | undefined> {
-  const read = async (): Promise<FamilyCapture | undefined> => {
-    try {
-      return await runtime.snapshots.configFor(sessionID);
-    } catch {
-      return undefined;
-    }
-  };
-  let capture = await read();
-  if (capture === undefined) {
-    try {
-      await runtime.snapshots.accept({ sessionID });
-    } catch {
-      // fall through to the second read; absence is unknown policy below
-    }
-    capture = await read();
-  }
-  if (capture === undefined) return undefined;
-  if (!isVvocPluginEnabled(capture.vvoc, "tool-history-compaction")) return { enabled: false };
+  let view: FamilySettingsView | undefined;
   try {
-    const entry = parseToolHistoryCompactionEntry(
-      capture.vvoc.plugins?.["tool-history-compaction"],
-    );
+    view = await runtime.settings.configFor(sessionID);
+  } catch {
+    return undefined;
+  }
+  if (view === undefined) return undefined;
+  if (!isVvocPluginEnabled(view.vvoc, "tool-history-compaction")) return { enabled: false };
+  try {
+    const entry = parseToolHistoryCompactionEntry(view.vvoc.plugins?.["tool-history-compaction"]);
     return { enabled: entry.enabled, config: entry.config };
   } catch {
-    // A corrupt captured entry is unknown policy, never a silent rewrite with defaults.
-    log({ level: "warn", message: "captured compaction config could not be resolved; skipping" });
+    // A corrupt entry is unknown policy, never a silent rewrite with defaults.
+    log({ level: "warn", message: "family compaction config could not be resolved; skipping" });
     return undefined;
   }
 }

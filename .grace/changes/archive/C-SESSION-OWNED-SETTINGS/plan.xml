@@ -1,0 +1,250 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-SESSION-OWNED-SETTINGS>
+    <IntentSummary>Replace the family snapshot subsystem with session-owned settings in native session metadata. One new resolver module owns the narrow settings record (decode, birth from the effective config, lineage resolution, read-modify-write projection, migration); the shared native runtime drops the bind/guard/variant machinery and exposes the settings service; every plugin consumer switches from snapshots.configFor/accept to settings.configFor; explicit change arrives through /vv-settings in the TUI and `vvoc session set` in the CLI; the snapshot store, snapshot service, rebind markers, force flags, and /vv-rebind are deleted with their tests; README and the GRACE graph/verification projections are synchronized. Approved: the approved factory task is recorded as the owner authorization for both spec and plan.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-NATIVE-RUNTIME</Value><Value>V-M-NATIVE-RUNTIME</Value>
+        <Value>src/runtime/context.ts</Value>
+        <Value>src/runtime/snapshots.ts</Value>
+        <Value>src/runtime/snapshot-store.ts</Value>
+        <Value>src/runtime/snapshot-config.ts</Value>
+        <Value>src/lib/rebind-request.ts</Value>
+        <Value>src/tui/rebind/plugin.ts</Value>
+        <Value>src/plugins/workflow.integration.test.ts</Value>
+        <Value>README.md</Value>
+      </MustExist>
+      <MustContain><File>src/runtime/types.ts</File><Text>SnapshotAdmissionError</Text></MustContain>
+      <MustContain><File>src/runtime/context.ts</File><Text>guardResolvedModel</Text></MustContain>
+      <MustContain><File>src/plugins/workflow.integration.test.ts</File><Text>a bound family keeps its captured profile while new work sees the changed policy</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/runtime/model-registry.test.ts</Command>
+        <Command>bun run typecheck</Command>
+      </MustPassCommand>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify><Module>M-NATIVE-RUNTIME</Module></MustVerify>
+      <MustContain><File>src/runtime/session-settings.ts</File><Text>vvoc:settings</Text></MustContain>
+      <MustContain><File>src/runtime/session-settings.ts</File><Text>export interface FamilySettings</Text></MustContain>
+      <MustContain><File>src/runtime/context.ts</File><Text>sessionSettings</Text></MustContain>
+      <MustContain><File>src/commands/session.ts</File><Text>pull-defaults</Text></MustContain>
+      <MustContain><File>src/tui/settings/plugin.ts</File><Text>vv-settings</Text></MustContain>
+      <MustContain><File>README.md</File><Text>/vv-settings</Text></MustContain>
+      <MustNotContain><File>src/runtime/context.ts</File><Text>guardResolvedModel</Text></MustNotContain>
+      <MustNotContain><File>src/runtime/types.ts</File><Text>SnapshotAdmissionError</Text></MustNotContain>
+      <MustNotExist>
+        <Value>src/runtime/snapshots.ts</Value>
+        <Value>src/runtime/snapshot-store.ts</Value>
+        <Value>src/lib/rebind-request.ts</Value>
+        <Value>src/tui/rebind/plugin.ts</Value>
+      </MustNotExist>
+      <MustPassCommand>
+        <Command>bash -c "grep -rE 'SnapshotAdmissionError|SnapshotUnboundError|SnapshotStoreError' src/ &gt;/dev/null 2&gt;&amp;1 &amp;&amp; exit 1 || exit 0"</Command>
+        <Command>bun test src/runtime/session-settings.test.ts</Command>
+        <Command>bun test src/plugins/workflow.integration.test.ts</Command>
+        <Command>bun run check</Command>
+        <Command>bun run build</Command>
+        <Command>grace lint --path .</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <PlanningNotes>
+      <Note>Approval provenance: the approved factory task authorizes translating this bundle to approved and executing it; recorded per the GRACE approval rule. No separate user approval step remains.</Note>
+      <Note>Metadata semantics: session.update REPLACES the whole metadata map, so the only write path is read-modify-write of the `vvoc:settings` key; auxiliary imports create new sessions and never count as metadata writes.</Note>
+      <Note>Settings record format is fixed: {version:1, preset?, roles, profile, plugins} with resolved values; plugin toggles keep resolved booleans only, so object-valued plugin entries (schedules, modes) always resolve from the live configuration.</Note>
+      <Note>Projection semantics: the consumer-facing projected config deep-clones the live effective config and overrides roles, orchestration.profile, and the plugin toggle booleans governed by the family record; credentials never come from metadata.</Note>
+      <Note>Role application after the change: the family root model is never switched or validated; children apply roles at creation (agent editor transforms stay creation-level; host-created children get a one-shot creation reconciliation switch from family settings; auxiliary children carry the model in the import payload as today). The model-roles toggle gates all role application.</Note>
+      <Note>Race discipline: inside the runtime, per-family RMW serializes through the existing coordination family lock; the birth path caches the born fact per session id in-process; CLI/TUI perform a single RMW and the window is documented.</Note>
+      <Note>Migration: runs at first runtime acquisition per project scope; converts each stored binding into the root's metadata for live roots, skips dead roots, deletes the scope's bindings/snapshots/rebind directories only after a fully successful pass, and keeps them for retry on any failure.</Note>
+      <Note>Host pin: the e2e harness pin follows docs/host-updates.md; if the 2.2.6 binary cannot be verified live in this environment the change records an explicit residual note instead of a fabricated hash, and the harness keeps the newest verified pin.</Note>
+      <KnownFlake>Known-flakes item 3: bun run check on an unpatched checkout failed at the grace markup gate. All markup edits are in scope here, so the gate must pass on the finished tree; judged only after the gate finishes.</KnownFlake>
+      <Note>No final-review obligation is declared by the source; the factory verify stage reviews the result. GRACE lifecycle commands stay external and never nest inside plan commands.</Note>
+    </PlanningNotes>
+    <DurableScope>
+      <GraphAnchors>
+        <M-NATIVE-RUNTIME />
+        <M-E2E-V2-HARNESS />
+        <M-PLUGIN-MODEL-ROLES />
+        <M-CLI-PRESET />
+        <M-CLI-ROLE />
+        <M-CLI-PLUGIN-TOGGLE />
+        <M-CLI-COMMANDS />
+        <M-PLUGIN-CONTEXT-TUI />
+        <M-PLUGIN-WORKFLOW />
+        <M-PLUGIN-GUARDIAN />
+        <M-PLUGIN-HASHLINE-EDIT />
+        <M-PLUGIN-SECRETS-REDACTION />
+        <M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-NATIVE-RUNTIME />
+        <V-M-E2E-V2-HARNESS />
+        <V-M-PLUGIN-MODEL-ROLES />
+        <V-M-CLI-PRESET />
+        <V-M-CLI-ROLE />
+        <V-M-CLI-PLUGIN-TOGGLE />
+        <V-M-CLI-COMMANDS />
+        <V-M-PLUGIN-CONTEXT-TUI />
+        <V-M-PLUGIN-WORKFLOW />
+        <V-M-PLUGIN-GUARDIAN />
+        <V-M-PLUGIN-HASHLINE-EDIT />
+        <V-M-PLUGIN-SECRETS-REDACTION />
+        <V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+      </VerificationAnchors>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>src/runtime/session-settings.ts</File>
+      <File>src/runtime/session-settings.test.ts</File>
+      <File>src/runtime/context.ts</File>
+      <File>src/runtime/context.test.ts</File>
+      <File>src/runtime/types.ts</File>
+      <File>src/runtime/snapshot-config.ts</File>
+      <File>src/runtime/snapshot-config.test.ts</File>
+      <File>src/runtime/auxiliary.ts</File>
+      <File>src/runtime/auxiliary.test.ts</File>
+      <File>src/runtime/model-registry.ts</File>
+      <File>src/runtime/model-registry.test.ts</File>
+      <File>src/runtime/context-inspection.ts</File>
+      <File>src/runtime/context-inspection.test.ts</File>
+      <File>src/runtime/snapshots.ts</File>
+      <File>src/runtime/snapshots.test.ts</File>
+      <File>src/runtime/snapshot-store.ts</File>
+      <File>src/runtime/snapshot-store.test.ts</File>
+      <File>src/lib/rebind-request.ts</File>
+      <File>src/lib/rebind-request.test.ts</File>
+      <File>src/tui.tsx</File>
+      <File>src/tui/settings/plugin.ts</File>
+      <File>src/tui/settings/plugin.test.ts</File>
+      <File>src/tui/rebind/plugin.ts</File>
+      <File>src/tui/rebind/plugin.test.ts</File>
+      <File>src/cli.ts</File>
+      <File>src/commands/session.ts</File>
+      <File>src/commands/session.test.ts</File>
+      <File>src/commands/preset.ts</File>
+      <File>src/commands/preset.test.ts</File>
+      <File>src/commands/role.ts</File>
+      <File>src/commands/role.test.ts</File>
+      <File>src/commands/plugin-toggle.ts</File>
+      <File>src/commands/plugin-toggle.test.ts</File>
+      <File>src/plugins/analytics/index.ts</File>
+      <File>src/plugins/guardian/index.ts</File>
+      <File>src/plugins/hashline-edit/index.ts</File>
+      <File>src/plugins/model-roles/index.ts</File>
+      <File>src/plugins/peak-hours/index.ts</File>
+      <File>src/plugins/secrets-redaction/index.ts</File>
+      <File>src/plugins/spec-guard/index.ts</File>
+      <File>src/plugins/system-context-injection/index.ts</File>
+      <File>src/plugins/tool-history-compaction/index.ts</File>
+      <File>src/plugins/web-tools/index.ts</File>
+      <File>src/plugins/workflow/index.ts</File>
+      <File>src/plugins/workflow.integration.test.ts</File>
+      <File>src/plugins/model-roles.integration.test.ts</File>
+      <File>src/plugins/guardian.integration.test.ts</File>
+      <File>src/plugins/system-context-injection.integration.test.ts</File>
+      <File>src/plugins/tool-history-compaction.integration.test.ts</File>
+      <File>src/plugins/web-tools.integration.test.ts</File>
+      <File>src/plugins/hashline-edit.integration.test.ts</File>
+      <File>src/plugins/telegram.integration.test.ts</File>
+      <File>scripts/e2e-v2/cases.ts</File>
+      <File>scripts/e2e-v2/core.ts</File>
+      <File>scripts/e2e-v2/host.ts</File>
+      <File>scripts/e2e-v2/full-cases.ts</File>
+      <File>src/hosts.json</File>
+      <File>README.md</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/main.xml</File>
+      <File>.grace/changes/active/C-SESSION-OWNED-SETTINGS/spec.xml</File>
+      <File>.grace/changes/active/C-SESSION-OWNED-SETTINGS/plan.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Build the session-settings module: record format, decode, birth, lineage resolution, RMW projection, migration.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>src/runtime/session-settings.ts defines the versioned FamilySettings record, strict decode (invalid input yields undefined plus a bounded reason), settingsFromConfig from the effective runtime config, the projected consumer view (live config with family-governed fields overridden, credentials only from live), lineage-to-root resolution ported from resolveSessionFamily with cycle/depth guards, and the RMW helper that merges only the `vvoc:settings` key into the full metadata map.</Criterion>
+          <Criterion>The migration converter reads a bindings scope directory, projects each stored snapshot into the narrow record, RMW-writes it into live root sessions, skips dead roots, and removes the bindings/snapshots/rebind directories only after full success.</Criterion>
+          <Criterion>Colocated tests cover: decode acceptance/rejection, from-config values, projection merge semantics (foreign live fields survive, toggles override), RMW preserving a foreign metadata key, lineage cycle/depth refusal, and migration one-shot with second-run no-op plus dead-root skip and failure retention.</Criterion>
+          <Criterion>Module contract, map, and change summary anchors are accurate.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/runtime/session-settings.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Rewire the shared native runtime onto the settings service and delete the guard machinery.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>The native snapshot context seam widens session.update to accept metadata and keeps the compile-time Plugin.Context proof.</Criterion>
+          <Criterion>The runtime exposes a settings service (familyOf, configFor with lazy birth for roots, resolve, explicit update, auxiliary) and drops: bindFor, guardResolvedModel, prompt/generate/model.request guard hooks, explicitSelections/pluginSwitches/firstWorkPending/creationModels/creationDefaults/suppressedTitles state, variant materialization and pending registrations, admitOwned, rebind, removeFamily wiring, and the snapshot-service registry.</Criterion>
+          <Criterion>A one-shot creation reconciliation switches host-created children to the family's role model when role overriding is enabled, once per child, without any later validation; the title auxiliary path resolves roles from family settings; the config watcher keeps refreshing the live config; session deletion keeps only in-process cache hygiene.</Criterion>
+          <Criterion>Migration runs once at first runtime acquisition per project scope, fail-soft.</Criterion>
+          <Criterion>src/runtime/types.ts drops the snapshot vocabulary that loses all consumers (SnapshotService, SnapshotStore, StagedCandidate, AdmissionOutcome, accepted-input helpers, guard error classes) and adds the settings types; snapshot-config.ts keeps effectiveRuntimeConfig/parseRoleSelections/agent bindings helpers and drops the behaviour projection/hash/provenance/watch code; model-registry.ts drops variant registration and qualification helpers that lose consumers.</Criterion>
+          <Criterion>Deleted files: src/runtime/snapshots.ts{,.test.ts}, src/runtime/snapshot-store.ts{,.test.ts}, src/lib/rebind-request.ts{,.test.ts}; grep for SnapshotAdmissionError|SnapshotUnboundError|SnapshotStoreError|firstWorkPending in src/ is empty.</Criterion>
+          <Criterion>context.test.ts and auxiliary.test.ts reflect the new surface; module anchors stay accurate.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/runtime</Command>
+          <Command>bash -c "grep -rE 'SnapshotAdmissionError|SnapshotUnboundError|SnapshotStoreError|firstWorkPending' src/ &gt;/dev/null 2&gt;&amp;1 &amp;&amp; exit 1 || exit 0"</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Move all plugin consumers onto the settings resolver.</Title>
+        <DependsOn>T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>workflow, system-context-injection, analytics, guardian, hashline-edit, peak-hours, secrets-redaction, spec-guard, tool-history-compaction, web-tools, model-roles resolve family policy through runtime.settings.configFor (one call, no accept retry); the workflow WorkflowRuntime surface narrows to the settings service.</Criterion>
+          <Criterion>The rewritten workflow integration test proves AC-01: a session whose family record carries profile X keeps resolving X after the underlying config flips to Y, and a fresh session resolves Y.</Criterion>
+          <Criterion>context-inspection projects the settings view through the same allowlisted policy DTO with value-free errors; its tests cover the new source.</Criterion>
+          <Criterion>model-roles keeps setRoleOverride as the role-application toggle; the model-roles integration suite is rewritten for creation-level role application (editor transforms plus one-shot child reconciliation) with the guard/bind scenarios removed or converted to birth/resolve coverage.</Criterion>
+          <Criterion>Other plugin integration suites that inject fake snapshot runtimes are updated to the settings surface without behavior regression.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/plugins/workflow.integration.test.ts src/plugins/model-roles.integration.test.ts</Command>
+          <Command>bun test src/plugins/guardian.integration.test.ts src/plugins/system-context-injection.integration.test.ts src/plugins/tool-history-compaction.integration.test.ts src/plugins/web-tools.integration.test.ts src/plugins/hashline-edit.integration.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Explicit change commands: /vv-settings TUI command and vvoc session set CLI; remove --force and rebind plumbing.</Title>
+        <DependsOn>T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>src/tui/settings/plugin.ts registers /vv-settings beside /context using the existing slot/keymap pattern: preset | profile | role | plugin toggle actions plus a pull-current-defaults action, writing through the running runtime's settings update for the active session's family root, one bounded toast per outcome, disabled without an open session.</Criterion>
+          <Criterion>src/commands/session.ts implements `vvoc session set --session &lt;id&gt;` with --preset | --profile | --role id=model | --role unset:id | --plugin name=on|off | --pull-defaults; it discovers the running host through Service.discover/Service.headers, resolves lineage to the root, and performs one RMW; no live host is a clear error. Registered in src/cli.ts.</Criterion>
+          <Criterion>preset.ts, role.ts, plugin-toggle.ts lose --force/--session flags and all rebind-marker calls; preset/role tests and plugin-toggle tests are updated.</Criterion>
+          <Criterion>src/tui.tsx drops the rebind facade and registers the settings command; tui/rebind/* is deleted with its test; new command tests cover the isolation property (only the named family changes) and the RMW foreign-key property.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/commands/session.test.ts src/commands/preset.test.ts src/commands/role.test.ts src/commands/plugin-toggle.test.ts</Command>
+          <Command>bun test src/tui/settings/plugin.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Rewrite the e2e-v2 harness binding surface for session settings and settle the host pin.</Title>
+        <DependsOn>T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>cases.ts binding cases and core.ts REPLAY_RESTART assert the settings/policy projection instead of capture.snapshotId and family-qualified variants; rebind wording becomes explicit settings change; parity rows are renamed consistently.</Criterion>
+          <Criterion>bun test scripts/e2e-v2.test.ts passes.</Criterion>
+          <Criterion>The host pin follows docs/host-updates.md: either fresh live-host evidence for 2.2.6 (hosts.json verified update plus harness constants) or a written residual note in the change summary explaining exactly why the pin update is not verifiable in this environment; no fabricated hash.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test scripts/e2e-v2.test.ts</Command>
+        </Verification>
+      </T-005>
+      <T-006>
+        <Title>Synchronize README and GRACE projections, run the full gates, commit.</Title>
+        <DependsOn>T-001,T-002,T-003,T-004,T-005</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>README: the ModelRolesPlugin row, the role-resolution paragraph, the binding/rebind/--force//vv-rebind contract paragraph, and the startup-snapshot note are rewritten for session-owned settings including the new /vv-settings and `vvoc session set` commands.</Criterion>
+          <Criterion>.grace/graph/main.xml and .grace/verification/main.xml describe the settings resolver, the deleted machinery, the new command surfaces, and the rewritten scenarios.</Criterion>
+          <Criterion>bun run check, bun run build, grace lint --path ., grace status --path . all pass with fresh output; git status contains only intended files; work committed as conventional commits on the task branch without pushing.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run check</Command>
+          <Command>bun run build</Command>
+          <Command>grace lint --path .</Command>
+          <Command>grace status --path .</Command>
+        </Verification>
+      </T-006>
+    </ImplementationPlan>
+  </C-SESSION-OWNED-SETTINGS>
+</GraceChangePlan>

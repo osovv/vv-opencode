@@ -1,9 +1,9 @@
 // FILE: src/runtime/context.test.ts
-// VERSION: 1.1.0
+// VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify context-identity native runtime and family-binding-service acquisition, per-lease idempotent release, distinct-context isolation at one location, registration teardown/reacquisition, and disposed-state safety.
-//   SCOPE: Deterministic fixture-host assertions for the runtime and family-binding registries; no real host, network, or V1 client.
-//   DEPENDS: [bun:test, src/runtime/context.js, src/runtime/snapshots.js, src/runtime/types.js]
+//   PURPOSE: Verify context-identity native runtime acquisition, per-lease idempotent release, distinct-context isolation at one location, registration teardown/reacquisition, disposed-state safety, and agent-binding recomputation coherence.
+//   SCOPE: Deterministic fixture-host assertions for the runtime registry; no real host, network, or V1 client.
+//   DEPENDS: [bun:test, src/runtime/context.js, src/lib/vvoc-config.js, src/runtime/types.js]
 //   LINKS: [M-NATIVE-RUNTIME, V-M-NATIVE-RUNTIME]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -15,21 +15,17 @@
 //   NativeHandler - Shape of one registered native RPC handler.
 //   makeLocation - Build a structural runtime location fixture.
 //   FakeNativeHost - In-memory native host double that records discovery, registration, and client construction.
-//   MemoryBindingStore - In-memory binding-store double for family-binding sharing tests.
-//   createSnapshotDeps - Minimal injectable snapshot-service dependencies.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SNAPSHOT-ANCHORING-REDESIGN T-004/T-005 - Updated runtime acquisition coverage for durable family-binding services and retired staged admission.]
+//   LAST_CHANGE: [C-SESSION-OWNED-SETTINGS T-002 - Dropped the snapshot-service registry coverage; settings-service sharing is covered by the model-roles integration suite.]
+//   PREVIOUS: [C-SNAPSHOT-ANCHORING-REDESIGN T-004/T-005 - Updated runtime acquisition coverage for durable family-binding services and retired staged admission.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import type { Plugin } from "@opencode/plugin";
-import { acquireRuntime, acquireSnapshotService, rebuildAgentBindings } from "./context.js";
+import { acquireRuntime, rebuildAgentBindings } from "./context.js";
 import { createDefaultVvocConfig } from "../lib/vvoc-config.js";
-import { behaviourContentHash, type BehaviourProjection } from "./snapshot-config.js";
-import type { SnapshotServiceDeps } from "./snapshots.js";
-import type { FamilyBindingRecord } from "./snapshot-store.js";
 import type { EffectiveRuntimeConfig } from "./types.js";
 import {
   RuntimeDisposedError,
@@ -252,120 +248,6 @@ describe("acquireRuntime", () => {
     await expect(lease.runtime.client()).rejects.toBeInstanceOf(RuntimeDisposedError);
     await lease.release();
     expect(host.disposeCalls).toBe(1);
-  });
-});
-
-class MemoryBindingStore {
-  readonly snapshots = new Map<string, BehaviourProjection>();
-  readonly bindings = new Map<string, FamilyBindingRecord>();
-
-  async writeSnapshot(projection: BehaviourProjection) {
-    const hash = behaviourContentHash(projection);
-    this.snapshots.set(hash, projection);
-    return hash;
-  }
-  async readSnapshot(hash: string) {
-    return this.snapshots.get(hash);
-  }
-  async writeBinding(binding: FamilyBindingRecord) {
-    this.bindings.set(binding.familyId, binding);
-  }
-  async readBinding(familyId: string) {
-    return this.bindings.get(familyId);
-  }
-  async removeBinding(familyId: string) {
-    this.bindings.delete(familyId);
-  }
-  async listBindings() {
-    return [...this.bindings.values()];
-  }
-  async listSnapshots() {
-    return [...this.snapshots.keys()];
-  }
-  async removeSnapshot(hash: string) {
-    this.snapshots.delete(hash);
-  }
-  async countBindings() {
-    const counts = new Map<string, number>();
-    for (const binding of this.bindings.values()) {
-      counts.set(binding.snapshotHash, (counts.get(binding.snapshotHash) ?? 0) + 1);
-    }
-    return counts;
-  }
-}
-
-function createSnapshotDeps(store: MemoryBindingStore): SnapshotServiceDeps {
-  return {
-    store,
-    location: {
-      directory: "/workspace/shared",
-      projectID: "project-1",
-      canonical: "/workspace/shared",
-    },
-    loadConfig: async () => ({
-      roles: { default: "prov/m1" },
-      agentRoles: { build: "default" },
-      vvoc: createDefaultVvocConfig(),
-    }),
-    readSession: async (sessionID) =>
-      sessionID === "ses_root"
-        ? { id: sessionID, locationDirectory: "/workspace/shared" }
-        : undefined,
-    readSessionModel: async () => undefined,
-    switchModel: async () => undefined,
-    auxiliarySession: {
-      create: async () => ({ sessionID: "ses_aux" }),
-      switchModel: async () => undefined,
-      generate: async () => ({ text: "x" }),
-    },
-  };
-}
-
-describe("acquireSnapshotService", () => {
-  test("shares one snapshot service for the same context and dependency instance", async () => {
-    const host = new FakeNativeHost();
-    const context = host.createContext(makeLocation("/workspace/shared"));
-    const deps = createSnapshotDeps(new MemoryBindingStore());
-
-    const first = acquireSnapshotService(context, deps);
-    const second = acquireSnapshotService(context, deps);
-    expect(second.snapshots).toBe(first.snapshots);
-
-    // Releasing one lease twice must not dispose another consumer's live service.
-    await first.release();
-    await first.release();
-    expect(second.snapshots.familyOf("ses_root")).resolves.toBe("ses_root");
-    await second.release();
-  });
-
-  test("isolates distinct contexts that share one location", () => {
-    const host = new FakeNativeHost();
-    const deps = createSnapshotDeps(new MemoryBindingStore());
-    const location = makeLocation("/workspace/shared");
-    const left = acquireSnapshotService(host.createContext(location), deps);
-    const right = acquireSnapshotService(host.createContext(location), deps);
-
-    expect(right.snapshots).not.toBe(left.snapshots);
-  });
-
-  test("a released snapshot service rejects further admission", async () => {
-    const host = new FakeNativeHost();
-    const lease = acquireSnapshotService(
-      host.createContext(makeLocation("/workspace/released")),
-      createSnapshotDeps(new MemoryBindingStore()),
-    );
-    await lease.release();
-
-    const outcome = await lease.snapshots.admitOwned({
-      sessionID: "ses_root",
-      directory: "/workspace/released",
-      location: {
-        directory: "/workspace/released",
-        projectID: "project-1",
-        canonical: "/workspace/released",
-      },
-    });
-    expect(outcome.status).toBe("rejected");
   });
 });
 

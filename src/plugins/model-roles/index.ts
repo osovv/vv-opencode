@@ -1,8 +1,8 @@
 // FILE: src/plugins/model-roles/index.ts
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Native ModelRolesPlugin that delegates to the shared native snapshot runtime, enabling vvoc role overriding when the model-roles toggle is on.
-//   SCOPE: Native Plugin.define default export, plugin-toggle check, shared runtime acquisition, role-override enablement, and scoped release. Core policy capture, admission, guarding, title auxiliary work and native config watching live in the shared runtime, so this toggle never disables other plugins' policy capture or guards. No V1 fake client, no singleton startup config, no forced location reload, no stateless generation, and no cosmetic compatibility cast.
+//   PURPOSE: Native ModelRolesPlugin that delegates to the shared native runtime, enabling vvoc role overriding for newly created sessions when the model-roles toggle is on.
+//   SCOPE: Native Plugin.define default export, plugin-toggle check, shared runtime acquisition, role-override enablement, and scoped release. Family settings resolution, auxiliary work, and creation-level role application live in the shared runtime, so this toggle never disables other plugins' settings resolution. No V1 fake client, no singleton startup config, no forced location reload, no stateless generation, and no cosmetic compatibility cast.
 //   DEPENDS: [@opencode/plugin, src/lib/config-layers.ts, src/lib/plugin-toggle-config.ts, src/runtime/context.ts]
 //   LINKS: [M-PLUGIN-MODEL-ROLES, M-NATIVE-RUNTIME, V-M-PLUGIN-MODEL-ROLES]
 //   ROLE: RUNTIME
@@ -11,13 +11,14 @@
 //
 // START_MODULE_MAP
 //   ModelRolesRegistration - Releasable plugin-owned registration.
-//   registerModelRoles - Enable or disable vvoc role overriding on the shared native snapshot runtime.
+//   registerModelRoles - Enable or disable vvoc role overriding on the shared native runtime.
 //   ModelRolesPlugin - Native Plugin.define object for vvoc model-roles.
 //   default - Default export: the native ModelRolesPlugin object.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 - Delegated to acquireNativeSnapshotRuntime so the toggle only controls role overriding.]
+//   LAST_CHANGE: [C-SESSION-OWNED-SETTINGS T-003 - Kept the toggle semantics on the settings-based runtime: role overriding now applies to newly created sessions only, and family settings resolution is unaffected.]
+//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-002 - Delegated to acquireNativeSnapshotRuntime so the toggle only controls role overriding.]
 // END_CHANGE_SUMMARY
 
 import { Plugin } from "@opencode/plugin";
@@ -37,9 +38,9 @@ export interface ModelRolesRegistration {
 }
 
 /**
- * Enable or disable vvoc role overriding on the shared native snapshot runtime.
- * Policy capture, admission, guarding and auxiliary work stay active regardless,
- * so another plugin sharing the same context keeps its stable policy service.
+ * Enable or disable vvoc role overriding on the shared native runtime. Family
+ * settings resolution and auxiliary work stay active regardless, so another
+ * plugin sharing the same context keeps its stable settings service.
  */
 export async function registerModelRoles<Client extends NativeForkClient = OpenCodeClient>(
   ctx: NativeSnapshotContext,
@@ -47,7 +48,6 @@ export async function registerModelRoles<Client extends NativeForkClient = OpenC
 ): Promise<ModelRolesRegistration> {
   const runtime = await acquireNativeSnapshotRuntime(ctx, {
     ...(options.runtimeDeps === undefined ? {} : { runtimeDeps: options.runtimeDeps }),
-    ...(options.store === undefined ? {} : { store: options.store }),
     ...(options.now === undefined ? {} : { now: options.now }),
   });
   await runtime.setRoleOverride(options.enabled);

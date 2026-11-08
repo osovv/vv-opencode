@@ -28,7 +28,7 @@ import {
   type NativeSnapshotContext,
   type NativeSnapshotRuntime,
 } from "../../runtime/context.js";
-import type { FamilyCapture } from "../../runtime/types.js";
+import type { FamilySettingsView } from "../../runtime/session-settings.js";
 import { appendAnalyticsRecord } from "../../lib/analytics/store.js";
 import type { AnalyticsRecord, UsageRecord, UsageTokens } from "../../lib/analytics/types.js";
 
@@ -138,24 +138,14 @@ export function createAnalyticsPlugin(
       const resolveEnabled = async (sessionID: string): Promise<boolean | undefined> => {
         const cached = sessionPolicy.get(sessionID);
         if (cached !== undefined) return cached;
-        const read = async (): Promise<FamilyCapture | undefined> => {
-          try {
-            return await runtime.snapshots.configFor(sessionID);
-          } catch {
-            return undefined;
-          }
-        };
-        let capture = await read();
-        if (capture === undefined) {
-          try {
-            await runtime.snapshots.accept({ sessionID });
-          } catch {
-            // fall through to the second read; absence is unknown policy below
-          }
-          capture = await read();
+        let view: FamilySettingsView | undefined;
+        try {
+          view = await runtime.settings.configFor(sessionID);
+        } catch {
+          return undefined;
         }
-        if (capture === undefined) return undefined;
-        const enabled = isVvocPluginEnabled(capture.vvoc, "analytics");
+        if (view === undefined) return undefined;
+        const enabled = isVvocPluginEnabled(view.vvoc, "analytics");
         sessionPolicy.set(sessionID, enabled);
         return enabled;
       };

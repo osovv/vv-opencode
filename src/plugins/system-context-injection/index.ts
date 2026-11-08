@@ -33,7 +33,7 @@ import {
   type NativeSnapshotContext,
   type NativeSnapshotRuntime,
 } from "../../runtime/context.js";
-import type { FamilyCapture } from "../../runtime/types.js";
+import type { FamilySettingsView } from "../../runtime/session-settings.js";
 
 const BUILT_IN_SUBAGENTS = ["general"] as const;
 const PLUGIN_MANAGED_SUBAGENTS = ["guardian"] as const;
@@ -269,26 +269,16 @@ function appendTailContext(
 async function resolveCapturedConfig(
   runtime: NativeSnapshotRuntime,
   sessionID: string,
-): Promise<FamilyCapture["vvoc"] | undefined> {
-  const read = async (): Promise<FamilyCapture | undefined> => {
-    try {
-      return await runtime.snapshots.configFor(sessionID);
-    } catch {
-      return undefined;
-    }
-  };
-  let capture = await read();
-  if (capture === undefined) {
-    try {
-      await runtime.snapshots.accept({ sessionID });
-    } catch {
-      // fall through to the second read; absence is unknown policy below
-    }
-    capture = await read();
+): Promise<FamilySettingsView["vvoc"] | undefined> {
+  let view: FamilySettingsView | undefined;
+  try {
+    view = await runtime.settings.configFor(sessionID);
+  } catch {
+    return undefined;
   }
-  if (capture === undefined) return undefined;
-  if (!isVvocPluginEnabled(capture.vvoc, "system-context-injection")) return undefined;
-  return capture.vvoc;
+  if (view === undefined) return undefined;
+  if (!isVvocPluginEnabled(view.vvoc, "system-context-injection")) return undefined;
+  return view.vvoc;
 }
 // END_BLOCK_POLICY
 

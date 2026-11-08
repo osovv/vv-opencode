@@ -114,9 +114,8 @@ async function createHarness(
   let released = false;
   const capture = { familyId: "fam-1", vvoc: config };
   const fakeRuntime = {
-    snapshots: {
+    settings: {
       configFor: async () => (policy === "unknown" ? undefined : capture),
-      accept: async () => ({ status: "unbound" }),
     },
     permissions: permission,
     effectiveConfig: () => ({

@@ -2,8 +2,8 @@
 // FILE: scripts/e2e-v2/fixtures/plugin.ts
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Wrap the actual packed ModelRolesPlugin.setup in a harness-owned plugin that shares its real context, enforces a mandatory loopback network guard, and exposes a bounded inspection/admission/permission control plane for the driver.
-//   SCOPE: Call the real plugin setup, acquire the same shared native snapshot runtime, register mandatory http/model/ws destination guards whose registration failure aborts setup, serve a nonce-protected 127.0.0.1 control plane that only forwards to real runtime methods, dispose every registration and runtime lease on both normal and failed setup, and bound the in-memory event queue. It never reproduces selection, policy, admission, or permission behavior; it only calls the packaged implementation. The module has no import-time side effects.
+//   PURPOSE: Wrap the actual packed ModelRolesPlugin.setup in a harness-owned plugin that shares its real context, enforces a mandatory loopback network guard, and exposes a bounded family-settings inspection and permission control plane for the driver.
+//   SCOPE: Call the real plugin setup, acquire the same shared native runtime, register mandatory http/model/ws destination guards whose registration failure aborts setup, serve a nonce-protected 127.0.0.1 control plane that only forwards allowlisted projections of real runtime methods, dispose every registration and runtime lease on both normal and failed setup, and bound the in-memory event queue. It never reproduces settings resolution or permission behavior; it only calls the packaged implementation. The module has no import-time side effects.
 //   DEPENDS: [node:crypto, node:fs, node:http, scripts/e2e-v2/host.ts]
 //   LINKS: [M-E2E-V2-HARNESS, V-M-E2E-V2-HARNESS, M-PLUGIN-MODEL-ROLES]
 //   ROLE: SCRIPT
@@ -21,12 +21,13 @@
 //   assertOwnedOrigin - Assert an outgoing request URL stays on the owned loopback fixture origin.
 //   sendJson - Write a JSON response with its status and content length.
 //   readBody - Read and JSON-parse a bounded request body.
+//   isRecord - True when a value is a non-array object.
 //   createControlHandler - Build the nonce-protected handler that only forwards to real runtime methods.
 //   closeServer - Close an owned fixture HTTP server and resolve once it has stopped.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-003 correction - Made the loopback destination guard mandatory, used native Registration.dispose, released the runtime lease, and ran cleanup on failed setup.]
+//   LAST_CHANGE: [C-SESSION-OWNED-SETTINGS T-006 - The control plane forwards to the family-settings service (/settings, /family) instead of the removed admission/snapshot endpoints.]
 // END_CHANGE_SUMMARY
 
 import { randomBytes } from "node:crypto";
@@ -48,15 +49,10 @@ export interface HarnessRuntime {
     readonly location: { readonly directory: string };
     readonly identity: unknown;
   };
-  readonly snapshots: {
-    captures(): Promise<unknown>;
-    variants(familyId?: string): Promise<unknown>;
+  readonly settings: {
     familyOf(sessionID: string): Promise<string>;
-    policy(sessionID: string): Promise<unknown>;
-    configFor(sessionID: string): Promise<unknown>;
-    hasStaged(familyId: string): Promise<boolean>;
+    resolve(sessionID: string): Promise<unknown>;
   };
-  admitWorkload(request: Record<string, unknown>): Promise<unknown>;
   client(): Promise<unknown>;
   readonly permissions: {
     request(input: Record<string, unknown>, options?: Record<string, unknown>): Promise<string>;
@@ -115,6 +111,11 @@ function assertOwnedOrigin(rawUrl: string, providerOrigin: string, label: string
 // END_BLOCK_GUARDS
 
 // START_BLOCK_CONTROL_PLANE
+/** True when a value is a non-array object. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function sendJson(response: ServerResponse, status: number, payload: unknown): void {
   const text = JSON.stringify(payload);
   response.writeHead(status, {
@@ -184,36 +185,25 @@ function createControlHandler(input: {
           });
           return;
         }
-        if (request.method === "GET" && url.pathname === "/captures") {
-          sendJson(response, 200, { data: await runtime.snapshots.captures() });
-          return;
-        }
-        if (request.method === "GET" && url.pathname === "/variants") {
-          sendJson(response, 200, {
-            data: await runtime.snapshots.variants(
-              sessionID === undefined ? undefined : await runtime.snapshots.familyOf(sessionID),
-            ),
-          });
-          return;
-        }
         if (request.method === "GET" && url.pathname === "/family") {
           if (sessionID === undefined) throw new Error("missing sessionID");
-          sendJson(response, 200, { familyId: await runtime.snapshots.familyOf(sessionID) });
+          sendJson(response, 200, { familyId: await runtime.settings.familyOf(sessionID) });
           return;
         }
-        if (request.method === "GET" && url.pathname === "/policy") {
+        if (request.method === "GET" && url.pathname === "/settings") {
           if (sessionID === undefined) throw new Error("missing sessionID");
-          const familyId = await runtime.snapshots.familyOf(sessionID);
+          const familyId = await runtime.settings.familyOf(sessionID);
+          const view = (await runtime.settings.resolve(sessionID)) as
+            | Record<string, unknown>
+            | undefined;
+          // Allowlisted projection only: never expose live configuration
+          // credentials or document contents through the control plane.
+          const settings = isRecord(view?.settings) ? view?.settings : undefined;
           sendJson(response, 200, {
             familyId,
-            capture: (await runtime.snapshots.policy(sessionID)) ?? null,
-          });
-          return;
-        }
-        if (request.method === "GET" && url.pathname === "/config") {
-          if (sessionID === undefined) throw new Error("missing sessionID");
-          sendJson(response, 200, {
-            capture: (await runtime.snapshots.configFor(sessionID)) ?? null,
+            source: typeof view?.source === "string" ? view.source : null,
+            settingsId: typeof view?.settingsId === "string" ? view.settingsId : null,
+            settings: settings ?? null,
           });
           return;
         }
@@ -228,22 +218,6 @@ function createControlHandler(input: {
         if (request.method === "GET" && url.pathname === "/client") {
           await runtime.client();
           sendJson(response, 200, { ok: true, instanceId: runtime.runtime.instanceId });
-          return;
-        }
-        if (request.method === "POST" && url.pathname === "/admit") {
-          const body = (await readBody(request)) as Record<string, unknown>;
-          const outcome = await runtime.admitWorkload({
-            sessionID: body.sessionID,
-            directory: runtime.runtime.location.directory,
-            location: runtime.runtime.identity,
-            ...(body.explicit === undefined ? {} : { explicit: body.explicit }),
-            ...(body.selectionOverride === undefined
-              ? {}
-              : { selectionOverride: body.selectionOverride }),
-            ...(body.workload === undefined ? {} : { workload: body.workload }),
-            ...(body.force === undefined ? {} : { force: body.force }),
-          });
-          sendJson(response, 200, { outcome });
           return;
         }
         if (request.method === "POST" && url.pathname === "/permission") {

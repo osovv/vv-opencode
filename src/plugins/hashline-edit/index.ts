@@ -41,7 +41,7 @@ import {
   type NativeSnapshotContext,
   type NativeSnapshotRuntime,
 } from "../../runtime/context.js";
-import type { FamilyCapture } from "../../runtime/types.js";
+import type { FamilySettingsView } from "../../runtime/session-settings.js";
 import { ContractInputError, formatContractIssues } from "../../lib/agent-tool-contract.js";
 import { findFirstChangedLine, summarizeEditDiff } from "./diff-summary.js";
 import { applyHashlineEditsWithReport } from "./edit-operations.js";
@@ -1299,32 +1299,20 @@ export function createHashlineEditHandlers(
 // END_BLOCK_HANDLERS
 
 // START_BLOCK_PLUGIN_ENTRY
-/** Resolve captured per-family hashline-edit settings; unbound/disabled fails closed. */
+/** Resolve per-family hashline-edit settings from the projected family config; unresolved fails closed. */
 async function resolveSettings(
   runtime: NativeSnapshotRuntime,
   sessionID: string,
 ): Promise<HashlineEditPluginSettings | undefined> {
-  let capture: FamilyCapture | undefined;
+  let view: FamilySettingsView | undefined;
   try {
-    capture = await runtime.snapshots.configFor(sessionID);
+    view = await runtime.settings.configFor(sessionID);
   } catch {
-    capture = undefined;
+    view = undefined;
   }
-  if (capture === undefined) {
-    try {
-      await runtime.snapshots.accept({ sessionID });
-    } catch {
-      // fall through to the second read
-    }
-    try {
-      capture = await runtime.snapshots.configFor(sessionID);
-    } catch {
-      capture = undefined;
-    }
-  }
-  if (capture === undefined) return undefined;
+  if (view === undefined) return undefined;
   try {
-    return parseHashlineEditPluginEntry(capture.vvoc.plugins?.["hashline-edit"]);
+    return parseHashlineEditPluginEntry(view.vvoc.plugins?.["hashline-edit"]);
   } catch {
     return undefined;
   }

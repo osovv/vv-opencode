@@ -1,9 +1,9 @@
 // FILE: src/runtime/snapshot-config.test.ts
-// VERSION: 2.0.0
+// VERSION: 3.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify full effective-config extraction, role/agent binding parsing, initial-selection provenance, and config.updated watching.
-//   SCOPE: vvoc snapshot policy derivation, invalid-binding failure, initial default/explicit classification, and watcher notification and error reporting; no native host.
-//   DEPENDS: [bun:test, src/lib/config-layers.ts, src/lib/vvoc-config.ts, src/runtime/snapshot-config.ts, src/runtime/types.ts]
+//   PURPOSE: Verify effective-config extraction, role/agent binding parsing, canonical selection normalization, and native event decoding.
+//   SCOPE: vvoc snapshot policy derivation, invalid-binding failure, canonical variant handling, and session-creation/model-selection/config-update decoding; no native host.
+//   DEPENDS: [bun:test, src/lib/config-layers.js, src/lib/vvoc-config.js, src/runtime/snapshot-config.js, src/runtime/types.js]
 //   LINKS: [M-NATIVE-RUNTIME, V-M-NATIVE-RUNTIME]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -14,27 +14,23 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-002 - Initial-selection provenance and full config coverage.]
+//   LAST_CHANGE: [C-SESSION-OWNED-SETTINGS T-002 - Coverage narrowed to the surviving extraction, parsing, and event-decoding helpers.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import type { VvocConfigSnapshot } from "../lib/config-layers.js";
-import { createDefaultVvocConfig, type VvocConfig } from "../lib/vvoc-config.js";
+import { createDefaultVvocConfig } from "../lib/vvoc-config.js";
 import {
   agentBindingsFrom,
   agentPolicyBindings,
-  behaviourContentHash,
-  buildBehaviourProjection,
-  canonicalizeJson,
-  classifyInitialSelection,
+  canonicalModelVariant,
+  decodeModelSelectedEvent,
+  decodeSessionCreatedEvent,
   effectiveRuntimeConfig,
-  isAcceptedWorkloadEvent,
   isConfigUpdateEvent,
+  normalizeModelSelection,
   parseRoleSelections,
-  sanitizePolicyConfig,
-  watchConfigUpdates,
 } from "./snapshot-config.js";
-import { SnapshotAdmissionError } from "./types.js";
 
 function makeSnapshot(roles = {}): VvocConfigSnapshot {
   const config = createDefaultVvocConfig();
@@ -57,11 +53,11 @@ describe("effectiveRuntimeConfig", () => {
     expect(effective.sourcePath).toBe("/p/.vvoc/vvoc.json");
   });
 
-  test("parses role selections and fails closed on an invalid binding", () => {
+  test("parses role selections and fails loudly on an invalid binding", () => {
     expect(parseRoleSelections({ smart: "prov/m2#xhigh" })).toEqual({
       smart: { providerID: "prov", modelID: "m2", variant: "xhigh" },
     });
-    expect(() => parseRoleSelections({ smart: "nope" })).toThrow(SnapshotAdmissionError);
+    expect(() => parseRoleSelections({ smart: "nope" })).toThrow(/invalid model binding/);
   });
 
   test("derives agent bindings with resolved selections", () => {
@@ -83,187 +79,49 @@ describe("effectiveRuntimeConfig", () => {
   });
 });
 
-describe("classifyInitialSelection", () => {
-  test("a session model matching the creation default is implicit; a differing one is explicit", () => {
-    const creationDefault = { providerID: "loopback", modelID: "seam-smart" };
-    expect(
-      classifyInitialSelection({
-        sessionModel: { providerID: "loopback", modelID: "seam-smart" },
-        creationDefault,
-      }),
-    ).toEqual({ mode: "implicit", source: "config" });
-    expect(
-      classifyInitialSelection({
-        sessionModel: { providerID: "loopback", modelID: "seam-fast" },
-        creationDefault,
-      }),
-    ).toEqual({
-      mode: "explicit",
-      source: "watcher",
-      literal: { providerID: "loopback", modelID: "seam-fast" },
-    });
-    expect(classifyInitialSelection({ sessionModel: undefined, creationDefault })).toEqual({
-      mode: "implicit",
-      source: "config",
-    });
-  });
-
+describe("canonical selection normalization", () => {
   test("the native absent/`default` variant is not a distinct selection", () => {
+    expect(canonicalModelVariant(undefined)).toBeUndefined();
+    expect(canonicalModelVariant("default")).toBeUndefined();
+    expect(canonicalModelVariant("thinking")).toBe("thinking");
     expect(
-      classifyInitialSelection({
-        sessionModel: { providerID: "loopback", modelID: "seam-smart", variant: "default" },
-        creationDefault: { providerID: "loopback", modelID: "seam-smart" },
+      normalizeModelSelection({ providerID: "prov", modelID: "m1", variant: "default" }),
+    ).toEqual({ providerID: "prov", modelID: "m1" });
+  });
+});
+
+describe("event decoding", () => {
+  test("session.created decodes the creation model", () => {
+    expect(
+      decodeSessionCreatedEvent({
+        type: "session.created",
+        data: { sessionID: "ses_1", model: { id: "m1", providerID: "prov", variant: "default" } },
       }),
-    ).toEqual({ mode: "implicit", source: "config" });
+    ).toEqual({ sessionID: "ses_1", model: { providerID: "prov", modelID: "m1" } });
+    expect(decodeSessionCreatedEvent({ type: "session.deleted" })).toBeUndefined();
+    expect(
+      decodeSessionCreatedEvent({ type: "session.created", data: { sessionID: "ses_1" } }),
+    ).toEqual({ sessionID: "ses_1" });
+    expect(
+      decodeSessionCreatedEvent({ type: "session.created", data: { sessionID: 42 } }),
+    ).toBeUndefined();
   });
 
-  test("only config.updated invalidates candidates; own reload output never does", () => {
+  test("model.selected decodes explicit switches only", () => {
+    expect(
+      decodeModelSelectedEvent({
+        type: "session.model.selected",
+        data: { sessionID: "ses_1", model: { id: "m2", providerID: "prov" } },
+      }),
+    ).toEqual({ sessionID: "ses_1", model: { providerID: "prov", modelID: "m2" } });
+    expect(
+      decodeModelSelectedEvent({ type: "session.model.selected", data: { sessionID: "ses_1" } }),
+    ).toBeUndefined();
+  });
+
+  test("only config.updated invalidates the cached effective config", () => {
     expect(isConfigUpdateEvent({ type: "config.updated" })).toBe(true);
     expect(isConfigUpdateEvent({ type: "model.updated" })).toBe(false);
     expect(isConfigUpdateEvent({ type: "agent.updated" })).toBe(false);
-    expect(isConfigUpdateEvent({ type: "session.created" })).toBe(false);
-  });
-
-  test("accepted input is the native inbox enqueue, not a resume start", () => {
-    expect(
-      isAcceptedWorkloadEvent({ type: "session.execution.started", data: { sessionID: "s" } }),
-    ).toBe(false);
-    expect(
-      isAcceptedWorkloadEvent({
-        type: "session.inbox.enqueued",
-        data: { sessionID: "s", inboxID: "i", item: { type: "user" } },
-      }),
-    ).toBe(true);
-  });
-});
-
-describe("watchConfigUpdates", () => {
-  test("notifies on config.updated, stops on abort, and reports transport failure", async () => {
-    const controller = new AbortController();
-    let changes = 0;
-    const stop = watchConfigUpdates(
-      (async function* () {
-        yield { type: "session.created" };
-        yield { type: "config.updated" };
-        yield { type: "model.updated" };
-      })(),
-      () => {
-        changes += 1;
-        controller.abort();
-      },
-      controller.signal,
-    );
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    stop();
-    expect(changes).toBe(1);
-
-    const errors: unknown[] = [];
-    let failed = false;
-    const failedStop = watchConfigUpdates(
-      (async function* () {
-        yield { type: "session.created" };
-        throw new Error("transport lost");
-      })(),
-      () => undefined,
-      new AbortController().signal,
-      (error) => {
-        failed = true;
-        errors.push(error);
-      },
-    );
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    failedStop();
-    expect(failed).toBe(true);
-    expect(errors).toHaveLength(1);
-  });
-});
-
-describe("behaviour projection", () => {
-  function projectionConfig(overrides: {
-    readonly schema?: string;
-    readonly apiKey?: string;
-    readonly redactionSecret?: string;
-  }): VvocConfig {
-    const config = createDefaultVvocConfig();
-    return {
-      ...config,
-      $schema: overrides.schema ?? config.$schema,
-      web: {
-        search: { provider: "exa", apiKey: overrides.apiKey ?? "k" },
-        fetch: { provider: "native", apiKey: overrides.apiKey ?? "k" },
-      },
-      secretsRedaction: {
-        ...config.secretsRedaction,
-        secret: overrides.redactionSecret ?? "seed",
-      },
-    };
-  }
-
-  test("strips credential values and version-derived fields", () => {
-    const config = projectionConfig({
-      schema: "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@2.1.3/schemas/vvoc/v3.json",
-      apiKey: "secret-api-value",
-      redactionSecret: "secret-seed-value",
-    });
-    const sanitized = sanitizePolicyConfig(config);
-    const serialized = JSON.stringify(sanitized);
-    expect(serialized).not.toContain("secret-api-value");
-    expect(serialized).not.toContain("secret-seed-value");
-    expect(serialized).not.toContain("$schema");
-    expect(sanitized.web?.search?.apiKey).toBeUndefined();
-    expect(sanitized.secretsRedaction.secret).toBeUndefined();
-    expect(sanitized.roles).toEqual(config.roles);
-    expect(sanitized.plugins).toEqual(config.plugins);
-  });
-
-  test("content hash ignores package version and credentials", () => {
-    const roles = { ...createDefaultVvocConfig().roles, default: "prov/m1" };
-    const agentRoles = { build: "default" };
-    const left = buildBehaviourProjection({
-      roles,
-      agentRoles,
-      vvoc: projectionConfig({
-        schema: "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@2.1.3/schemas/vvoc/v3.json",
-        apiKey: "left-key",
-        redactionSecret: "left-seed",
-      }),
-    });
-    const right = buildBehaviourProjection({
-      roles,
-      agentRoles,
-      vvoc: projectionConfig({
-        schema: "https://cdn.jsdelivr.net/npm/@osovv/vv-opencode@9.9.9/schemas/vvoc/v3.json",
-        apiKey: "right-key",
-        redactionSecret: "right-seed",
-      }),
-    });
-    expect(behaviourContentHash(left)).toBe(behaviourContentHash(right));
-  });
-
-  test("content hash tracks behaviour and is deterministic across key order", () => {
-    const config = createDefaultVvocConfig();
-    const base = buildBehaviourProjection({
-      roles: config.roles,
-      agentRoles: { build: "default" },
-      vvoc: config,
-    });
-    const reorderedConfig = {
-      ...config,
-      roles: Object.fromEntries(Object.entries(config.roles).reverse()),
-    };
-    const reordered = buildBehaviourProjection({
-      roles: reorderedConfig.roles,
-      agentRoles: { build: "default" },
-      vvoc: reorderedConfig,
-    });
-    const changed = buildBehaviourProjection({
-      roles: { ...config.roles, default: "prov/changed" },
-      agentRoles: { build: "default" },
-      vvoc: config,
-    });
-    expect(canonicalizeJson({ b: 1, a: 2 })).toBe(canonicalizeJson({ a: 2, b: 1 }));
-    expect(behaviourContentHash(reordered)).toBe(behaviourContentHash(base));
-    expect(behaviourContentHash(base)).toBe(behaviourContentHash(base));
-    expect(behaviourContentHash(changed)).not.toBe(behaviourContentHash(base));
   });
 });
