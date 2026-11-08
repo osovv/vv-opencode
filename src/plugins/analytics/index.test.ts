@@ -94,7 +94,7 @@ async function makeHarness(
   const capture = { familyId: "fam-1", vvoc: config };
   let configForCalls = 0;
   const fakeRuntime = {
-    snapshots: {
+    settings: {
       configFor: async (sessionID: string) => {
         configForCalls += 1;
         if (options.configForThrows !== undefined && configForCalls <= options.configForThrows) {
@@ -103,7 +103,6 @@ async function makeHarness(
         if (options.resolve !== undefined) return options.resolve(sessionID);
         return policy === "unknown" ? undefined : capture;
       },
-      accept: async () => ({ status: "unbound" }),
     },
     release: async () => {
       released = true;

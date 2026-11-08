@@ -99,35 +99,15 @@ function fakeRuntime(calls: string[]): unknown {
       location: { directory: "/tmp/vvoc-e2e-project" },
       identity: { directory: "/tmp/vvoc-e2e-project" },
     },
-    snapshots: {
-      async captures() {
-        calls.push("captures");
-        return [];
-      },
-      async variants() {
-        calls.push("variants");
-        return [];
-      },
+    settings: {
       async familyOf(id: string) {
         calls.push("familyOf");
         return id;
       },
-      async policy() {
-        calls.push("policy");
+      async resolve() {
+        calls.push("resolve");
         return undefined;
       },
-      async configFor() {
-        calls.push("configFor");
-        return undefined;
-      },
-      async hasStaged() {
-        calls.push("hasStaged");
-        return false;
-      },
-    },
-    async admitWorkload(request: Record<string, unknown>) {
-      calls.push("admitWorkload");
-      return { status: "bound", sessionID: request.sessionID };
     },
     async client() {
       calls.push("client");
@@ -493,6 +473,16 @@ describe("fixture plugin forwarding", () => {
     });
     expect(client.status).toBe(200);
     expect(calls).toContain("client");
+
+    const settings = await fetch(`http://127.0.0.1:${info.port}/settings?sessionID=ses_x`, {
+      headers: { "x-e2e-nonce": info.nonce },
+    });
+    expect(settings.status).toBe(200);
+    const settingsBody = (await settings.json()) as { familyId: string; settings: unknown };
+    expect(settingsBody.familyId).toBe("ses_x");
+    expect(settingsBody.settings).toBeNull();
+    expect(calls).toContain("familyOf");
+    expect(calls).toContain("resolve");
 
     const guard = hookHandlers.get("model.request");
     expect(guard).toBeDefined();

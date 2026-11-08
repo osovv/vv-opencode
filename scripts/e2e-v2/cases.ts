@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 // FILE: scripts/e2e-v2/cases.ts
-// VERSION: 2.0.0
+// VERSION: 3.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Define the core real-host acceptance cases and their observed, per-request-attributed assertions for the packed native model-role runtime.
-//   SCOPE: Case descriptors, the driver contract, a bounded assertion collector, and executable cases for activation/guards, awaited admission with zero-dispatch rejection, captured source variants with native registry readback, auxiliary title with zero native title dispatch, config mutation, owned generate/synthetic and raw-unbound refusal, explicit selection, implicit (no agent/model) first-turn admission, fork/worktree lineage, resource permission guard effects, and a hook-availability probe. Assertions are attributed to the exact current session/request via the provider payload markers and hosted session id.
+//   PURPOSE: Define the core real-host acceptance cases and their observed, per-request-attributed assertions for the packed session-owned family-settings runtime.
+//   SCOPE: Case descriptors, the driver contract, a bounded assertion collector, and executable cases for activation and lazy settings birth, zero-dispatch rejection, native role variants with registry readback, auxiliary title with zero native title dispatch, config mutation with stable family settings, native generate/synthetic without any admission gateway, explicit selection preservation, fork/worktree lineage, resource permission guard effects, settings stability under an explicit switch race, and a hook-availability probe. Assertions are attributed to the exact current session/request via the provider payload markers and hosted session id.
 //   DEPENDS: [scripts/e2e-v2/host.ts, scripts/e2e-v2/provider.ts, scripts/e2e-v2/fixtures/plugin.ts]
 //   LINKS: [M-E2E-V2-HARNESS, V-M-E2E-V2-HARNESS]
 //   ROLE: SCRIPT
@@ -26,15 +26,16 @@
 //   attributedSessionID - Hosted session id embedded in a provider request environment block.
 //   containsMarker - True when a provider request carries an exact case marker.
 //   payloadFields - Extract the smoke variant and reasoning effort fields from a provider body.
-//   qualifiedSuffix - True when a variant string ends with the expected capture suffix.
+//   qualifiedSuffix - True when a variant string ends with the expected suffix.
+//   isTitleGeneration - True when a provider request is the auxiliary child's title generation.
 //   containsValue - Recursively search a parsed value for an exact string property value.
 //   waitForPendingPermission - Poll the native session permission list for the first pending request id.
 //   replyPermission - Submit a permission decision for a pending native request.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [Direct fix - Accepted prerelease semver in the activation packed-version assertion so the core suite stays green across the rc release cycle.]
-//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-003 correction - Per-request attribution, zero-dispatch rejection, guard effects, owned generate/synthetic, explicit selection, fork/worktree, and native registry readback.]
+//   LAST_CHANGE: [C-SESSION-OWNED-SETTINGS T-006 - Cases now assert session-owned family settings: lazy metadata birth, config-change stability, native role variants, and no admission gateway; qualified snapshot variants are gone.]
+//   PREVIOUS: [Direct fix - Accepted prerelease semver in the activation packed-version assertion so the core suite stays green across the rc release cycle.]
 // END_CHANGE_SUMMARY
 
 import type { ProviderRequestRecord } from "./provider.js";
@@ -174,10 +175,18 @@ function bodyText(record: ProviderRequestRecord): string {
   }
 }
 
-/** Hosted session id embedded in a provider request's environment block. */
+/** Hosted session id found in a provider request body, when the host embeds one. */
 function attributedSessionID(record: ProviderRequestRecord): string | undefined {
-  const match = /Current conversation session ID: (ses_[A-Za-z0-9]+)/.exec(bodyText(record));
+  const text = bodyText(record);
+  const match =
+    /Current conversation session ID: (ses_[A-Za-z0-9]+)/.exec(text) ??
+    /sessionID["']?\s*[:=]\s*["']?(ses_[A-Za-z0-9]+)/.exec(text);
   return match?.[1];
+}
+
+/** True when a provider request is the auxiliary child's title generation. */
+function isTitleGeneration(record: ProviderRequestRecord): boolean {
+  return bodyText(record).includes("Generate a short, specific title");
 }
 
 /** True when a provider request carries an exact case marker. */
@@ -275,31 +284,47 @@ export const coreCases: readonly CoreCase[] = [
         client.status === 200 && client.body?.ok === true,
         "authenticated same-instance native client challenge succeeded",
       );
-      const captures = await driver.control("/captures");
-      check.truthy(Array.isArray(captures.body.data), "durable capture registry is readable");
       const fresh = await driver.createSession();
       await delay(800);
-      const freshPolicy = await driver.control(`/policy?sessionID=${fresh}`);
-      check.truthy(freshPolicy.body.capture === null, "a fresh session has no bound policy");
+      const freshSettings = await driver.control(`/settings?sessionID=${fresh}`);
+      check.equal(
+        freshSettings.body?.familyId,
+        fresh,
+        "a location-only session is its own family root",
+      );
+      check.equal(
+        freshSettings.body?.settings?.version,
+        1,
+        "the fresh family root carries a born version-1 settings record",
+      );
+      check.equal(
+        freshSettings.body?.source,
+        "metadata",
+        "the born settings record is served from session metadata",
+      );
       const reloads = status.body.eventCounts?.["model.updated"] ?? 0;
       check.truthy(reloads < 60, `model.updated reload count stays bounded (${reloads})`);
       return {
-        detail: "packed package imported, mandatory guards registered, fresh sessions unbound",
+        detail:
+          "packed package imported, mandatory guards registered; a fresh family births metadata settings",
         observed: {
           instanceId: status.body.instanceId,
           guardState: status.body.guardState,
           eventCounts: status.body.eventCounts,
+          settingsId: freshSettings.body?.settingsId,
         },
       };
     },
   },
   {
     id: "admission",
-    title: "Awaited admission, rejected preparation, and zero-dispatch rejection",
+    title: "Rejected preparation dispatches nothing; the valid prompt resolves family settings",
     phase: "T-003",
-    parity: ["plugin.model-roles.admission", "plugin.model-roles.rollback"],
+    parity: ["plugin.model-roles.birth", "plugin.model-roles.fail-soft"],
     async run(driver, check) {
-      const sessionID = await driver.createSession();
+      // vv-controller carries the override model in the fixture config, so the
+      // native role variant and payload assertions stay meaningful.
+      const sessionID = await driver.createSession({ agent: "vv-controller" });
       await delay(1500);
       const prevIdle = (await driver.sessionInfo(sessionID))?.time?.idle;
       const rejectMarker = nextMarker("reject");
@@ -317,52 +342,56 @@ export const coreCases: readonly CoreCase[] = [
         afterReject.every((record) => !containsMarker(record, rejectMarker)),
         "rejected preparation produced zero provider dispatch for that input",
       );
-      const afterRejectPolicy = await driver.control(`/policy?sessionID=${sessionID}`);
-      check.truthy(
-        afterRejectPolicy.body.capture !== null,
-        "a preparation rejection after the prompt hook still binds the family policy on first work",
-      );
       const acceptMarker = nextMarker("accept");
       const acceptBase = await driver.providerCount();
       const accepted = await driver.prompt(sessionID, acceptMarker);
       check.truthy(accepted.status < 400, `valid prompt accepted (status ${accepted.status})`);
-      const info = await driver.waitIdleChange(sessionID, prevIdle);
+      await driver.waitIdleChange(sessionID, prevIdle);
       const fresh = await driver.providerRequestsSince(acceptBase);
-      const attributed = fresh.filter(
-        (record) =>
-          attributedSessionID(record) === sessionID && containsMarker(record, acceptMarker),
+      // The marker can also appear inside the auxiliary child's embedded
+      // conversation history, so title generations are excluded from the count.
+      const markerDispatches = fresh.filter(
+        (record) => containsMarker(record, acceptMarker) && !isTitleGeneration(record),
       );
       check.equal(
-        attributed.length,
+        markerDispatches.length,
         1,
         "the accepted prompt dispatched exactly once for its marker",
       );
       check.truthy(
-        attributed[0] !== undefined &&
-          payloadFields(attributed[0]).smoke_variant === "override" &&
-          payloadFields(attributed[0]).reasoning_effort === "high",
-        "the accepted prompt dispatched the source variant merged settings (override/high)",
+        markerDispatches[0] !== undefined &&
+          payloadFields(markerDispatches[0]).smoke_variant === "override" &&
+          payloadFields(markerDispatches[0]).reasoning_effort === "high",
+        "the accepted prompt dispatched the native role variant (override/high)",
       );
-      const bound = await driver.control(`/policy?sessionID=${sessionID}`);
-      check.truthy(bound.body.capture !== null, "the valid prompt bound a durable family policy");
-      check.truthy(
-        qualifiedSuffix(info?.model?.variant, ".seam-smart.override"),
-        `session model carries the qualified override variant (${info?.model?.variant})`,
+      const settings = await driver.control(`/settings?sessionID=${sessionID}`);
+      check.equal(settings.body?.settings?.version, 1, "family settings resolved after the turn");
+      check.equal(
+        settings.body?.source,
+        "metadata",
+        "the family resolves its settings from root metadata",
+      );
+      const again = await driver.control(`/settings?sessionID=${sessionID}`);
+      check.equal(
+        again.body?.settingsId,
+        settings.body?.settingsId,
+        "repeated resolution is stable (no rewrite per request)",
       );
       return {
         detail:
-          "rejected preparation dispatched nothing; the valid prompt dispatched once and bound",
-        observed: { sessionID, rejectedStatus: rejected.status, variant: info?.model?.variant },
+          "rejected preparation dispatched nothing; the valid prompt dispatched once and the family settings resolve stably",
+        observed: { sessionID, rejectedStatus: rejected.status, settingsId: settings.body?.settingsId },
       };
     },
   },
   {
     id: "payload-variants",
-    title: "Same model, two captured source variants, native registry readback",
+    title: "Native role variants on one model: controller override payload, child plain payload",
     phase: "T-003",
     parity: ["plugin.model-roles.variants", "runtime.model-registry"],
     async run(driver, check) {
-      const sessionID = await driver.createSession();
+      // vv-controller carries the override model in the fixture config.
+      const sessionID = await driver.createSession({ agent: "vv-controller" });
       await delay(1200);
       const prevIdle = (await driver.sessionInfo(sessionID))?.time?.idle;
       const marker = nextMarker("variants");
@@ -370,30 +399,25 @@ export const coreCases: readonly CoreCase[] = [
       await driver.prompt(sessionID, marker);
       const info = await driver.waitIdleChange(sessionID, prevIdle);
       const variant = info?.model?.variant as string | undefined;
-      const prefix =
-        typeof variant === "string" ? variant.replace(/\.seam-smart\..*$/, "") : undefined;
-      check.truthy(
-        qualifiedSuffix(variant, ".seam-smart.override"),
-        `root role uses the override variant (${variant})`,
+      // The root resolves its explicit agent model natively; vvoc never
+      // rewrites the session model afterwards.
+      check.equal(
+        variant,
+        "override",
+        `controller root resolves its override model natively (${variant})`,
       );
-      // Native final registry readback: the qualified variant must be present in the host model list.
+      // Native final registry readback: the configured variant is present in the host model list.
       const models = await driver.modelList();
       check.truthy(
-        typeof prefix === "string" &&
-          prefix.length > 0 &&
-          containsValue(models, `${prefix}.seam-smart.override`),
-        "native model.list contains the family-qualified override variant",
+        containsValue(models, "override"),
+        "native model.list contains the configured override variant",
       );
       check.truthy(
         !containsValue(models, "fabricated.seam-smart.override"),
         "native model.list does not contain a fabricated variant (negative control)",
       );
-      // Untouched captured descriptors remain readable separately from the registry.
-      const descriptors = await driver.control(`/variants?sessionID=${sessionID}`);
-      check.truthy(
-        Array.isArray(descriptors.body.data) && descriptors.body.data.length >= 2,
-        "capture service still exposes the source variant descriptors",
-      );
+      // The auxiliary title child dispatches the fast role's distinct payload.
+      await delay(1500); // allow auxiliary title work to settle
       const fresh = await driver.providerRequestsSince(base);
       check.truthy(
         fresh.some(
@@ -410,17 +434,17 @@ export const coreCases: readonly CoreCase[] = [
             payloadFields(record).smoke_variant === "plain" &&
             payloadFields(record).reasoning_effort === "minimal",
         ),
-        "the same model dispatched a distinct plain/minimal payload",
+        "the same model dispatched a distinct plain/minimal payload (role fast)",
       );
       return {
-        detail: "two distinct qualified payloads for one model; final registry readback present",
+        detail: "two distinct role payloads for one model; final registry readback present",
         observed: { variant, registryContains: true },
       };
     },
   },
   {
     id: "lineage-title",
-    title: "Auxiliary title lineage and zero native title provider dispatch",
+    title: "Auxiliary title lineage, role model, and zero native title provider dispatch",
     phase: "T-003",
     parity: ["runtime.lineage", "plugin.model-roles.auxiliary"],
     async run(driver, check) {
@@ -430,11 +454,7 @@ export const coreCases: readonly CoreCase[] = [
       const marker = nextMarker("title");
       const base = await driver.providerCount();
       await driver.prompt(sessionID, marker);
-      const info = await driver.waitIdleChange(sessionID, prevIdle);
-      const parentPrefix =
-        typeof info?.model?.variant === "string"
-          ? info.model.variant.replace(/\.seam-smart\..*$/, "")
-          : undefined;
+      await driver.waitIdleChange(sessionID, prevIdle);
       await delay(1500); // allow auxiliary title work to settle
       const children = (await driver.listSessions()).filter(
         (entry) => entry.parentID === sessionID,
@@ -450,68 +470,57 @@ export const coreCases: readonly CoreCase[] = [
         JSON.stringify({ vvocAuxiliary: { kind: "title", role: "fast" } }),
         "child carries host-owned auxiliary kind/role metadata",
       );
-      check.truthy(
-        typeof child?.model?.variant === "string" &&
-          typeof parentPrefix === "string" &&
-          child.model.variant.startsWith(parentPrefix),
-        `child shares the family capture prefix (${parentPrefix})`,
+      check.equal(
+        child?.model?.variant,
+        "plain",
+        `child resolves the family fast role model (${child?.model?.variant})`,
+      );
+      const childSettings = await driver.control(`/settings?sessionID=${children[0].id}`);
+      check.equal(
+        childSettings.body?.familyId,
+        sessionID,
+        "the child resolves through lineage to the root family",
       );
       const fresh = await driver.providerRequestsSince(base);
-      const parentDispatches = fresh.filter((record) => attributedSessionID(record) === sessionID);
+      const parentDispatches = fresh.filter(
+        (record) => containsMarker(record, marker) && !isTitleGeneration(record),
+      );
       check.equal(
         parentDispatches.length,
         1,
-        "exactly one provider dispatch is attributed to the parent (no native title dispatch)",
-      );
-      const childDispatches = fresh.filter(
-        (record) => attributedSessionID(record) === children[0].id,
+        "exactly one non-title provider dispatch carries the parent marker (no native title dispatch)",
       );
       check.truthy(
-        childDispatches.some((record) =>
-          bodyText(record).includes("Generate a short, specific title"),
-        ),
+        fresh.some((record) => isTitleGeneration(record)),
         "the auxiliary child performed the title generation instead",
       );
       return {
         detail:
-          "auxiliary title is parented, family-qualified, and replaces the native title dispatch",
+          "auxiliary title is parented, resolves the family fast role, and replaces the native title dispatch",
         observed: {
           sessionID,
           childID: children[0].id,
           parentDispatches: parentDispatches.length,
-          childDispatches: childDispatches.length,
         },
       };
     },
   },
   {
     id: "owned-generate-synthetic",
-    title: "Owned pre-admission for generate/synthetic before a user prompt, raw-unbound refusal",
+    title: "Native generate/synthetic complete without any admission gateway; settings resolve family-wide",
     phase: "T-003",
-    parity: ["plugin.model-roles.synthetic", "runtime.admission.owned"],
+    parity: ["plugin.model-roles.synthetic", "runtime.settings.resolve"],
     async run(driver, check) {
-      // Owned generate: pre-admit, then run the real native session.generate.
+      // Native session.generate needs no pre-binding: there is no admission
+      // gateway, and the family settings resolve fail-soft on first touch.
       const genSession = await driver.createSession();
       await delay(1000);
-      const genAdmit = await driver.control("/admit", {
-        method: "POST",
-        body: {
-          sessionID: genSession,
-          explicit: { providerID: "loopback", modelID: "seam-smart" },
-          workload: "generate",
-          force: true,
-        },
-      });
-      check.truthy(
-        genAdmit.body?.outcome?.status === "bound" || genAdmit.body?.outcome?.status === "reused",
-        `owned generate pre-admission published (${genAdmit.body?.outcome?.status})`,
-      );
       const genMarker = nextMarker("generate");
       const genBase = await driver.providerCount();
       const generated = await driver.generate(genSession, genMarker);
       check.truthy(
         generated.status < 400,
-        `native session.generate succeeded (${generated.status})`,
+        `native session.generate succeeded without pre-admission (${generated.status})`,
       );
       const genFresh = await driver.providerRequestsSince(genBase);
       const genDispatched = genFresh.filter((record) => containsMarker(record, genMarker));
@@ -523,26 +532,18 @@ export const coreCases: readonly CoreCase[] = [
       check.truthy(
         genDispatched[0] !== undefined &&
           payloadFields(genDispatched[0]).smoke_variant === "override",
-        "owned generate dispatched the family captured variant payload",
+        "generate dispatched the session's native role variant payload",
       );
-      const genPolicy = await driver.control(`/policy?sessionID=${genSession}`);
-      check.truthy(
-        genPolicy.body.capture !== null,
-        "owned generate bound the family before any ordinary user prompt",
+      const genSettings = await driver.control(`/settings?sessionID=${genSession}`);
+      check.equal(
+        genSettings.body?.settings?.version,
+        1,
+        "the generate family resolves settings without any admission step",
       );
 
-      // Owned synthetic: pre-admit, then run the real native session.synthetic.
+      // Native session.synthetic completes the same way.
       const synSession = await driver.createSession();
       await delay(1000);
-      await driver.control("/admit", {
-        method: "POST",
-        body: {
-          sessionID: synSession,
-          explicit: { providerID: "loopback", modelID: "seam-smart" },
-          workload: "synthetic",
-          force: true,
-        },
-      });
       const synMarker = nextMarker("synthetic");
       const synPrevIdle = (await driver.sessionInfo(synSession))?.time?.idle;
       const synBase = await driver.providerCount();
@@ -560,51 +561,20 @@ export const coreCases: readonly CoreCase[] = [
           (record) =>
             containsMarker(record, synMarker) && payloadFields(record).smoke_variant === "override",
         ),
-        "owned synthetic dispatched the family captured variant payload",
+        "synthetic dispatched the session's native role variant payload",
       );
-
-      // Raw unbound generate must fail before any provider dispatch.
-      const rawGen = await driver.createSession();
-      await delay(800);
-      const rawGenMarker = nextMarker("unbound-generate");
-      const rawGenBase = await driver.providerCount();
-      const rawGenerated = await driver.generate(rawGen, rawGenMarker);
-      await delay(1200);
-      const rawGenFresh = await driver.providerRequestsSince(rawGenBase);
-      check.truthy(
-        rawGenerated.status >= 400,
-        `raw unbound session.generate is refused (${rawGenerated.status})`,
-      );
-      check.truthy(
-        rawGenFresh.every((record) => !containsMarker(record, rawGenMarker)),
-        "raw unbound generate produced zero provider dispatch",
-      );
-
-      // Raw unbound synthetic must also fail before provider dispatch.
-      const rawSyn = await driver.createSession();
-      await delay(800);
-      const rawSynMarker = nextMarker("unbound-synthetic");
-      const rawSynBase = await driver.providerCount();
-      const rawSynthetic = await driver.synthetic(rawSyn, rawSynMarker);
-      await delay(2000);
-      const rawSynFresh = await driver.providerRequestsSince(rawSynBase);
-      check.truthy(
-        rawSynFresh.every((record) => !containsMarker(record, rawSynMarker)),
-        "raw unbound synthetic produced zero provider dispatch",
-      );
-      const rawSynPolicy = await driver.control(`/policy?sessionID=${rawSyn}`);
-      check.truthy(
-        rawSynPolicy.body.capture === null,
-        "raw unbound synthetic did not bind a family (status " + rawSynthetic.status + ")",
+      const synSettings = await driver.control(`/settings?sessionID=${synSession}`);
+      check.equal(
+        synSettings.body?.familyId,
+        synSession,
+        "the synthetic session is its own family root with settings",
       );
       return {
         detail:
-          "owned generate/synthetic bound before a user prompt; raw unbound work dispatched nothing",
+          "generate/synthetic complete natively with no admission gateway; family settings resolve for both",
         observed: {
           genStatus: generated.status,
           synStatus: synthetic.status,
-          rawGenStatus: rawGenerated.status,
-          rawSynStatus: rawSynthetic.status,
         },
       };
     },
@@ -640,7 +610,7 @@ export const coreCases: readonly CoreCase[] = [
         "explicit-at-create dispatched the override payload",
       );
 
-      // Explicit switch before first binding wins over the config default.
+      // Explicit switch before first work wins over the config default.
       const switched = await driver.createSession();
       await delay(1000);
       const switchResult = await driver.switchModel(switched, {
@@ -656,8 +626,7 @@ export const coreCases: readonly CoreCase[] = [
       await driver.prompt(switched, switchMarker);
       const switchInfo = await driver.waitIdleChange(switched, switchPrevIdle);
       check.truthy(
-        qualifiedSuffix(switchInfo?.model?.variant, ".seam-smart.plain") ||
-          switchInfo?.model?.variant === "plain",
+        qualifiedSuffix(switchInfo?.model?.variant, "plain"),
         `explicit switch kept the chosen plain selection (${switchInfo?.model?.variant})`,
       );
       const switchFresh = await driver.providerRequestsSince(switchBase);
@@ -679,14 +648,14 @@ export const coreCases: readonly CoreCase[] = [
   },
   {
     id: "implicit-first-turn",
-    title: "Sessions without agent or model complete their first turn on the family variant",
+    title: "Sessions without agent or model complete their first turn on the native role model",
     phase: "T-003",
-    parity: ["plugin.model-roles.admission"],
+    parity: ["plugin.model-roles.birth"],
     async run(driver, check) {
-      // The API/SDK shape: location-only create, no agent, no model. The host may
-      // resolve the first dispatch before the binding switch lands, so this case
-      // locks the user-visible contract: the first turn succeeds on the family
-      // variant, in every creation shape.
+      // The API/SDK shape: location-only create, no agent, no model. Role
+      // application happens through native agent definitions at creation, so
+      // this case locks the user-visible contract: the first turn succeeds on
+      // the role-resolved model, in every creation shape.
       const implicit = await driver.createSession();
       await delay(1200);
       const implicitPrevIdle = (await driver.sessionInfo(implicit))?.time?.idle;
@@ -701,17 +670,11 @@ export const coreCases: readonly CoreCase[] = [
         "a location-only session completes its first turn",
       );
       check.truthy(
-        qualifiedSuffix(implicitInfo?.model?.variant, ".seam-smart.override"),
-        `the implicit session carries the family-qualified variant (${implicitInfo?.model?.variant})`,
-      );
-      check.truthy(
         (await driver.providerRequestsSince(implicitBase)).some(
           (record) =>
-            attributedSessionID(record) === implicit &&
-            containsMarker(record, implicitMarker) &&
-            payloadFields(record).smoke_variant === "override",
+            containsMarker(record, implicitMarker) && !isTitleGeneration(record),
         ),
-        "the implicit first turn dispatched the family-qualified payload",
+        "the implicit first turn dispatched exactly its own request",
       );
 
       // Control: an explicit agent at create keeps working unchanged.
@@ -727,9 +690,9 @@ export const coreCases: readonly CoreCase[] = [
         "succeeded",
         "an explicit-agent session completes its first turn",
       );
-      check.truthy(
-        qualifiedSuffix(agentInfo?.model?.variant, ".seam-smart.override") ||
-          agentInfo?.model?.variant === "override",
+      check.equal(
+        agentInfo?.model?.variant,
+        "override",
         `the explicit-agent session kept its agent model selection (${agentInfo?.model?.variant})`,
       );
 
@@ -748,10 +711,10 @@ export const coreCases: readonly CoreCase[] = [
         "succeeded",
         "an explicit-model session completes its first turn",
       );
-      check.truthy(
-        qualifiedSuffix(modelInfo?.model?.variant, ".seam-smart.override") ||
-          modelInfo?.model?.variant === "override",
-        `the explicit-model session kept its qualified selection (${modelInfo?.model?.variant})`,
+      check.equal(
+        modelInfo?.model?.variant,
+        "override",
+        `the explicit-model session kept its selection (${modelInfo?.model?.variant})`,
       );
       return {
         detail:
@@ -766,20 +729,23 @@ export const coreCases: readonly CoreCase[] = [
   },
   {
     id: "config-mutation",
-    title: "Bound family retains policy while changed configuration binds new work",
+    title: "Session-owned settings: a born family keeps its settings while new work resolves the changed config",
     phase: "T-003",
-    parity: ["runtime.snapshot-persist", "plugin.model-roles.policy"],
+    parity: ["runtime.settings-persist", "plugin.model-roles.policy"],
     async run(driver, check) {
       const first = await driver.createSession();
       await delay(1200);
       const firstPrevIdle = (await driver.sessionInfo(first))?.time?.idle;
       await driver.prompt(first, nextMarker("before-mutation"));
-      const firstInfo = await driver.waitIdleChange(first, firstPrevIdle);
-      const firstVariant = firstInfo?.model?.variant;
-      check.truthy(
-        qualifiedSuffix(firstVariant, ".seam-smart.override"),
-        `initial family bound override (${firstVariant})`,
+      await driver.waitIdleChange(first, firstPrevIdle);
+      const firstSettings = await driver.control(`/settings?sessionID=${first}`);
+      const firstSettingsId = firstSettings.body?.settingsId as string | undefined;
+      check.equal(
+        firstSettings.body?.settings?.roles?.smart,
+        "loopback/seam-smart#override",
+        "the born family settings carry the override smart role",
       );
+      const firstModel = (await driver.sessionInfo(first))?.model;
 
       await driver.writeVvocRoles({ allPlain: true });
       await delay(1500);
@@ -787,30 +753,45 @@ export const coreCases: readonly CoreCase[] = [
       await delay(1200);
       const secondPrevIdle = (await driver.sessionInfo(second))?.time?.idle;
       await driver.prompt(second, nextMarker("after-mutation"));
-      const secondInfo = await driver.waitIdleChange(second, secondPrevIdle);
-      const secondVariant = secondInfo?.model?.variant;
-      check.truthy(
-        qualifiedSuffix(secondVariant, ".seam-smart.plain"),
-        `new work after mutation binds the new plain policy (${secondVariant})`,
+      await driver.waitIdleChange(second, secondPrevIdle);
+      const secondSettings = await driver.control(`/settings?sessionID=${second}`);
+      check.equal(
+        secondSettings.body?.settings?.roles?.smart,
+        "loopback/seam-smart#plain",
+        "the new family births with the changed role settings",
       );
       check.truthy(
-        secondVariant !== firstVariant,
-        "the new family capture differs from the earlier one",
+        secondSettings.body?.settingsId !== firstSettingsId,
+        "the two families carry distinct settings records",
+      );
+      // The born family session keeps its native model, and its settings are
+      // untouched by the config change.
+      check.equal(
+        JSON.stringify((await driver.sessionInfo(first))?.model ?? null),
+        JSON.stringify(firstModel ?? null),
+        "the born family session keeps its original native model",
+      );
+      const firstAfter = await driver.control(`/settings?sessionID=${first}`);
+      check.equal(
+        firstAfter.body?.settingsId,
+        firstSettingsId,
+        "the born family settings are untouched by the config change",
       );
       check.equal(
-        (await driver.sessionInfo(first))?.model?.variant,
-        firstVariant,
-        "the already-bound family keeps its original captured variant",
+        firstAfter.body?.settings?.roles?.smart,
+        "loopback/seam-smart#override",
+        "the born family keeps resolving its recorded override role",
       );
       return {
-        detail: "config change binds new work without mutating an already bound family",
-        observed: { firstVariant, secondVariant },
+        detail:
+          "config change births new families with the new settings without mutating an already-born family",
+        observed: { firstSettingsId, secondId: secondSettings.body?.settingsId },
       };
     },
   },
   {
     id: "fork-worktree",
-    title: "Fork (empty parentID) and worktree move keep root family policy",
+    title: "Fork (empty parentID) and worktree move keep root family settings",
     phase: "T-003",
     parity: ["runtime.lineage", "plugin.model-roles.fork"],
     async run(driver, check) {
@@ -821,10 +802,7 @@ export const coreCases: readonly CoreCase[] = [
       const rootInfo = await driver.waitIdleChange(root, rootPrevIdle);
       const rootFamily = (await driver.control(`/family?sessionID=${root}`)).body
         .familyId as string;
-      const rootSnapshot = (await driver.control(`/config?sessionID=${root}`)).body?.capture
-        ?.snapshotId;
-      const rootVariant = rootInfo?.model?.variant as string | undefined;
-      const expectedVariantName = rootVariant?.replace(/.*\.seam-smart\./, "");
+      const rootSettings = (await driver.control(`/settings?sessionID=${root}`)).body;
 
       const forked = await driver.fork(root);
       check.truthy(
@@ -844,7 +822,13 @@ export const coreCases: readonly CoreCase[] = [
       check.equal(
         forkFamily,
         rootFamily,
-        "host-verified family lookup resolves the fork to the root family",
+        "host-verified lineage resolves the fork to the root family",
+      );
+      const forkSettings = (await driver.control(`/settings?sessionID=${forkID}`)).body;
+      check.equal(
+        forkSettings?.settingsId,
+        rootSettings?.settingsId,
+        "the fork resolves the root family settings record",
       );
 
       const projectID = rootInfo?.projectID as string | undefined;
@@ -867,11 +851,11 @@ export const coreCases: readonly CoreCase[] = [
         const movedFamily = (await driver.control(`/family?sessionID=${forkID}`)).body
           .familyId as string;
         check.equal(movedFamily, rootFamily, "moved fork still resolves the root family");
-        const movedConfig = await driver.control(`/config?sessionID=${forkID}`);
+        const movedSettings = (await driver.control(`/settings?sessionID=${forkID}`)).body;
         check.equal(
-          movedConfig.body?.capture?.snapshotId,
-          rootSnapshot,
-          "moved fork keeps the root family capture",
+          movedSettings?.settingsId,
+          rootSettings?.settingsId,
+          "moved fork keeps the root family settings record",
         );
         const movedModel = (await driver.sessionInfo(forkID))?.model;
         const marker = nextMarker("fork-moved");
@@ -890,10 +874,9 @@ export const coreCases: readonly CoreCase[] = [
           marker: containsMarker(record, marker),
           session: attributedSessionID(record),
         }));
-        // Residual (C-SNAPSHOT-ANCHORING-REDESIGN): the host creates no model
-        // request for a child session prompted after `/session/{id}/move` in this
-        // harness (verified through the runtime guard hook log), so the post-move
-        // provider payload is recorded but not asserted. Lineage, capture, and
+        // Residual: the host creates no model request for a child session
+        // prompted after `/session/{id}/move` in this harness, so the post-move
+        // provider payload is recorded but not asserted. Lineage, settings, and
         // session-model assertions above stay enforced.
         movedObserved = { movedModel, freshSummary };
       } finally {
@@ -901,7 +884,7 @@ export const coreCases: readonly CoreCase[] = [
       }
       return {
         detail:
-          "fork lineage and worktree move preserve the root family capture; post-move provider dispatch is recorded as a residual, not asserted",
+          "fork lineage and worktree move preserve the root family settings; post-move provider dispatch is recorded as a residual, not asserted",
         observed: { rootFamily, forkID, projectID, ...(movedObserved as object) },
       };
     },
@@ -964,10 +947,10 @@ export const coreCases: readonly CoreCase[] = [
     },
   },
   {
-    id: "ordering-first-accepted",
-    title: "First prompt binds the family; a later explicit switch before idle does not rebind it",
+    id: "settings-stability",
+    title: "Settings birth happens once; a later explicit switch never rewrites the record",
     phase: "T-003",
-    parity: ["runtime.admission.ordering"],
+    parity: ["runtime.settings.stability"],
     async run(driver, check) {
       await driver.writeVvocRoles({ allPlain: false });
       await delay(1500);
@@ -977,8 +960,9 @@ export const coreCases: readonly CoreCase[] = [
       const markerA = nextMarker("first-staged");
       const markerB = nextMarker("last-staged");
       // A is staged first by the real prompt hook, then its native preparation is
-      // delayed by the fixture hook (which only sleeps). B is staged second with
-      // an explicit plain selection and is expected to be accepted first.
+      // delayed by the fixture hook (which only sleeps). The settings birth is
+      // driven by the first request's context work; the explicit switch below
+      // must never rewrite the born record.
       const pendingA = driver.prompt(session, `${ORDERING_DELAY_MARKER} ${markerA}`);
       await delay(700);
       const switched = await driver.switchModel(session, {
@@ -988,7 +972,7 @@ export const coreCases: readonly CoreCase[] = [
       });
       check.truthy(
         switched.status < 400,
-        `policy switch during A preparation accepted (${switched.status})`,
+        `explicit model switch during A preparation accepted (${switched.status})`,
       );
       await delay(300);
       const resultB = await driver.prompt(session, markerB);
@@ -996,15 +980,25 @@ export const coreCases: readonly CoreCase[] = [
       const resultA = await pendingA;
       check.truthy(resultA.status >= 0, `first prompt request completed (${resultA.status})`);
       const info = await driver.waitIdleChange(session, prevIdle, 45_000);
-      check.truthy(info !== undefined, `the session settled after the ordering race`);
-      const bound = await driver.control(`/policy?sessionID=${session}`);
-      const boundModel = JSON.stringify(bound.body?.capture?.roleModels ?? {});
-      check.truthy(
-        boundModel.includes("override"),
-        "the first prompt's override policy bound and survived the later explicit switch",
+      check.truthy(info !== undefined, `the session settled after the race`);
+      const settings = await driver.control(`/settings?sessionID=${session}`);
+      check.equal(
+        settings.body?.settings?.roles?.smart,
+        "loopback/seam-smart#override",
+        "the family settings born at first resolution kept the pre-switch override role",
+      );
+      check.equal(
+        settings.body?.source,
+        "metadata",
+        "the family still resolves from its persisted metadata record",
+      );
+      check.equal(
+        info?.model?.variant,
+        "plain",
+        `the user's explicit switch survived untouched (${info?.model?.variant})`,
       );
       return {
-        detail: "first prompt's policy bound while a later explicit switch did not rebind it",
+        detail: "settings birth happened once and a later explicit switch rewrote nothing",
         observed: {
           session,
           variant: info?.model?.variant,

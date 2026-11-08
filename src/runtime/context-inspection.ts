@@ -2,7 +2,7 @@
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Register the read-only native context-inspection RPC on the server plugin context, projecting the registered tool catalog and an allowlisted session-family or current-runtime policy for the TUI.
-//   SCOPE: Structural server context/runtime seam, bounded catalog reads via ctx.tool.list with server-side vendor schema conversion (Schema-owned Effect 4 resolved from @opencode/schema), serving-location/project session validation via ctx.session.get, meaningful FamilyCapture validation via snapshots.policy, current-runtime preview from the already-loaded effective config, value-free stable error codes, and strict allowlisted output construction. It never stages/accepts work, switches models, reloads, executes tools, or connects MCP servers.
+//   SCOPE: Structural server context/runtime seam, bounded catalog reads via ctx.tool.list with server-side vendor schema conversion (Schema-owned Effect 4 resolved from @opencode/schema), serving-location/project session validation via ctx.session.get, meaningful FamilySettingsView validation via settings.configFor, current-runtime preview from the already-loaded effective config, value-free stable error codes, and strict allowlisted output construction. It never stages/accepts work, switches models, reloads, executes tools, or connects MCP servers.
 //   DEPENDS: [node:module, node:url, @opencode/schema/tool, src/runtime/context-inspection-contract.ts, src/runtime/types.ts]
 //   LINKS: [M-NATIVE-RUNTIME, M-PLUGIN-CONTEXT-TUI, DF-CONTEXT-INSPECTION, V-M-NATIVE-RUNTIME, V-M-PLUGIN-CONTEXT-TUI]
 //   ROLE: RUNTIME
@@ -11,15 +11,16 @@
 //
 // START_MODULE_MAP
 //   ContextInspectionServerContext - Structural native server plugin context accepted by the registration helper.
-//   ContextInspectionServerRuntime - Structural runtime snapshot/config seam the handler may read.
+//   ContextInspectionServerRuntime - Structural runtime settings/config seam the handler may read.
 //   createContextInspectionHandler - Build the production inspection handler for focused tests.
 //   registerContextInspectionRpc - Register the versioned read-only inspection RPC and return its registration handle.
-//   isMeaningfulFamilyCapture - Validate a durable capture before exposing any allowlisted policy.
+//   isMeaningfulFamilySettingsView - Validate a resolved family settings view before exposing any allowlisted policy.
 //   loadSchemaOwnedVendorConverter - Resolve the Schema-owned Effect 4 codec converter for known built-in tool schemas.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-008 attempt 2 - Added value-free error codes, meaningful-capture validation, current-location session checks, undefined-preview rejection, bounded schedule reporting, and Schema-owned Effect schema conversion.]
+//   LAST_CHANGE: [C-SESSION-OWNED-SETTINGS T-003 - The family policy source is now the resolved session-owned settings view; provenance carries the settings content id and observation time, and validation matches the view shape.]
+//   PREVIOUS: [C-OPENCODE-V2-NATIVE T-008 attempt 2 - Added value-free error codes, meaningful-capture validation, current-location session checks, undefined-preview rejection, bounded schedule reporting, and Schema-owned Effect schema conversion.]
 // END_CHANGE_SUMMARY
 
 import { createRequire } from "node:module";
@@ -59,9 +60,9 @@ export interface ContextInspectionServerContext {
 }
 
 /**
- * Structural runtime snapshot/config seam the handler may read. `policy` is the
- * session-family capture lookup; `currentConfig` is the already-loaded effective
- * config used only for a labelled current-runtime preview.
+ * Structural runtime settings/config seam the handler may read. `policy` is the
+ * session-family settings resolution; `currentConfig` is the already-loaded
+ * effective config used only for a labelled current-runtime preview.
  */
 export interface ContextInspectionServerRuntime {
   policy(sessionID: string): Promise<unknown>;
@@ -91,7 +92,7 @@ export function createContextInspectionHandler(
     const warnings: string[] = [];
 
     const catalog = input.includeCatalog === false ? undefined : await readCatalog(ctx, warnings);
-    const policy = await readPolicy(ctx, runtime, input.sessionID, location, warnings);
+    const policy = await readPolicy(ctx, runtime, input.sessionID, location, observedAt, warnings);
 
     return {
       version: CONTEXT_INSPECTION_VERSION,
@@ -231,6 +232,7 @@ async function readPolicy(
   runtime: ContextInspectionServerRuntime,
   sessionID: string | undefined,
   location: ContextInspectionLocation,
+  observedAt: number,
   warnings: string[],
 ): Promise<ContextInspectionPolicy> {
   if (sessionID === undefined || sessionID.length === 0) {
@@ -261,9 +263,9 @@ async function readPolicy(
     );
   }
 
-  let capture: unknown;
+  let view: unknown;
   try {
-    capture = await runtime.policy(sessionID);
+    view = await runtime.policy(sessionID);
   } catch {
     return unavailablePolicy(
       "family",
@@ -272,30 +274,31 @@ async function readPolicy(
       "policy lookup failed",
     );
   }
-  if (capture === undefined) {
+  if (view === undefined) {
     return unavailablePolicy(
       "family",
       "policy_capture_missing",
       warnings,
-      "no captured family policy is bound to this session",
+      "no family settings could be resolved for this session",
     );
   }
-  if (!isMeaningfulFamilyCapture(capture)) {
+  if (!isMeaningfulFamilySettingsView(view)) {
     return unavailablePolicy(
       "family",
       "policy_capture_invalid",
       warnings,
-      "the captured family policy is corrupt or incomplete",
+      "the resolved family settings view is corrupt or incomplete",
     );
   }
 
-  const projected = projectContextInspectionPolicy(readPolicySource(capture));
+  const record = view as Record<string, unknown>;
+  const projected = projectContextInspectionPolicy(readPolicySource(record));
   if (!projected.complete) {
     return unavailablePolicy(
       "family",
       "schedule_projection_exceeded",
       warnings,
-      "the captured peak schedule exceeds the bounded projection",
+      "the resolved peak schedule exceeds the bounded projection",
     );
   }
   const policyWarnings = projected.warnings.length === 0 ? undefined : [...projected.warnings];
@@ -306,7 +309,7 @@ async function readPolicy(
     contextEnabled: projected.contextEnabled,
     analyticsEnabled: projected.analyticsEnabled,
     peakHours: projected.peakHours,
-    provenance: readProvenance(capture, location),
+    provenance: readProvenance(record, location, observedAt),
     ...(policyWarnings === undefined ? {} : { warnings: policyWarnings }),
   };
 }
@@ -360,20 +363,20 @@ function readPreviewPolicy(
 
 // START_BLOCK_CAPTURE_VALIDATION
 /**
- * Validate a durable family capture before exposing any allowlisted policy. An
- * arbitrary object (for example `{}`) is never treated as available defaults.
+ * Validate a resolved family settings view before exposing any allowlisted
+ * policy. An arbitrary object (for example `{}`) is never treated as available
+ * defaults.
  */
-export function isMeaningfulFamilyCapture(value: unknown): value is Record<string, unknown> {
+export function isMeaningfulFamilySettingsView(value: unknown): value is Record<string, unknown> {
   if (!isRecord(value)) return false;
-  if (value.schemaVersion !== 1) return false;
   if (!nonEmptyString(value.familyId)) return false;
-  if (!nonEmptyString(value.snapshotId)) return false;
-  if (!nonEmptyString(value.integrity)) return false;
-  if (typeof value.capturedAt !== "number" || !Number.isFinite(value.capturedAt)) return false;
+  if (!isRecord(value.settings)) return false;
+  if (value.settings.version !== 1) return false;
+  if (!isRecord(value.settings.roles) || !isRecord(value.settings.plugins)) return false;
+  if (typeof value.settings.profile !== "string" || value.settings.profile.length === 0) {
+    return false;
+  }
   if (!isRecord(value.vvoc) || !isRecord(value.vvoc.plugins)) return false;
-  const location = value.location;
-  if (!isRecord(location) || !nonEmptyString(location.directory)) return false;
-  if (!nonEmptyString(location.projectID)) return false;
   return true;
 }
 
@@ -400,25 +403,20 @@ function readPlugins(vvoc: Record<string, unknown>): Readonly<Record<string, unk
 }
 
 function readProvenance(
-  capture: Record<string, unknown>,
+  view: Record<string, unknown>,
   fallback: ContextInspectionLocation,
+  observedAt: number,
 ): ContextInspectionProvenance {
-  const location = isRecord(capture.location) ? capture.location : undefined;
-  const directory = location === undefined ? undefined : readString(location.directory);
-  const projectID = location === undefined ? undefined : readString(location.projectID);
-  const workspaceID = location === undefined ? undefined : readString(location.workspaceID);
+  const directory = readString(view.locationDirectory);
   return {
-    familyId: readString(capture.familyId) ?? "",
-    snapshotId: readString(capture.snapshotId) ?? "",
-    capturedAt: typeof capture.capturedAt === "number" ? capture.capturedAt : 0,
-    location:
-      directory === undefined
-        ? fallback
-        : {
-            directory,
-            ...(projectID === undefined ? {} : { projectID }),
-            ...(workspaceID === undefined ? {} : { workspaceID }),
-          },
+    familyId: readString(view.familyId) ?? "",
+    snapshotId: readString(view.settingsId) ?? "",
+    capturedAt: typeof observedAt === "number" ? observedAt : 0,
+    location: {
+      directory: directory ?? fallback.directory,
+      ...(fallback.projectID === undefined ? {} : { projectID: fallback.projectID }),
+      ...(fallback.workspaceID === undefined ? {} : { workspaceID: fallback.workspaceID }),
+    },
   };
 }
 

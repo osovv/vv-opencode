@@ -39,7 +39,7 @@ import {
   type NativeSnapshotContext,
   type NativeSnapshotRuntime,
 } from "../../runtime/context.js";
-import type { FamilyCapture } from "../../runtime/types.js";
+import type { FamilySettingsView } from "../../runtime/session-settings.js";
 import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
 import { resolveSecretsRedactionRuntimeConfig, type SecretsRedactionConfig } from "./config.js";
 import { buildPatternSet, type PatternSet } from "./patterns.js";
@@ -354,37 +354,25 @@ function createHandlers(deps: SecretsRedactionDependencies): {
 // END_BLOCK_HANDLERS
 
 // START_BLOCK_PLUGIN_ENTRY
-/** Resolve the bound-family secrets policy; never falls back to current/default config. */
+/** Resolve the family-settings secrets policy; unresolvable settings leave redaction off. */
 async function resolvePolicy(
   runtime: NativeSnapshotRuntime,
   sessionID: string,
 ): Promise<SecretsPolicyDecision> {
-  const read = async (): Promise<FamilyCapture | undefined> => {
-    try {
-      return await runtime.snapshots.configFor(sessionID);
-    } catch {
-      return undefined;
-    }
-  };
-  let capture = await read();
-  if (capture === undefined) {
-    // A first accepted workload may be persisted but not yet published; reconcile
-    // through the native acceptance service before deciding, then read again.
-    try {
-      await runtime.snapshots.accept({ sessionID });
-    } catch {
-      // fall through to the second read; absence blocks below
-    }
-    capture = await read();
+  let view: FamilySettingsView | undefined;
+  try {
+    view = await runtime.settings.configFor(sessionID);
+  } catch {
+    return undefined;
   }
-  if (capture === undefined) return undefined;
-  if (!isVvocPluginEnabled(capture.vvoc, "secrets-redaction")) return "disabled";
+  if (view === undefined) return undefined;
+  if (!isVvocPluginEnabled(view.vvoc, "secrets-redaction")) return "disabled";
   const resolved = resolveSecretsRedactionRuntimeConfig({
-    config: capture.vvoc,
+    config: view.vvoc,
     source: { kind: "project" },
     warnings: [],
   });
-  return { key: capture.familyId, config: resolved.config };
+  return { key: view.familyId, config: resolved.config };
 }
 
 function createConsoleLog(): SecretsRedactionDependencies["log"] {

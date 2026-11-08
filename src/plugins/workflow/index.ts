@@ -109,7 +109,8 @@ import {
   type NativeSessionInfoLike,
   type NativeSnapshotContext,
 } from "../../runtime/context.js";
-import type { EffectiveRuntimeConfig, SnapshotService } from "../../runtime/types.js";
+import type { EffectiveRuntimeConfig } from "../../runtime/types.js";
+import type { FamilySettingsService } from "../../runtime/session-settings.js";
 import {
   createConsoleDiagnosticSink,
   decodeNativeSubagentResult,
@@ -450,7 +451,7 @@ export interface WorkflowClient {
  * `NativeSnapshotRuntime` satisfies it structurally; tests inject a fake.
  */
 export interface WorkflowRuntime {
-  readonly snapshots: Pick<SnapshotService, "configFor" | "accept">;
+  readonly settings: Pick<FamilySettingsService, "configFor">;
   client(): Promise<WorkflowClient>;
   effectiveConfig(): EffectiveRuntimeConfig;
   release(): Promise<void>;
@@ -504,30 +505,16 @@ async function setupWorkflow(
   async function resolveFamilyPolicy(
     sessionId: string,
   ): Promise<{ policy: ResolvedOrchestrationPolicy; enabled: boolean } | undefined> {
-    let capture: { vvoc: EffectiveRuntimeConfig["vvoc"] } | undefined;
+    let view: { vvoc: EffectiveRuntimeConfig["vvoc"] } | undefined;
     try {
-      capture = await runtime.snapshots.configFor(sessionId);
+      view = await runtime.settings.configFor(sessionId);
     } catch {
       return undefined;
     }
-    if (capture === undefined) {
-      // A first accepted workload may be persisted but not yet published;
-      // reconcile through the native acceptance service, then read again.
-      try {
-        await runtime.snapshots.accept({ sessionID: sessionId });
-      } catch {
-        // fall through to the second read; absence fails closed below
-      }
-      try {
-        capture = await runtime.snapshots.configFor(sessionId);
-      } catch {
-        return undefined;
-      }
-    }
-    if (capture === undefined) return undefined;
+    if (view === undefined) return undefined;
     return {
-      policy: resolveOrchestrationPolicy(capture.vvoc),
-      enabled: isVvocPluginEnabled(capture.vvoc, "workflow"),
+      policy: resolveOrchestrationPolicy(view.vvoc),
+      enabled: isVvocPluginEnabled(view.vvoc, "workflow"),
     };
   }
   async function requireFamilyEnabled(sessionId: string): Promise<ResolvedOrchestrationPolicy> {
@@ -536,7 +523,7 @@ async function setupWorkflow(
       throw new WorkflowDiagnosticError(
         "FAMILY_UNBOUND",
         "authorization",
-        `FAMILY_UNBOUND: no immutable policy capture is bound to session ${sessionId}; workflow tools fail closed until a family is bound.`,
+        `FAMILY_UNBOUND: no family settings could be resolved for session ${sessionId}; workflow tools fail closed until family settings resolve.`,
       );
     }
     if (!family.enabled) {

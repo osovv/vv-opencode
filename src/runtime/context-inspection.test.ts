@@ -108,17 +108,23 @@ const SAFE_PLUGINS = {
 
 function baseCapture(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    schemaVersion: 1,
     familyId: "fam_1",
-    snapshotId: "snap_1",
-    integrity: "sha256:deadbeef",
-    capturedAt: 42,
-    location: { directory: "/moved/worktree", projectID: "proj_1", workspaceID: "ws_1" },
+    locationDirectory: "/moved/worktree",
+    settings: {
+      version: 1,
+      roles: { default: "secret-role" },
+      profile: "balanced",
+      plugins: {},
+    },
     vvoc: {
       plugins: SAFE_PLUGINS,
       roles: { default: "secret-role" },
       secretsRedaction: { secret: "top-secret" },
     },
+    roleModels: { default: { providerID: "p", modelID: "m" } },
+    source: "metadata",
+    settingsId: "snap_1",
+    // Legacy raw-capture noise: must never surface in the projected result.
     modelSettings: [{ providerID: "p", modelID: "m", body: { secret: "leak" } }],
     rawIntent: { model: "p/m" },
     ...overrides,
@@ -380,7 +386,7 @@ describe("context inspection handler", () => {
       status: "available",
       scope: "family",
       contextEnabled: true,
-      provenance: { familyId: "fam_1", snapshotId: "snap_1", capturedAt: 42 },
+      provenance: { familyId: "fam_1", snapshotId: "snap_1", capturedAt: 1_700_000_000_000 },
     });
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain("top-secret");
