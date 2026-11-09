@@ -1,9 +1,9 @@
 // FILE: src/plugins/secrets-redaction/index.ts
-// VERSION: 2.1.0
+// VERSION: 2.2.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Native OpenCode 2.0.18 plugin that redacts secrets from provider-bound request hooks (context/generate/compaction/title) and restores them in native tool inputs and streamed provider responses, strictly under the immutable policy capture bound to the session's family.
-//   SCOPE: Native Plugin.define entry, strict per-family policy resolution through snapshot accept reconciliation BEFORE provider dispatch (unknown policy blocks provider-bound work; only an explicit captured disabled policy is a no-redaction path), family-scoped placeholder state with TTL/max bounds and cleanup, per-native-session WebSocket framing discarded at each experimental.ws.handshake request boundary (so an abandoned stream cannot poison later frames) while family placeholder mappings stay shared, redaction of system text and message text/reasoning/tool-call/tool-result/metadata fields, native tool input restoration, SSE/non-SSE http.response restoration, experimental.ws.receive frame restoration, and credential-safe diagnostics. It never mutates the persisted user prompt, never falls back to the current or default config, and never formats a fabricated host logger.
-//   DEPENDS: [@opencode/plugin, src/runtime/context.ts, src/runtime/types.ts, src/lib/plugin-toggle-config.ts, src/lib/vvoc-config.ts, src/plugins/secrets-redaction/config.ts, src/plugins/secrets-redaction/patterns.ts, src/plugins/secrets-redaction/engine.ts, src/plugins/secrets-redaction/deep.ts, src/plugins/secrets-redaction/session.ts, src/plugins/secrets-redaction/stream.ts]
+//   PURPOSE: Native OpenCode 2.x plugin that redacts secrets from provider-bound request hooks (context/generate/compaction/title) and restores them in native tool inputs and streamed provider responses, strictly under the immutable policy capture bound to the session's family.
+//   SCOPE: Native Plugin.define entry, strict per-family policy resolution through snapshot accept reconciliation BEFORE provider dispatch (unknown policy blocks provider-bound work with a reasoned, actionable error; only an explicit captured disabled policy is a no-redaction path), family-scoped placeholder state with TTL/max bounds and cleanup, per-native-session WebSocket framing discarded at each experimental.ws.handshake request boundary (so an abandoned stream cannot poison later frames) while family placeholder mappings stay shared, credentials-first redaction of system text and message text/reasoning/tool-call/tool-result/metadata fields with opaque media leaves preserved byte-for-byte in structured payloads, strict native tool input restoration that fails closed with a credential-safe error before any side effect when a secret reference has no mapping, SSE/non-SSE http.response restoration, experimental.ws.receive frame restoration, and credential-safe diagnostics. It never mutates the persisted user prompt, never falls back to the current or default config, never formats a fabricated host logger, and never fuzzy-matches or borrows mappings.
+//   DEPENDS: [@opencode/plugin, src/runtime/context.ts, src/runtime/types.ts, src/lib/plugin-toggle-config.ts, src/lib/vvoc-config.ts, src/plugins/secrets-redaction/config.ts, src/plugins/secrets-redaction/patterns.ts, src/plugins/secrets-redaction/engine.ts, src/plugins/secrets-redaction/deep.ts, src/plugins/secrets-redaction/restore.ts, src/plugins/secrets-redaction/session.ts, src/plugins/secrets-redaction/stream.ts]
 //   LINKS: [M-PLUGIN-SECRETS-REDACTION, M-NATIVE-RUNTIME, V-M-PLUGIN-SECRETS-REDACTION, DF-SECRETS-REDACTION]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -12,7 +12,11 @@
 // START_MODULE_MAP
 //   PLACEHOLDER_PREFIX - Placeholder namespace prefix for redacted secrets.
 //   SecretsPolicyResolution - Family-scoped policy key plus normalized secrets config.
+//   SecretsPolicyUnboundReason - Why no trustworthy family policy exists (lineage vs config load).
+//   SecretsPolicyUnbound - Unbound decision carrying its fail-closed reason.
+//   SecretsPolicyDecision - Enabled resolution, explicit disable, unbound with reason, or unknown.
 //   SecretsPolicyUnboundError - No trustworthy family policy exists, so provider-bound work is blocked.
+//   SecretsReferenceUnresolvedError - Re-export of the strict tool-input restore failure.
 //   SecretsRedactionHandlers - Native hook handlers for context/generate/compaction/title/tool/http/ws.
 //   SecretsRedactionRegistration - Handlers plus cleanup-owning dispose.
 //   SecretsRedactionDependencies - Injectable strict policy resolver and diagnostic sink.
@@ -20,7 +24,6 @@
 //   SecretsRedactionPluginOptions - Optional injectable runtime acquisition for tests.
 //   createSecretsRedactionPlugin - Native plugin factory; the default export acquires the real shared runtime.
 //   SecretsRedactionPlugin - Default production native secrets-redaction plugin object.
-//   SecretsPolicyDecision - Enabled resolution, explicit disable, or unknown policy.
 //   SecretsContextEvent - Native context/generate/compaction/title request surface.
 //   SecretsToolBeforeEvent - Native tool execute.before input surface.
 //   SecretsHttpResponseEvent - Native http.response surface.
@@ -30,7 +33,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE MID-REPAIR-2 - WebSocket frame restoration state is keyed per native session instead of per family, and an experimental.ws.handshake handler discards only that session's abandoned framing at each model call, so a terminal-less SSE stream can no longer swallow later JSON frames and two same-family sessions no longer mix carries; family-wide placeholder mappings remain intentionally shared.]
+//   LAST_CHANGE: [secrets reliability overhaul - Tool input restoration became strict: an unresolved well-formed secret reference throws SecretsReferenceUnresolvedError (SECRETS_REFERENCE_UNRESOLVED) naming tool, session, and the safe placeholder token BEFORE any side effect instead of silently executing with a placeholder path; structured tool-call/tool-result payloads redact with the media guard so base64/data-URL payloads stay byte-identical; SECRETS_POLICY_UNBOUND now distinguishes an unresolvable settings lineage from a config load failure and names value-free recovery guidance.]
 // END_CHANGE_SUMMARY
 
 import { Plugin } from "@opencode/plugin";
@@ -44,8 +47,9 @@ import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
 import { resolveSecretsRedactionRuntimeConfig, type SecretsRedactionConfig } from "./config.js";
 import { buildPatternSet, type PatternSet } from "./patterns.js";
 import { redactText } from "./engine.js";
-import { redactDeep, restoreDeep } from "./deep.js";
+import { redactDeep, redactDeepMediaAware, restoreDeepStrict } from "./deep.js";
 import { PlaceholderSession } from "./session.js";
+import { SecretsReferenceUnresolvedError } from "./restore.js";
 import {
   createFrameRestoreState,
   createResponseByteTransform,
@@ -55,25 +59,58 @@ import {
 
 export const PLACEHOLDER_PREFIX = "__VVOC_SECRET_";
 
+export { SecretsReferenceUnresolvedError };
+
 /** Family-scoped policy key plus normalized secrets config. */
 export interface SecretsPolicyResolution {
   readonly key: string;
   readonly config: SecretsRedactionConfig;
 }
 
+/**
+ * Why no trustworthy family policy exists. Fail-closed dispatch is unchanged;
+ * the reason only makes the block actionable.
+ */
+export type SecretsPolicyUnboundReason = "settings-lineage-unresolvable" | "config-load-failed";
+
+/** Unbound decision carrying its fail-closed reason. */
+export interface SecretsPolicyUnbound {
+  readonly unbound: true;
+  readonly reason: SecretsPolicyUnboundReason;
+}
+
 /** A family whose captured policy disables secrets-redaction: the only legitimate no-redaction path. */
-export type SecretsPolicyDecision = SecretsPolicyResolution | "disabled" | undefined;
+export type SecretsPolicyDecision =
+  | SecretsPolicyResolution
+  | "disabled"
+  | SecretsPolicyUnbound
+  | undefined;
 
 /** No trustworthy family policy exists, so provider-bound work is blocked. */
 export class SecretsPolicyUnboundError extends Error {
   readonly code = "SECRETS_POLICY_UNBOUND";
+  readonly reason: SecretsPolicyUnboundReason;
 
-  constructor(sessionID: string) {
+  constructor(
+    sessionID: string,
+    reason: SecretsPolicyUnboundReason = "settings-lineage-unresolvable",
+  ) {
+    const cause =
+      reason === "config-load-failed"
+        ? "the family's vvoc configuration could not be loaded"
+        : "no immutable secrets-redaction policy is bound to the session's settings lineage";
     super(
-      `SECRETS_POLICY_UNBOUND: no immutable secrets-redaction policy is bound to session ${sessionID}; refusing to dispatch an unredacted provider request.`,
+      `SECRETS_POLICY_UNBOUND: ${cause} (session ${sessionID}); refusing to dispatch an unredacted provider request. Recovery: repair the vvoc configuration and restart OpenCode (run \`vvoc doctor\` to inspect the effective config), or explicitly disable the secrets-redaction plugin for this scope if you intend to work without credential redaction.`,
     );
     this.name = "SecretsPolicyUnboundError";
+    this.reason = reason;
   }
+}
+
+function isUnbound(resolved: SecretsPolicyDecision): resolved is SecretsPolicyUnbound {
+  return (
+    typeof resolved === "object" && resolved !== null && "unbound" in resolved && resolved.unbound
+  );
 }
 
 // START_BLOCK_NATIVE_EVENTS
@@ -191,7 +228,9 @@ function redactContentPart(part: NativeContentPart, state: FamilyState): void {
     }
     case "tool-call": {
       if (part.input !== undefined) {
-        part.input = redactDeep(part.input, state.patternSet, state.session);
+        // Media-aware: base64/data-URL leaves in structured arguments stay
+        // byte-identical while textual leaves redact.
+        part.input = redactDeepMediaAware(part.input, state.patternSet, state.session);
       }
       if (part.metadata !== undefined) {
         part.metadata = redactDeep(part.metadata, state.patternSet, state.session);
@@ -201,7 +240,10 @@ function redactContentPart(part: NativeContentPart, state: FamilyState): void {
     case "tool-result": {
       if (part.result !== undefined && part.result !== null && typeof part.result === "object") {
         const result = part.result as { type?: string; value?: unknown };
-        result.value = redactDeep(result.value, state.patternSet, state.session);
+        // Media-aware: tool results carry image/PDF/audio/video payloads as
+        // base64 or data URLs; rewriting those into placeholders corrupts
+        // every subsequent provider request. Textual values still redact.
+        result.value = redactDeepMediaAware(result.value, state.patternSet, state.session);
       }
       if (part.metadata !== undefined) {
         part.metadata = redactDeep(part.metadata, state.patternSet, state.session);
@@ -270,7 +312,12 @@ function createHandlers(deps: SecretsRedactionDependencies): {
   const requireState = async (sessionID: string): Promise<FamilyState | undefined> => {
     const resolved = await deps.configFor(sessionID);
     if (resolved === "disabled") return undefined;
-    if (resolved === undefined) throw new SecretsPolicyUnboundError(sessionID);
+    if (resolved === undefined || isUnbound(resolved)) {
+      throw new SecretsPolicyUnboundError(
+        sessionID,
+        isUnbound(resolved) ? resolved.reason : undefined,
+      );
+    }
     return stateFromResolution(resolved);
   };
 
@@ -323,19 +370,25 @@ function createHandlers(deps: SecretsRedactionDependencies): {
       // A missing policy never blocks socket frames (they may not be provider text),
       // but no restoration happens without a trustworthy family map.
       const resolved = await deps.configFor(event.sessionID);
-      if (resolved === "disabled" || resolved === undefined) return;
+      if (resolved === "disabled" || resolved === undefined || isUnbound(resolved)) return;
       const state = stateFromResolution(resolved);
       const frames = frameStateFor(event.sessionID, state.session);
       event.frame = restoreProviderFrame(state.session, event.frame, frames);
     },
     async toolBefore(event) {
       // Restoration requires a bound family map; without one there is nothing to
-      // restore and no map may be borrowed from another family.
+      // restore and no map may be borrowed from another family. With a bound
+      // map the restore is strict: an unresolved well-formed reference throws
+      // BEFORE the tool runs, so a placeholder never substitutes for a real
+      // path or value at execution time.
       const resolved = await deps.configFor(event.sessionID);
-      if (resolved === "disabled" || resolved === undefined) return;
+      if (resolved === "disabled" || resolved === undefined || isUnbound(resolved)) return;
       if (event.input === undefined) return;
       const state = stateFromResolution(resolved);
-      event.input = restoreDeep(event.input, state.session);
+      event.input = restoreDeepStrict(event.input, state.session, {
+        tool: event.tool,
+        sessionID: event.sessionID,
+      });
     },
   };
 
@@ -354,7 +407,11 @@ function createHandlers(deps: SecretsRedactionDependencies): {
 // END_BLOCK_HANDLERS
 
 // START_BLOCK_PLUGIN_ENTRY
-/** Resolve the family-settings secrets policy; unresolvable settings leave redaction off. */
+/**
+ * Resolve the family-settings secrets policy. Both failure shapes stay
+ * fail-closed; they differ only in the reason surfaced to the operator:
+ * an unresolvable settings lineage vs. a config snapshot that could not load.
+ */
 async function resolvePolicy(
   runtime: NativeSnapshotRuntime,
   sessionID: string,
@@ -363,9 +420,9 @@ async function resolvePolicy(
   try {
     view = await runtime.settings.configFor(sessionID);
   } catch {
-    return undefined;
+    return { unbound: true, reason: "config-load-failed" };
   }
-  if (view === undefined) return undefined;
+  if (view === undefined) return { unbound: true, reason: "settings-lineage-unresolvable" };
   if (!isVvocPluginEnabled(view.vvoc, "secrets-redaction")) return "disabled";
   const resolved = resolveSecretsRedactionRuntimeConfig({
     config: view.vvoc,

@@ -1,5 +1,5 @@
 // FILE: src/plugins/secrets-redaction/patterns.test.ts
-// VERSION: 1.0.0
+// VERSION: 1.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for buildPatternSet and builtin patterns
 //   SCOPE: pattern building, regex normalization
@@ -14,14 +14,14 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v0.0.0 - Initial GRACE compliance: added missing CHANGE_SUMMARY.]
+//   LAST_CHANGE: [secrets reliability overhaul - Covered the two new context-scoped builtins (bearer_auth group isolation, jwt shape) with identifier/UUID/dated-slug counterexamples, keyword caseSensitive semantics, case-insensitive exclude normalization, and the 15-name registry invariant (13 legacy opt-ins preserved).]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import { buildPatternSet, BUILTIN_PATTERNS } from "./patterns.js";
 
 describe("BUILTIN_PATTERNS", () => {
-  test("has all 13 expected builtin patterns", () => {
+  test("keeps all 13 legacy builtin patterns valid as opt-ins", () => {
     const names = Array.from(BUILTIN_PATTERNS.keys());
     expect(names).toContain("email");
     expect(names).toContain("uuid");
@@ -36,7 +36,14 @@ describe("BUILTIN_PATTERNS", () => {
     expect(names).toContain("bearer_dot");
     expect(names).toContain("syn_key");
     expect(names).toContain("hex_token");
-    expect(names.length).toBe(13);
+    expect(names.length).toBe(15);
+  });
+
+  test("adds the credential-first context-scoped builtins", () => {
+    expect(BUILTIN_PATTERNS.get("bearer_auth")).toBeDefined();
+    expect(BUILTIN_PATTERNS.get("bearer_auth")!.group).toBe(1);
+    expect(BUILTIN_PATTERNS.get("jwt")).toBeDefined();
+    expect(BUILTIN_PATTERNS.get("jwt")!.group).toBeUndefined();
   });
 
   test("email pattern matches standard emails", () => {
@@ -113,6 +120,46 @@ describe("BUILTIN_PATTERNS", () => {
     expect(regex.test("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9")).toBe(true);
     expect(regex.test("abcdefghijklmnopqrstuvwxyz123456")).toBe(true);
   });
+
+  test("bearer_auth matches a Bearer credential and isolates the token in group 1", () => {
+    const builtin = BUILTIN_PATTERNS.get("bearer_auth")!;
+    const regex = new RegExp(builtin.pattern, "di");
+    const match = regex.exec("Authorization: Bearer abc123def456ghi789jkl012");
+    expect(match).not.toBeNull();
+    expect(match![1]).toBe("abc123def456ghi789jkl012");
+    expect(match![0]).toBe("Bearer abc123def456ghi789jkl012");
+    expect(match!.indices![1]).toBeDefined();
+  });
+
+  test("bearer_auth matches lowercase bearer and url-safe token alphabets", () => {
+    const builtin = BUILTIN_PATTERNS.get("bearer_auth")!;
+    const regex = new RegExp(builtin.pattern, "i");
+    expect(regex.test("bearer abc123def456ghi789jkl012")).toBe(true);
+    expect(regex.test("Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6-JmQ")).toBe(true);
+    expect(regex.test("Bearer base64+slash_equal-abc20+")).toBe(true);
+  });
+
+  test("bearer_auth does NOT match ordinary long identifiers without a Bearer context", () => {
+    const builtin = BUILTIN_PATTERNS.get("bearer_auth")!;
+    const regex = new RegExp(builtin.pattern, "i");
+    expect(regex.test("tool-output-redaction-and-truncated-results")).toBe(false);
+    expect(regex.test("M-PLUGIN-SYSTEM-CONTEXT-INJECTION")).toBe(false);
+    expect(regex.test("APPLICATIONINSIGHTS_CONNECTION_STRING")).toBe(false);
+    expect(regex.test("2026-11-09-meeting-notes-and-agenda")).toBe(false);
+    expect(regex.test("550e8400-e29b-41d4-a716-446655440000")).toBe(false);
+  });
+
+  test("jwt matches compact JWS tokens only", () => {
+    const builtin = BUILTIN_PATTERNS.get("jwt")!;
+    const regex = new RegExp(builtin.pattern, "i");
+    expect(
+      regex.test("token=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4"),
+    ).toBe(true);
+    // Ordinary identifiers, directories and UUIDs never look like a JWS.
+    expect(regex.test("M-PLUGIN-SYSTEM-CONTEXT-INJECTION")).toBe(false);
+    expect(regex.test("550e8400-e29b-41d4-a716-446655440000")).toBe(false);
+    expect(regex.test("2026-11-09-meeting-notes-and-agenda")).toBe(false);
+  });
 });
 
 describe("buildPatternSet", () => {
@@ -141,6 +188,34 @@ describe("buildPatternSet", () => {
       ],
     });
     expect(ps.rules).toHaveLength(13);
+  });
+
+  test("loads the credential-first opt-ins bearer_auth and jwt with group metadata", () => {
+    const ps = buildPatternSet({ builtin: ["bearer_auth", "jwt"] });
+    expect(ps.rules).toHaveLength(2);
+    expect(ps.rules[0]!.category).toBe("BEARER_AUTH");
+    expect(ps.rules[0]!.group).toBe(1);
+    expect(ps.rules[1]!.category).toBe("JWT");
+    expect(ps.rules[1]!.group).toBeUndefined();
+  });
+
+  test("keyword rules are case-insensitive unless caseSensitive is set", () => {
+    const insensitive = buildPatternSet({ keywords: [{ value: "ApiKeyAbc" }] });
+    expect(insensitive.rules[0]!.pattern.test("the apikeyabc value")).toBe(true);
+
+    const sensitive = buildPatternSet({
+      keywords: [{ value: "ApiKeyAbc", category: "WEB_API_KEY", caseSensitive: true }],
+    });
+    expect(sensitive.rules[0]!.pattern.test("the ApiKeyAbc value")).toBe(true);
+    expect(sensitive.rules[0]!.pattern.test("the apikeyabc value")).toBe(false);
+  });
+
+  test("exclude entries are matched case-insensitively", () => {
+    const ps = buildPatternSet({
+      builtin: ["email"],
+      exclude: ["TEST@EXAMPLE.INVALID"],
+    });
+    expect(ps.exclude.has("test@example.invalid")).toBe(true);
   });
 
   test("loads only specified builtins", () => {

@@ -155,6 +155,9 @@
                   "category": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "caseSensitive": {
+                    "type": "boolean"
                   }
                 }
               }

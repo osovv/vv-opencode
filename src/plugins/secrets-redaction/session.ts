@@ -1,9 +1,10 @@
 // FILE: src/plugins/secrets-redaction/session.ts
-// VERSION: 1.0.0
+// VERSION: 1.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Manages placeholder lifecycle for secret redaction — generates stable HMAC-based placeholders,
 //            maintains forward/reverse mappings, handles TTL eviction and max-mappings limits.
-//   SCOPE: placeholder creation, lookup, cleanup
+//   SCOPE: placeholder creation, lookup, cleanup, and the public placeholder-grammar helpers other
+//          modules use to detect placeholder-shaped text (prefix accessor + non-global matcher)
 //   DEPENDS: node:crypto
 //   LINKS: [M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: RUNTIME
@@ -12,7 +13,8 @@
 //
 // START_MODULE_MAP
 //   PlaceholderSession - manages secret → placeholder mappings with HMAC hashing
-//   getPlaceholderRegex - returns RegExp to find all placeholders in text
+//   getPlaceholderRegex - returns global RegExp to find all placeholders in text
+//   getPlaceholderMatcher - returns non-global RegExp to test whether one string is a placeholder
 //   placeholderCategoryToken - deterministic bounded token-safe category representation
 //   PlaceholderSessionOptions - Session configuration options.
 //   PlaceholderEntry - Individual placeholder mapping entry.
@@ -20,7 +22,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009 - Emit a deterministic bounded token-safe category token so every canonical config category (lowercase/digits/punctuation/Unicode/long) restores, while the original category stays mapping metadata.]
+//   LAST_CHANGE: [secrets reliability overhaul - Exposed the placeholder grammar: a public prefix accessor on PlaceholderSession and a non-global getPlaceholderMatcher so the engine can skip already-redacted text (idempotency) and the strict tool-input restore can fail closed on unresolved references.]
 // END_CHANGE_SUMMARY
 
 import { createHmac, randomBytes } from "node:crypto";
@@ -40,7 +42,7 @@ export interface PlaceholderEntry {
 }
 
 export class PlaceholderSession {
-  private readonly prefix: string;
+  private readonly prefixValue: string;
   private readonly ttlMs: number;
   private readonly maxMappings: number;
   private readonly secret: Buffer;
@@ -49,7 +51,7 @@ export class PlaceholderSession {
   private readonly created: Map<string, number> = new Map();
 
   constructor(options: PlaceholderSessionOptions) {
-    this.prefix = options.prefix;
+    this.prefixValue = options.prefix;
     this.ttlMs = options.ttlMs;
     this.maxMappings = options.maxMappings;
     this.secret = Buffer.from(options.secret, "utf-8");
@@ -69,12 +71,12 @@ export class PlaceholderSession {
     const hash = this.computeHash(original);
     const hash12 = hash.substring(0, 12);
     const token = placeholderCategoryToken(category);
-    let placeholder = `${this.prefix}${token}_${hash12}__`;
+    let placeholder = `${this.prefixValue}${token}_${hash12}__`;
 
     if (this.forward.has(placeholder)) {
       let counter = 1;
       while (this.forward.has(placeholder)) {
-        placeholder = `${this.prefix}${token}_${hash12}_${counter}__`;
+        placeholder = `${this.prefixValue}${token}_${hash12}_${counter}__`;
         counter++;
       }
     }
@@ -148,6 +150,11 @@ export class PlaceholderSession {
   get size(): number {
     return this.forward.size;
   }
+
+  /** Public namespace prefix shared by every placeholder this session emits. */
+  get prefix(): string {
+    return this.prefixValue;
+  }
 }
 
 /**
@@ -168,6 +175,18 @@ export function getPlaceholderRegex(prefix: string): RegExp {
   return new RegExp(
     `${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[A-Za-z0-9_]+_[0-9a-f]{12}(?:_\\d+)?__`,
     "g",
+  );
+}
+
+/**
+ * Non-global matcher for the placeholder grammar: tests whether one whole
+ * string is a well-formed placeholder. The engine uses it to keep redaction
+ * idempotent (an already-redacted value is left alone); the strict restore
+ * path uses it to fail closed on unresolved references.
+ */
+export function getPlaceholderMatcher(prefix: string): RegExp {
+  return new RegExp(
+    `^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[A-Za-z0-9_]+_[0-9a-f]{12}(?:_\\d+)?__$`,
   );
 }
 

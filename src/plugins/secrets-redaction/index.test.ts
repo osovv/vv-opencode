@@ -1,7 +1,7 @@
 // FILE: src/plugins/secrets-redaction/index.test.ts
-// VERSION: 2.0.0
+// VERSION: 2.1.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Native-boundary behavioral tests for the SecretsRedactionPlugin handlers: context redaction including configured and placeholder-resolved web apiKey values, tool-part payload redaction, http.response stream restoration, tool-input restoration including deep-frozen host inputs, strict per-family disabled/unknown policy behavior, and per-native-session WebSocket framing lifecycle (handshake discard, abandoned-stream isolation, same-family session independence, production hook registration). An optional pinned 2.0.18 host smoke proves the built plugin end to end: the same-context composite and the secrets-first distinct-context subpath registration (the T009 aggregate mode) both complete a turn with redact -> restore evidence and no admission failure.
+//   PURPOSE: Native-boundary behavioral tests for the SecretsRedactionPlugin handlers: context redaction including configured and placeholder-resolved web apiKey values, credential-first default policy with legacy-config preservation, media integrity across repeated provider requests, tool-part payload redaction, http.response stream restoration, strict tool-input restoration that fails closed on unresolved secret references before any side effect, keyword case sensitivity, deep-frozen host inputs, strict per-family disabled/unbound policy behavior, and per-native-session WebSocket framing lifecycle (handshake discard, abandoned-stream isolation, same-family session independence, production hook registration). An optional pinned host smoke proves the built plugin end to end: the same-context composite and the secrets-first distinct-context subpath registration (the T009 aggregate mode) both complete a turn with redact -> restore evidence and no admission failure.
 //   SCOPE: Invoke the native hook handlers with pinned message/system/stream shapes through createSecretsRedactionRegistration with an injected strict family policy resolver; pure web apiKey rule tests are retained.
 //   DEPENDS: bun:test, src/lib/vvoc-config.ts, src/plugins/secrets-redaction/config.ts, src/plugins/secrets-redaction/index.ts
 //   LINKS: [M-PLUGIN-SECRETS-REDACTION, V-M-PLUGIN-SECRETS-REDACTION]
@@ -12,7 +12,16 @@
 // START_MODULE_MAP
 //   EMAIL - Stable email secret fixture.
 //   PLACEHOLDER_PATTERN - Expected redacted email placeholder shape.
+//   PNG_DATA_URL - Deterministic image data-URL media fixture.
+//   AUDIO_DATA_URL - Deterministic audio data-URL media fixture.
+//   JWT - Compact JWS credential fixture.
+//   BEARER_TOKEN - Bearer credential fixture.
+//   OPENAI_KEY - OpenAI-format credential fixture.
+//   UUID - UUID non-secret identifier fixture.
+//   SecretsPolicyUnboundErrorLike - Structural shape of the unbound policy error.
 //   makeRegistration - Build native handlers with an injected family policy resolution.
+//   registrationWithPolicy - Build native handlers with an arbitrary injected policy decision.
+//   registrationFromConfig - Build enabled handlers bound to one concrete config.
 //   REAL_HOST - Pinned host binary from VVOC_E2E_V2_HOST; the gated smoke is skipped when unset.
 //   realHostDescribe - describe when a real host is configured, describe.skip otherwise.
 //   ContextPart - Context message content part fixture.
@@ -33,7 +42,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009-SECRETS - Reconciled the distinct-context real-host smoke with the pinned 2.0.18 host: the T-009 cross-context coordination publishes the family capture exactly once across subpath-registered contexts, so secrets-first distinct contexts now complete a turn with full redact -> restore evidence and no family-binding admission failure; the test asserts the reconciled succeeded outcome instead of the pre-coordination failure. Prior T-009-SECRETS: deep-frozen tool-input regressions (array and nested-object restore through toolBefore, no-placeholder equivalent copy, cyclic input cycle preservation, and frozen tool-call redaction all assert the host-provided original is never mutated and the handler rebinds to an owned copy); earlier MID-REPAIR-2: per-native-session WebSocket framing regressions.]
+//   LAST_CHANGE: [secrets reliability overhaul - Added credential-first default-policy coverage (UUID/email/dated-slug/directory/env-name stay usable; Bearer and JWT credentials redact), legacy persisted-config preservation, byte-for-byte media integrity across repeated provider requests, strict unresolved-reference failures before side effects (unknown, altered, evicted-instance, cross-family), safe literal marker execution, case-sensitive keyword rules, and reasoned SECRETS_POLICY_UNBOUND errors.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -44,17 +53,31 @@ import { join } from "node:path";
 import {
   createDefaultVvocConfig,
   renderVvocConfig,
+  type SecretsRedactionKeywordRule,
   type VvocConfig,
 } from "../../lib/vvoc-config.js";
-import { resolveSecretsRedactionRuntimeConfig, webApiKeyKeywordRules } from "./config.js";
+import {
+  resolveSecretsRedactionRuntimeConfig,
+  webApiKeyKeywordRules,
+  type SecretsRedactionConfig,
+} from "./config.js";
 import {
   createSecretsRedactionPlugin,
   createSecretsRedactionRegistration,
+  type SecretsPolicyDecision,
   type SecretsRedactionRegistration,
 } from "./index.js";
 
 const EMAIL = "qa-redaction-check-884271@example.invalid";
 const PLACEHOLDER_PATTERN = /__VVOC_SECRET_EMAIL_[0-9a-f]{12}__/;
+// Deterministic base64 media fixtures (~1.5KB payload content each).
+const PNG_DATA_URL = `data:image/png;base64,${Buffer.from("synthetic-png-".repeat(100), "utf8").toString("base64")}`;
+const AUDIO_DATA_URL = `data:audio/wav;base64,${Buffer.from("synthetic-wav-".repeat(100), "utf8").toString("base64")}`;
+const JWT =
+  "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJVadQssw5c";
+const BEARER_TOKEN = "abc123def456ghi789jkl012mnopqrs345";
+const OPENAI_KEY = "sk-qa-redaction-fixture-aa11bb22cc33dd44ee55";
+const UUID = "550e8400-e29b-41d4-a716-446655440000";
 
 interface ContextPart {
   type?: string;
@@ -111,6 +134,19 @@ async function firstPlaceholder(registration: SecretsRedactionRegistration): Pro
   ];
   await registration.handlers.context({ sessionID: "s1", messages });
   return messages[0]!.content[0]!.text!.match(PLACEHOLDER_PATTERN)![0];
+}
+
+/** Build handlers with an arbitrary injected policy decision (resolution/disabled/unbound). */
+function registrationWithPolicy(decision: (sessionID: string) => SecretsPolicyDecision) {
+  return createSecretsRedactionRegistration({
+    configFor: async (sessionID) => decision(sessionID),
+    log: () => undefined,
+  });
+}
+
+/** Build enabled handlers bound to one concrete vvoc secretsRedaction section. */
+function registrationFromConfig(config: SecretsRedactionConfig): SecretsRedactionRegistration {
+  return registrationWithPolicy(() => ({ key: "family-under-test", config }));
 }
 
 /** Recursively freeze a JSON-like fixture the way the native host freezes tool input. */
@@ -209,7 +245,7 @@ describe("SecretsRedactionPlugin", () => {
       fetch: { apiKey: "same-key" },
     };
     expect(webApiKeyKeywordRules(duplicate)).toEqual([
-      { value: "same-key", category: "WEB_API_KEY" },
+      { value: "same-key", category: "WEB_API_KEY", caseSensitive: true },
     ]);
 
     const empty = createDefaultVvocConfig();
@@ -224,7 +260,7 @@ describe("SecretsRedactionPlugin", () => {
       fetch: { apiKey: "${VVOC_TEST_UNSET_KEY}" },
     };
     expect(webApiKeyKeywordRules(config, { VVOC_TEST_SEARCH_KEY: "resolved-search-key" })).toEqual([
-      { value: "resolved-search-key", category: "WEB_API_KEY" },
+      { value: "resolved-search-key", category: "WEB_API_KEY", caseSensitive: true },
     ]);
   });
 
@@ -318,6 +354,315 @@ describe("SecretsRedactionPlugin", () => {
     const input = { command: `echo ${EMAIL}` };
     await registration.handlers.toolBefore({ sessionID: "s1", tool: "bash", input });
     expect(input.command).toBe(`echo ${EMAIL}`);
+  });
+
+  test("an unbound policy error distinguishes a config load failure with recovery guidance", async () => {
+    const registration = registrationWithPolicy(() => ({
+      unbound: true,
+      reason: "config-load-failed",
+    }));
+    const messages: ContextMessage[] = [
+      { role: "user", content: [{ type: "text", text: `x ${EMAIL}` }] },
+    ];
+    const error = await registration.handlers.context({ sessionID: "s1", messages }).then(
+      () => null,
+      (caught: SecretsPolicyUnboundErrorLike) => caught,
+    );
+
+    expect(error).not.toBeNull();
+    expect(error!.code).toBe("SECRETS_POLICY_UNBOUND");
+    expect(error!.reason).toBe("config-load-failed");
+    expect(error!.message).toContain("vvoc doctor");
+    expect(error!.message).not.toContain(EMAIL);
+    expect(messages[0]!.content[0]!.text).toBe(`x ${EMAIL}`);
+  });
+
+  test("an unresolvable settings lineage is reported as its own unbound reason", async () => {
+    const registration = registrationWithPolicy(() => ({
+      unbound: true,
+      reason: "settings-lineage-unresolvable",
+    }));
+    const messages: ContextMessage[] = [
+      { role: "user", content: [{ type: "text", text: `x ${EMAIL}` }] },
+    ];
+    const error = await registration.handlers.context({ sessionID: "s1", messages }).then(
+      () => null,
+      (caught: SecretsPolicyUnboundErrorLike) => caught,
+    );
+
+    expect(error!.code).toBe("SECRETS_POLICY_UNBOUND");
+    expect(error!.reason).toBe("settings-lineage-unresolvable");
+    expect(error!.message).toContain("settings lineage");
+    expect(error!.message).not.toContain(EMAIL);
+  });
+});
+
+interface SecretsPolicyUnboundErrorLike extends Error {
+  code?: string;
+  reason?: string;
+}
+
+describe("SecretsRedactionPlugin credential-first defaults", () => {
+  function defaultConfigRegistration(): SecretsRedactionRegistration {
+    const resolved = resolveSecretsRedactionRuntimeConfig({
+      config: createDefaultVvocConfig(),
+      source: { kind: "default" },
+      warnings: [],
+    });
+    return registrationFromConfig(resolved.config);
+  }
+
+  test("defaults redact Bearer credentials and JWTs but leave ordinary identifiers usable", async () => {
+    const registration = defaultConfigRegistration();
+    const messages: ContextMessage[] = [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: [
+              `uuid=${UUID}`,
+              `mail=${EMAIL}`,
+              "dir=M-PLUGIN-SYSTEM-CONTEXT-INJECTION",
+              "env=APPLICATIONINSIGHTS_CONNECTION_STRING",
+              "slug=2026-11-09-meeting-notes-and-agenda",
+              `auth=Bearer ${BEARER_TOKEN}`,
+              `jwt=${JWT}`,
+            ].join(" "),
+          },
+        ],
+      },
+    ];
+
+    await registration.handlers.context({ sessionID: "s1", messages });
+    const text = messages[0]!.content[0]!.text!;
+
+    // Non-secret identifiers stay usable unchanged (false-positive regressions).
+    expect(text).toContain(UUID);
+    expect(text).toContain(EMAIL);
+    expect(text).toContain("M-PLUGIN-SYSTEM-CONTEXT-INJECTION");
+    expect(text).toContain("APPLICATIONINSIGHTS_CONNECTION_STRING");
+    expect(text).toContain("2026-11-09-meeting-notes-and-agenda");
+    // Credentials redact; the Bearer context prefix survives, the token does not.
+    expect(text).toContain("auth=Bearer __VVOC_SECRET_BEARER_AUTH_");
+    expect(text).not.toContain(BEARER_TOKEN);
+    expect(text).toContain("__VVOC_SECRET_JWT_");
+    expect(text).not.toContain(JWT);
+  });
+
+  test("media payloads stay byte-identical across two follow-up provider requests", async () => {
+    const registration = defaultConfigRegistration();
+    const part = {
+      type: "tool-result",
+      result: {
+        type: "text",
+        value: { image: PNG_DATA_URL, audio: AUDIO_DATA_URL, note: `author ${OPENAI_KEY}` },
+      },
+    };
+    const messages: ContextMessage[] = [{ role: "assistant", content: [part] }];
+
+    await registration.handlers.context({ sessionID: "s1", messages });
+    const redacted = (messages[0]!.content[0] as typeof part).result!.value as {
+      image: string;
+      audio: string;
+      note: string;
+    };
+    expect(redacted.image).toBe(PNG_DATA_URL);
+    expect(redacted.audio).toBe(AUDIO_DATA_URL);
+    expect(redacted.note).not.toContain(OPENAI_KEY);
+    expect(redacted.note).toContain("__VVOC_SECRET_OPENAI_KEY_");
+
+    // Second follow-up model request replays the already-redacted part.
+    await registration.handlers.context({ sessionID: "s1", messages });
+    const replayed = (messages[0]!.content[0] as typeof part).result!.value as typeof redacted;
+    expect(replayed.image).toBe(PNG_DATA_URL);
+    expect(replayed.audio).toBe(AUDIO_DATA_URL);
+    expect(replayed.note).toBe(redacted.note);
+
+    // Textual credential redaction still works on fresh content in the same part type.
+    part.result!.value = { ...part.result!.value, note: `author ${OPENAI_KEY}` };
+    const fresh: ContextMessage[] = [{ role: "assistant", content: [part] }];
+    await registration.handlers.context({ sessionID: "s1", messages: fresh });
+    const freshValue = (fresh[0]!.content[0] as typeof part).result!.value as { note: string };
+    expect(freshValue.note).not.toContain(OPENAI_KEY);
+    expect(freshValue.note).toContain("__VVOC_SECRET_OPENAI_KEY_");
+  });
+
+  test("a persisted legacy builtin list keeps the old privacy masking behavior", async () => {
+    const vvoc = createDefaultVvocConfig();
+    vvoc.secretsRedaction = {
+      ...vvoc.secretsRedaction,
+      patterns: {
+        keywords: [],
+        regex: [],
+        builtin: [
+          "email",
+          "uuid",
+          "ipv4",
+          "mac",
+          "openai_key",
+          "anthropic_key",
+          "github_token",
+          "aws_access_key",
+          "stripe_key",
+          "bearer_token",
+          "bearer_dot",
+          "syn_key",
+          "hex_token",
+        ],
+        exclude: [],
+      },
+    };
+    const resolved = resolveSecretsRedactionRuntimeConfig({
+      config: vvoc,
+      source: { kind: "project" },
+      warnings: [],
+    });
+    const registration = registrationFromConfig(resolved.config);
+    const messages: ContextMessage[] = [
+      {
+        role: "user",
+        content: [{ type: "text", text: `uuid=${UUID} mail=${EMAIL}` }],
+      },
+    ];
+
+    await registration.handlers.context({ sessionID: "s1", messages });
+    const text = messages[0]!.content[0]!.text!;
+    // Old persisted configs keep today's behavior exactly: UUID and email mask.
+    expect(text).toContain("__VVOC_SECRET_UUID_");
+    expect(text).toContain("__VVOC_SECRET_EMAIL_");
+    expect(text).not.toContain(UUID);
+  });
+
+  test("case-sensitive keyword rules redact only the exact configured casing", async () => {
+    const vvoc = createDefaultVvocConfig();
+    const keyword: SecretsRedactionKeywordRule = {
+      value: "TenantLiveSecret",
+      category: "CUSTOM_KEY",
+      caseSensitive: true,
+    };
+    vvoc.secretsRedaction = {
+      ...vvoc.secretsRedaction,
+      patterns: {
+        keywords: [keyword],
+        regex: [],
+        builtin: ["openai_key"],
+        exclude: [],
+      },
+    };
+    const resolved = resolveSecretsRedactionRuntimeConfig({
+      config: vvoc,
+      source: { kind: "project" },
+      warnings: [],
+    });
+    const registration = registrationFromConfig(resolved.config);
+    const messages: ContextMessage[] = [
+      {
+        role: "user",
+        content: [{ type: "text", text: "exact=TenantLiveSecret other=tenantlivesecret" }],
+      },
+    ];
+
+    await registration.handlers.context({ sessionID: "s1", messages });
+    const text = messages[0]!.content[0]!.text!;
+    expect(text).toContain("other=tenantlivesecret");
+    expect(text).not.toContain("exact=TenantLiveSecret");
+    expect(text).toContain("exact=__VVOC_SECRET_CUSTOM_KEY_");
+  });
+});
+
+describe("SecretsRedactionPlugin strict tool-input restoration", () => {
+  test("an unresolved reference throws before side effects and never executes the tool", async () => {
+    // Instance A produces the placeholder; instance B shares the family key but
+    // owns fresh maps, so the reference has no mapping (expired/evicted/restart).
+    const producer = makeRegistration();
+    const placeholder = await firstPlaceholder(producer);
+    const consumer = makeRegistration();
+
+    let executed = 0;
+    const event = {
+      sessionID: "s1",
+      tool: "bash",
+      input: { command: `cat .vvoc/specs/${placeholder}/spec.xml` },
+    };
+
+    // The downstream executor runs only when the hook resolves; a hook failure
+    // means the host aborts the tool, so the spy must stay at zero.
+    const error = await consumer.handlers.toolBefore(event).then(
+      () => {
+        executed += 1;
+        return null as (Error & { code?: string }) | null;
+      },
+      (caught: Error & { code?: string }) => caught,
+    );
+
+    expect(executed).toBe(0);
+    expect(error).not.toBeNull();
+    expect(error!.code).toBe("SECRETS_REFERENCE_UNRESOLVED");
+    expect(error!.message).toContain(placeholder);
+    // Copy-on-write: the original event input is not partially mutated.
+    expect((event.input as { command: string }).command).toContain(placeholder);
+  });
+
+  test("an altered or invented marker fails closed instead of executing a placeholder path", async () => {
+    const registration = makeRegistration();
+    const invented = "__VVOC_SECRET_EMAIL_0123456789ab__";
+    const event = {
+      sessionID: "s1",
+      tool: "read",
+      input: { file_path: `.vvoc/specs/${invented}/spec.xml` },
+    };
+
+    const error = await registration.handlers.toolBefore(event).then(
+      () => null,
+      (caught: Error) => caught,
+    );
+
+    expect(error).not.toBeNull();
+    expect((error as Error & { code?: string }).code).toBe("SECRETS_REFERENCE_UNRESOLVED");
+    expect((error as Error).message).toContain(invented);
+    expect((error as Error).message).not.toContain("spec.xml");
+    expect((error as Error).message).toContain("s1");
+  });
+
+  test("a cross-family reference never borrows the other family's mappings", async () => {
+    const otherFamily = registrationWithPolicy((sessionID) => ({
+      key: `family-${sessionID}-other`,
+      config: resolveSecretsRedactionRuntimeConfig({
+        config: secretsVvoc(),
+        source: { kind: "default" },
+        warnings: [],
+      }).config,
+    }));
+    const placeholder = await firstPlaceholder(otherFamily);
+    const registration = makeRegistration();
+
+    const event = {
+      sessionID: "s1",
+      tool: "bash",
+      input: { command: `echo ${placeholder}` },
+    };
+    await expect(registration.handlers.toolBefore(event)).rejects.toThrow(
+      "SECRETS_REFERENCE_UNRESOLVED",
+    );
+  });
+
+  test("literal marker-shaped text executes unchanged without reject-on-prefix", async () => {
+    const registration = makeRegistration();
+    // Single-underscore literal (the documented safe representation) and
+    // prefix-only text are legitimate content and never block execution.
+    const event = {
+      sessionID: "s1",
+      tool: "edit",
+      input: {
+        content: "docs say _VVOC_SECRET_EMAIL_0123456789ab__ and prefix __VVOC_SECRET_ alone",
+      },
+    };
+    const before = JSON.stringify(event.input);
+
+    await registration.handlers.toolBefore(event);
+
+    expect(JSON.stringify(event.input)).toBe(before);
   });
 });
 

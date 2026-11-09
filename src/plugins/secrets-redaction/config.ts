@@ -1,8 +1,8 @@
 // FILE: src/plugins/secrets-redaction/config.ts
-// VERSION: 1.4.0
+// VERSION: 1.5.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Resolve secrets-redaction settings from the shared startup vvoc config snapshot with environment variable substitution.
-//   SCOPE: startup vvoc config snapshot consumption, env substitution, fallback defaults, and exact-value web apiKey keyword rules built from placeholder-resolved values
+//   SCOPE: startup vvoc config snapshot consumption, env substitution, fallback defaults, and case-sensitive exact-value web apiKey keyword rules built from placeholder-resolved values
 //   DEPENDS: src/lib/config-layers.ts, src/lib/vvoc-config.ts, src/lib/env-substitution.ts
 //   LINKS: [M-PLUGIN-SECRETS-REDACTION, M-ENV-SUBSTITUTION]
 //   ROLE: RUNTIME
@@ -19,7 +19,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct fix - Built web apiKey redaction rules from placeholder-resolved values via the shared env substitution helper.]
+//   LAST_CHANGE: [secrets reliability overhaul - Auto-generated web apiKey keyword rules are now case-sensitive exact-value rules, so a case-distinct string can never redact on a case-insensitive accidental match.]
 // END_CHANGE_SUMMARY
 
 import {
@@ -42,13 +42,14 @@ export const DEFAULT_CONFIG: SecretsRedactionConfig = createDefaultSecretsRedact
 /**
  * Exact-value keyword rules for configured web apiKey fields with ${VAR} placeholders
  * resolved from env. Canonical environment credentials are excluded because they never
- * appear in config. Values that resolve to an empty string are skipped.
+ * appear in config. Values that resolve to an empty string are skipped. The generated
+ * rules are case-sensitive: an exact configured credential value must match verbatim.
  */
 export function webApiKeyKeywordRules(
   config: VvocConfig,
   env: NodeJS.ProcessEnv = process.env,
-): Array<{ value: string; category: "WEB_API_KEY" }> {
-  const rules: Array<{ value: string; category: "WEB_API_KEY" }> = [];
+): Array<{ value: string; category: "WEB_API_KEY"; caseSensitive: boolean }> {
+  const rules: Array<{ value: string; category: "WEB_API_KEY"; caseSensitive: boolean }> = [];
   const seen = new Set<string>();
   for (const rawValue of [config.web?.search?.apiKey, config.web?.fetch?.apiKey]) {
     if (typeof rawValue !== "string" || rawValue.length === 0) {
@@ -59,7 +60,7 @@ export function webApiKeyKeywordRules(
       continue;
     }
     seen.add(value);
-    rules.push({ value, category: "WEB_API_KEY" });
+    rules.push({ value, category: "WEB_API_KEY", caseSensitive: true });
   }
   return rules;
 }

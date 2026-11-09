@@ -1,8 +1,8 @@
 // FILE: src/plugins/secrets-redaction/engine.test.ts
-// VERSION: 1.0.0
+// VERSION: 1.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for the secrets redaction engine.
-//   SCOPE: direct text redaction, overlap resolution, exclude handling, and placeholder round-trips.
+//   SCOPE: direct text redaction, overlap resolution, exclude handling, placeholder round-trips, idempotent re-redaction, and capture-group (context-anchored) spans.
 //   DEPENDS: bun:test, engine, patterns, restore, session
 //   LINKS: [M-PLUGIN-SECRETS-REDACTION, V-M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: TEST
@@ -16,7 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.0.2 - Added a regression test that a zero-width custom regex terminates instead of looping forever.]
+//   LAST_CHANGE: [secrets reliability overhaul - Added idempotency regressions (re-redacting redacted text is a no-op and re-redaction no longer breaks restoration), context-anchored group spans that preserve the Bearer prefix, case-insensitive exclusion, and keyword case-sensitivity coverage.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -130,5 +130,84 @@ describe("redactText", () => {
 
     expect(result.matches).toHaveLength(0);
     expect(result.text).toBe("aaa");
+  });
+
+  test("re-redacting redacted text is a no-op (idempotency)", () => {
+    const session = createSession();
+    const patternSet = buildPatternSet({ builtin: ["email"] });
+
+    const first = redactText(`Contact ${EMAIL} for help.`, patternSet, session);
+    const second = redactText(first.text, patternSet, session);
+
+    expect(second.text).toBe(first.text);
+    expect(second.matches).toHaveLength(0);
+    expect(session.size).toBe(1);
+  });
+
+  test("a bare well-formed placeholder is never re-redacted", () => {
+    const session = createSession();
+    const patternSet = buildPatternSet({ builtin: ["email"] });
+    // An unknown/invented marker with the well-formed shape (not in any mapping).
+    const invented = "__VVOC_SECRET_EMAIL_0123456789ab__";
+
+    const result = redactText(invented, patternSet, session);
+
+    expect(result.text).toBe(invented);
+    expect(result.matches).toHaveLength(0);
+    expect(session.size).toBe(0);
+  });
+
+  test("restoration still returns the original after redacted text is redacted again", () => {
+    const session = createSession();
+    const patternSet = buildPatternSet({ builtin: ["email"] });
+
+    const first = redactText(`value ${EMAIL} end`, patternSet, session);
+    redactText(first.text, patternSet, session);
+    const restored = restoreText(first.text, session);
+
+    expect(restored).toBe(`value ${EMAIL} end`);
+  });
+
+  test("context-anchored bearer_auth redacts only the token and preserves the prefix", () => {
+    const session = createSession();
+    const patternSet = buildPatternSet({ builtin: ["bearer_auth"] });
+    const token = "abc123def456ghi789jkl012";
+
+    const result = redactText(`Authorization: Bearer ${token}`, patternSet, session);
+
+    expect(result.matches).toHaveLength(1);
+    expect(result.matches[0]!.original).toBe(token);
+    expect(result.matches[0]!.category).toBe("BEARER_AUTH");
+    expect(result.text).toBe(`Authorization: Bearer ${result.matches[0]!.placeholder}`);
+    expect(result.text).not.toContain(token);
+    expect(restoreText(result.text, session)).toBe(`Authorization: Bearer ${token}`);
+  });
+
+  test("exclusion is case-insensitive regardless of how the entry was authored", () => {
+    const session = createSession();
+    const patternSet = buildPatternSet({
+      builtin: ["email"],
+      exclude: [EMAIL.toUpperCase()],
+    });
+
+    const result = redactText(`Contact ${EMAIL} for help.`, patternSet, session);
+
+    expect(result.matches).toHaveLength(0);
+    expect(result.text).toContain(EMAIL);
+  });
+
+  test("keyword rules respect caseSensitive while the default stays case-insensitive", () => {
+    const session = createSession();
+    const sensitive = buildPatternSet({
+      keywords: [{ value: "ApiKeyAbc", category: "CUSTOM_KEY", caseSensitive: true }],
+    });
+    const hit = redactText("key=ApiKeyAbc;", sensitive, session);
+    expect(hit.matches).toHaveLength(1);
+    const miss = redactText("key=apikeyabc;", sensitive, session);
+    expect(miss.matches).toHaveLength(0);
+
+    const insensitive = buildPatternSet({ keywords: [{ value: "ApiKeyAbc" }] });
+    const lowered = redactText("key=apikeyabc;", insensitive, session);
+    expect(lowered.matches).toHaveLength(1);
   });
 });

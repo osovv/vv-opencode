@@ -1,8 +1,8 @@
 // FILE: src/plugins/secrets-redaction/session.test.ts
-// VERSION: 1.0.0
+// VERSION: 1.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for PlaceholderSession
-//   SCOPE: placeholder creation, lookup, TTL eviction, maxMappings eviction
+//   SCOPE: placeholder creation, lookup, TTL eviction, maxMappings eviction, and the public placeholder-grammar helpers
 //   DEPENDS: session
 //   LINKS: [M-PLUGIN-SECRETS-REDACTION, V-M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: TEST
@@ -15,12 +15,12 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-OPENCODE-V2-NATIVE T-009 - Category-grammar coverage: every canonical category emits a matchable token, whole-text restoration, and counter uniqueness under a forced hash collision.]
+//   LAST_CHANGE: [secrets reliability overhaul - Covered the public prefix accessor and the non-global getPlaceholderMatcher used for idempotent redaction and strict unresolved-reference detection.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 import { restoreText } from "./restore.js";
-import { PlaceholderSession, generateFallbackSecret } from "./session.js";
+import { PlaceholderSession, generateFallbackSecret, getPlaceholderMatcher } from "./session.js";
 
 const SECRET = "test-secret-for-hmac";
 const PREFIX = "__VVOC_SECRET_";
@@ -207,6 +207,32 @@ test("generateFallbackSecret returns different values each call", () => {
   const s1 = generateFallbackSecret();
   const s2 = generateFallbackSecret();
   expect(s1).not.toBe(s2);
+});
+
+describe("placeholder grammar helpers", () => {
+  test("prefix accessor exposes the configured namespace prefix", () => {
+    const session = new PlaceholderSession({
+      prefix: PREFIX,
+      ttlMs: 60_000,
+      maxMappings: 1000,
+      secret: SECRET,
+    });
+    const placeholder = session.getOrCreatePlaceholder("some-secret", "KEY");
+    expect(session.prefix).toBe(PREFIX);
+    expect(placeholder.startsWith(session.prefix)).toBe(true);
+  });
+
+  test("getPlaceholderMatcher accepts exactly the well-formed placeholder shape", () => {
+    const matcher = getPlaceholderMatcher(PREFIX);
+    expect(matcher.test("__VVOC_SECRET_EMAIL_0123456789ab__")).toBe(true);
+    expect(matcher.test("__VVOC_SECRET_CUSTOM_KEY_0123456789ab_3__")).toBe(true);
+    // Prefix-only or partial text is not a reference.
+    expect(matcher.test("__VVOC_SECRET_")).toBe(false);
+    expect(matcher.test("__VVOC_SECRET_NOT_A_TOKEN__")).toBe(false);
+    expect(matcher.test("_VVOC_SECRET_EMAIL_0123456789ab__")).toBe(false);
+    expect(matcher.test("prose __VVOC_SECRET_EMAIL_0123456789ab__ suffix")).toBe(false);
+    expect(matcher.test("__VVOC_SECRET_EMAIL_0123456789ab__ suffix")).toBe(false);
+  });
 });
 
 describe("placeholder category grammar", () => {

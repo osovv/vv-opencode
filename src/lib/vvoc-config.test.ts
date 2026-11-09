@@ -24,6 +24,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  createDefaultSecretsRedactionConfig,
   createDefaultVvocConfig,
   createGuardianConfig,
   createSystemOneConfig,
@@ -683,5 +684,106 @@ describe("plugins union parsing and schema", () => {
 
     const unknownKey = JSON.parse(docWithPlugins({ "spec-guard": { severity: true } }));
     expect(validateVvocConfigDocument(unknownKey).length).toBeGreaterThan(0);
+  });
+});
+
+describe("secrets-redaction section", () => {
+  function docWithSecretsRedaction(secretsRedaction: unknown): string {
+    return JSON.stringify({ ...createDefaultVvocConfig(), secretsRedaction }, null, 2);
+  }
+
+  test("the credential-first default builtin list contains the eight default names", () => {
+    const config = createDefaultSecretsRedactionConfig();
+    expect(config.patterns.builtin).toEqual([
+      "openai_key",
+      "anthropic_key",
+      "github_token",
+      "aws_access_key",
+      "stripe_key",
+      "syn_key",
+      "bearer_auth",
+      "jwt",
+    ]);
+  });
+
+  test("a persisted legacy builtin list round-trips verbatim without implicit repair", () => {
+    const legacy = {
+      ...createDefaultSecretsRedactionConfig(),
+      patterns: {
+        keywords: [],
+        regex: [],
+        builtin: [
+          "email",
+          "uuid",
+          "ipv4",
+          "mac",
+          "openai_key",
+          "anthropic_key",
+          "github_token",
+          "aws_access_key",
+          "stripe_key",
+          "bearer_token",
+          "bearer_dot",
+          "syn_key",
+          "hex_token",
+        ],
+        exclude: [],
+      },
+    };
+    const parsed = parseVvocConfigText(docWithSecretsRedaction(legacy), "test");
+    expect(parsed.secretsRedaction.patterns.builtin).toEqual(legacy.patterns.builtin);
+  });
+
+  test("keyword rules accept caseSensitive and round-trip the value", () => {
+    const parsed = parseVvocConfigText(
+      docWithSecretsRedaction({
+        ...createDefaultSecretsRedactionConfig(),
+        patterns: {
+          keywords: [
+            { value: "TenantLiveSecret", category: "WEB_API_KEY", caseSensitive: true },
+            { value: "legacy-key" },
+          ],
+          regex: [],
+          builtin: ["openai_key"],
+          exclude: [],
+        },
+      }),
+      "test",
+    );
+    expect(parsed.secretsRedaction.patterns.keywords[0]).toEqual({
+      value: "TenantLiveSecret",
+      category: "WEB_API_KEY",
+      caseSensitive: true,
+    });
+    // The default stays case-insensitive: caseSensitive is omitted.
+    expect(parsed.secretsRedaction.patterns.keywords[1]).toEqual({ value: "legacy-key" });
+
+    const rendered = renderVvocConfig(parsed);
+    const reparsed = parseVvocConfigText(rendered, "test");
+    expect(reparsed.secretsRedaction.patterns.keywords[0]!.caseSensitive).toBe(true);
+  });
+
+  test("unknown keyword-rule keys are rejected by the schema", () => {
+    const invalid = JSON.parse(
+      docWithSecretsRedaction({
+        ...createDefaultSecretsRedactionConfig(),
+        patterns: {
+          keywords: [{ value: "k", caseInsensitive: true }],
+          regex: [],
+          builtin: [],
+          exclude: [],
+        },
+      }),
+    );
+    expect(validateVvocConfigDocument(invalid).length).toBeGreaterThan(0);
+  });
+
+  test("embedded secretsRedaction schema matches schemas/vvoc/v3.json", () => {
+    const fileSchema = JSON.parse(readFileSync(SCHEMA_PATH, "utf8")) as {
+      properties: Record<string, unknown>;
+    };
+    expect((VVOC_CONFIG_SCHEMA.properties as Record<string, unknown>).secretsRedaction).toEqual(
+      fileSchema.properties.secretsRedaction,
+    );
   });
 });

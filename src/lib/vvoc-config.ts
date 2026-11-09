@@ -1,5 +1,5 @@
 // FILE: src/lib/vvoc-config.ts
-// VERSION: 3.0.0
+// VERSION: 3.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Define the canonical vvoc.json document shape, schema versions, orchestration normalization, and validation helpers.
 //   SCOPE: Versioned schema constants, preset-aware default config generation including managed built-in profiles, strict current config parsing including direct Z.AI provider regions, section rendering/parsing helpers, and schema plus semantic validation for vvoc-owned configuration including OpenCode alias-model defaults.
@@ -52,7 +52,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct change - Added deepseek to the canonical web provider vocabularies and types without a region requirement.]
+//   LAST_CHANGE: [secrets reliability overhaul - The default secrets-redaction builtin list became credentials-first (openai_key, anthropic_key, github_token, aws_access_key, stripe_key, syn_key, bearer_auth, jwt) while every legacy builtin stays a valid opt-in and persisted lists keep their stored behavior verbatim; keyword rules gained optional caseSensitive (schema, type, and normalizer kept in sync).]
+//   PREVIOUS: [direct change - Added deepseek to the canonical web provider vocabularies and types without a region requirement.]
 //   PREVIOUS: [C-TELEGRAM-BRIDGE-PLUGIN T-001 - Added the optional strict top-level telegram section with ${VAR} token convention, single-owner allowlist, activity window, mutually exclusive connectivity modes, and delivery settings defaults. Prior: C-SYSTEMONE-DECISION-BACKEND T-002 - Added the optional strict systemone connection section and the guardian decisionBackend and systemone policy fields.]
 // END_CHANGE_SUMMARY
 
@@ -90,20 +91,22 @@ export const VVOC_CONFIG_VERSION = 3;
 export const VVOC_CONFIG_SCHEMA_URL = `https://cdn.jsdelivr.net/npm/${PACKAGE_NAME}@${PACKAGE_VERSION}/schemas/vvoc/v3.json`;
 
 const JSON_SCHEMA_DRAFT_2020_12 = "https://json-schema.org/draft/2020-12/schema";
+/**
+ * Credentials-first default builtin pattern list: known credential formats and
+ * the context-scoped bearer/JWT patterns. Privacy masking (email, uuid, ipv4,
+ * mac, hex_token) and the broad generic-token heuristics (bearer_token,
+ * bearer_dot) are NOT defaults anymore — they stay valid opt-in builtins with
+ * unchanged semantics for configs that list them explicitly.
+ */
 const BUILTIN_SECRETS_REDACTION_PATTERNS = [
-  "email",
-  "uuid",
-  "ipv4",
-  "mac",
   "openai_key",
   "anthropic_key",
   "github_token",
   "aws_access_key",
   "stripe_key",
-  "bearer_token",
-  "bearer_dot",
   "syn_key",
-  "hex_token",
+  "bearer_auth",
+  "jwt",
 ] as const;
 type JsonObject = Record<string, unknown>;
 type VvocConfigVersion = 3;
@@ -151,6 +154,8 @@ export type SystemOneConfig = {
 export type SecretsRedactionKeywordRule = {
   value: string;
   category?: string;
+  /** Exact-value matching is case-sensitive when true; default is case-insensitive. */
+  caseSensitive?: boolean;
 };
 
 export type SecretsRedactionRegexRule = {
@@ -382,6 +387,7 @@ const SECRETS_REDACTION_CONFIG_SCHEMA = {
             properties: {
               value: { type: "string", minLength: 1 },
               category: { type: "string", minLength: 1 },
+              caseSensitive: { type: "boolean" },
             },
           },
         },
@@ -1158,7 +1164,13 @@ function createVvocPresetAgents(overrides: VvocPresetAgents = {}): VvocPresetAge
 }
 
 function cloneKeywordRules(rules: SecretsRedactionKeywordRule[]): SecretsRedactionKeywordRule[] {
-  return rules.map((rule) => compactObject({ value: rule.value, category: rule.category }));
+  return rules.map((rule) =>
+    compactObject({
+      value: rule.value,
+      category: rule.category,
+      caseSensitive: rule.caseSensitive,
+    }),
+  );
 }
 
 function cloneRegexRules(rules: SecretsRedactionRegexRule[]): SecretsRedactionRegexRule[] {

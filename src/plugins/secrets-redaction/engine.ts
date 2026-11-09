@@ -1,8 +1,9 @@
 // FILE: src/plugins/secrets-redaction/engine.ts
-// VERSION: 1.2.0
+// VERSION: 1.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Core redaction engine — performs find/replace of secrets with placeholders in text.
-//   SCOPE: text scanning, overlap resolution, match sorting, zero-width match guard, and replacement
+//   SCOPE: text scanning, overlap resolution, match sorting, zero-width match guard, capture-group
+//          (context-anchored) redaction spans, idempotent skipping of well-formed placeholders, and replacement
 //   DEPENDS: session, patterns
 //   LINKS: [M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: RUNTIME
@@ -16,11 +17,11 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [v1.2.0 - Guarded the scan loop against zero-width regex matches (lookahead/anchor patterns) to prevent an infinite loop on user-configured patterns.]
+//   LAST_CHANGE: [secrets reliability overhaul - Redaction became idempotent (a value that is itself a well-formed placeholder is left untouched, so re-redacting redacted text no longer chains placeholders) and context-anchored builtin rules redact only their declared capture-group span via the hasIndices flag, preserving the surrounding context text such as a Bearer prefix.]
 // END_CHANGE_SUMMARY
 
 import { type PatternRule, type PatternSet } from "./patterns.js";
-import { type PlaceholderSession } from "./session.js";
+import { getPlaceholderMatcher, type PlaceholderSession } from "./session.js";
 
 export interface Match {
   start: number;
@@ -35,37 +36,61 @@ export interface RedactResult {
   matches: Match[];
 }
 
-function sortByPositionAsc(
-  rules: PatternRule[],
-  text: string,
-): Array<{ rule: PatternRule; matches: RegExpMatchArray }> {
-  const allMatches: Array<{ rule: PatternRule; match: RegExpMatchArray }> = [];
+interface Candidate {
+  rule: PatternRule;
+  start: number;
+  end: number;
+  value: string;
+}
+
+/**
+ * Collect every match span as {start, end, value}. A rule with a `group`
+ * contributes only its declared capture-group span (the credential), so
+ * context text such as the `Bearer ` prefix stays verbatim; spans are derived
+ * from the ES2022 hasIndices data instead of re-scanning the match text.
+ */
+function collectCandidates(rules: PatternRule[], text: string): Candidate[] {
+  const candidates: Candidate[] = [];
 
   for (const rule of rules) {
-    const re = new RegExp(
-      rule.pattern.source,
-      rule.pattern.flags.includes("g") ? rule.pattern.flags : `${rule.pattern.flags}g`,
-    );
+    const flags = rule.pattern.flags.includes("g") ? rule.pattern.flags : `${rule.pattern.flags}g`;
+    const re = new RegExp(rule.pattern.source, `${flags}d`);
     let match: RegExpExecArray | null;
     while ((match = re.exec(text)) !== null) {
-      if (match[0].length === 0) {
-        // Zero-width match: advance manually to avoid an infinite loop; an
-        // empty match has nothing to redact, so skip it.
+      const span = resolveSpan(rule, match);
+      if (span === undefined) {
+        // Zero-width (or group-less) spans have nothing to redact; advance
+        // manually to avoid an infinite loop on lookahead/anchor patterns.
         re.lastIndex += 1;
         continue;
       }
-      allMatches.push({ rule, match: match as RegExpMatchArray });
+      candidates.push({ rule, start: span[0], end: span[1], value: span[2] });
     }
   }
 
-  allMatches.sort((a, b) => {
-    const aStart = a.match.index!;
-    const bStart = b.match.index!;
-    if (aStart !== bStart) return aStart - bStart;
-    return b.match[0].length - a.match[0].length;
+  candidates.sort((a, b) => {
+    if (a.start !== b.start) return a.start - b.start;
+    return b.end - b.start - (a.end - a.start);
   });
 
-  return allMatches.map((x) => ({ rule: x.rule, matches: x.match }));
+  return candidates;
+}
+
+function resolveSpan(
+  rule: PatternRule,
+  match: RegExpExecArray,
+): [number, number, string] | undefined {
+  if (rule.group === undefined) {
+    if (match[0].length === 0) return undefined;
+    const start = match.index!;
+    return [start, start + match[0].length, match[0]];
+  }
+  const indices = match.indices?.[rule.group];
+  const value = match[rule.group];
+  if (indices === undefined || value === undefined || indices[0] === indices[1]) {
+    return undefined;
+  }
+  return [indices[0], indices[1], value];
 }
 
 function overlapsSelected(start: number, selected: Match[]): boolean {
@@ -86,13 +111,18 @@ export function redactText(
     return { text: input, matches: [] };
   }
 
-  const sorted = sortByPositionAsc(patternSet.rules, input);
+  const sorted = collectCandidates(patternSet.rules, input);
+  // Idempotency guard: a value that is itself a well-formed placeholder is
+  // never re-redacted, so repeated hooks/history replay cannot chain a
+  // placeholder into a new placeholder and restoration always returns the
+  // original value.
+  const placeholderShape = getPlaceholderMatcher(session.prefix);
   const matches: Match[] = [];
 
-  for (const { rule, matches: match } of sorted) {
-    const start = match.index!;
-    const end = start + match[0].length;
-    const value = match[0];
+  for (const { rule, start, end, value } of sorted) {
+    if (placeholderShape.test(value)) {
+      continue;
+    }
 
     if (patternSet.exclude.has(value.toLowerCase())) {
       continue;

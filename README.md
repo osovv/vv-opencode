@@ -176,7 +176,7 @@ The server plugins run inside the OpenCode server process; **ContextTuiPlugin** 
 | **GuardianPlugin** | Keeps long or AFK runs moving by auto-approving routine low-risk permission requests; anything risky stays in OpenCode's normal manual approval flow. The assessment uses the captured `fast` auxiliary model by default, or an opt-in provider-neutral System One decision provider. |
 | **HashlineEditPlugin** | Routes each model to exactly one native edit tool (host `edit` for GLM/Qwen/Kimi, host `apply_patch` for GPT, `str_replace_editor` for DeepSeek, `hashline_edit` for unmatched models) and hides the other edit tools per session. |
 | **SystemContextInjectionPlugin** | Projects shared primary guidance from the canonical controller template and adds missing controller sections without duplicating the host-supplied template. The active controller policy is added at the request tail; existing subagent exclusions and the explore-specific exception apply. Skill discovery is registered by `vvoc install`/`sync` through the native `skills` config. |
-| **SecretsRedactionPlugin** | Redacts tokens, keys, emails, and other sensitive values before messages reach the model, restoring them only where local execution needs the originals. |
+| **SecretsRedactionPlugin** | Redacts credentials before messages reach the model, restoring them only where local execution needs the originals. Defaults cover known credential formats plus `Authorization: Bearer` values and JWTs; privacy masking (emails, UUIDs, IPs) and broad generic-token heuristics are opt-in builtins. Base64/data-URL media in tool payloads is preserved byte-for-byte, and a tool whose secret reference no longer resolves fails with an actionable error before running. |
 | **WebToolsPlugin** | Two provider-neutral tools — `web_search` and `web_fetch` — over Exa, Brave, Z.AI, DeepSeek, native retrieval, or Spider, with permission checks and normalized output. |
 | **ToolHistoryCompactionPlugin** | Shrinks the context replayed to the model by compacting old tool outputs non-destructively, without touching on-disk history. |
 | **AnalyticsPlugin** | Local-only token and cache telemetry per model step, a live `cache NN%` indicator in the TUI, and `vvoc analytics cache-hit-rate` for retrospective comparison. |
@@ -577,6 +577,39 @@ The default routing table sends `deepseek` to `str_replace_editor`, `kimi`, `qwe
 Routing changes require an OpenCode restart, like other runtime plugin settings.
 
 `hashline_edit` and `str_replace_editor` publish closed input contracts and reject conflicting or malformed fields before touching a file, without changing literal edit behavior: `replace` keeps its optional inclusive `end` (the `replace_range` alias still works), `lines` accepts a string, a string array, or `null` (an empty array or `null` deletes the range), `append`/`prepend` perform boundary insertion, `new_str` may be intentionally empty to delete, and `view_range` may end at `-1` to view to end of file. Supplying conflicting anchors, an unknown field, or a malformed range is a structural error that leaves file content, paths, freshness metadata, and the metadata sink unchanged, and the existing current-file and stale-anchor checks stay authoritative before any mutation.
+
+### Secrets redaction
+
+`SecretsRedactionPlugin` keeps credentials out of provider-bound model requests and restores them only where local tool execution needs the originals. Redaction and restoration are family-scoped, in-memory, and bounded (TTL and a mapping cap); the mapping secret comes from `secretsRedaction.secret` (commonly `${VVOC_SECRET}`) and a random per-process fallback is used with a startup warning when it is unset.
+
+**Credentials-first defaults.** The default builtin list covers known credential formats — `openai_key`, `anthropic_key`, `github_token`, `aws_access_key`, `stripe_key`, `syn_key` — plus two context-scoped patterns: `bearer_auth` (the token after an `Authorization: Bearer` prefix; only the token is redacted, the prefix stays) and `jwt` (compact JWS). Ordinary long identifiers stay usable: directory names, dated slugs, module IDs, environment-variable names, checksums, UUIDs, IPs, MACs, and emails are **not** redacted by default.
+
+**Opt-in builtins.** Every legacy builtin keeps its exact prior semantics and can be listed under `secretsRedaction.patterns.builtin`: `email`, `uuid`, `ipv4`, `mac` (privacy masking) and `bearer_token`, `bearer_dot`, `hex_token` (broad generic-token heuristics that match any sufficiently long identifier-shaped string — and therefore also ordinary filenames and directories). Enable them explicitly if your threat model wants privacy masking or aggressive token matching.
+
+```json
+"secretsRedaction": {
+  "secret": "${VVOC_SECRET}",
+  "ttlMs": 3600000,
+  "maxMappings": 10000,
+  "patterns": {
+    "keywords": [{ "value": "${MY_API_KEY}", "category": "WEB_API_KEY", "caseSensitive": true }],
+    "regex": [],
+    "builtin": ["openai_key", "anthropic_key", "github_token", "aws_access_key", "stripe_key", "syn_key", "bearer_auth", "jwt"],
+    "exclude": []
+  },
+  "debug": false
+}
+```
+
+**Upgrading an existing installation.** A config that already persists a `patterns.builtin` array keeps exactly the list it stored — the new defaults do not silently replace or repair it (existing behavior is never clobbered). Freshly generated configs get the new list. If your stored list still contains `bearer_token`/`bearer_dot`/`email`/`uuid`/`ipv4`/`mac`/`hex_token`, those patterns keep masking identifiers until you edit the list yourself.
+
+**Keyword rules.** `keywords` are substring rules; they are case-insensitive unless `"caseSensitive": true`. Auto-generated rules from the web tools' configured `apiKey` values are always exact and case-sensitive. Regex rules compile as user-provided patterns; the exclude list is case-insensitive.
+
+**Media integrity.** Structured tool-call inputs and tool-result values preserve opaque media leaves byte-for-byte: `data:image/*`, `data:application/pdf`, `data:audio/*`, `data:video/*` base64 URLs and bare base64/base64url blobs of 512+ characters are never rewritten into placeholders, so image/PDF/audio payloads survive every subsequent provider request. Textual leaves, small values, and metadata still redact. Honest limits: long base64-encoded secrets hidden inside media-like payloads are not scanned, and media content itself is not OCR-scanned for secrets.
+
+**Strict restoration.** Placeholders flow back into tool arguments before local execution (read/write/edit, shell, nested MCP calls, Code Mode). If a tool argument still contains a well-formed placeholder with no mapping in the session's family — expired, evicted, from another session family, or invented by the model — the plugin refuses the tool with a `SECRETS_REFERENCE_UNRESOLVED` error naming the tool, session, and the safe placeholder token before any side effect. There is no fuzzy matching and no borrowing of another family's mappings. To write about placeholders literally (docs, tests), use a single leading underscore: `_VVOC_SECRET_…__` never matches the reference grammar and passes through untouched. Text that merely contains the prefix also passes; only full well-formed references are treated as credentials.
+
+**Policy errors.** `SECRETS_POLICY_UNBOUND` means no trustworthy policy is bound to the session's family and provider-bound requests are refused (fail-closed). The error names the reason — an unresolvable settings lineage or a configuration load failure — and recovery guidance (`vvoc doctor`, config repair + restart, or an explicit plugin disable for the scope). Disabling the plugin via `vvoc plugin disable secrets-redaction` is the supported explicit bypass.
 
 ### Tool history compaction
 
