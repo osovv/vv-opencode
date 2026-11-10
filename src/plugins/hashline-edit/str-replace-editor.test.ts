@@ -13,11 +13,15 @@
 //   FakeFile - In-memory file record with content and snapshot.
 //   FakeFs - In-memory StrReplaceEditorFs implementation with mutable snapshots.
 //   SESSION - Fixed session identifier used across editor fixtures.
-//   makeEditor - Build a StrReplaceEditor wired to a FakeFs and a session file cache.
+//   makeEditor - Build a StrReplaceEditor wired to a FakeFs and a shared or fresh session file cache.
+//   Deferred - Promise plus resolver used as a deterministic test barrier.
+//   deferred - Create a deterministic test barrier and its resolver.
+//   GatedFakeFs - FakeFs whose first read blocks until released, exposing lock overlap.
+//   PathGateFakeFs - FakeFs that blocks reads of one path only, proving per-target independence.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-005 - Updated view_range/missing-field expectations to the shared contract diagnostics, added direct-entry structural rejection, empty/whitespace path rejection with preserved in-name spaces, empty file_text/empty new_str acceptance, and result-envelope schema checks.]
+//   LAST_CHANGE: [Direct fix - Added deterministic barrier coverage for per-target serialization, different-target independence, and repeated non-noop replacement semantics.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -84,13 +88,80 @@ class FakeFs implements StrReplaceEditorFs {
 
 const SESSION = "ses_1";
 
-function makeEditor(fs: FakeFs): StrReplaceEditor {
-  const cache = new SessionFileCache();
+function makeEditor(
+  fs: FakeFs,
+  cache: SessionFileCache = new SessionFileCache(),
+): StrReplaceEditor {
   return new StrReplaceEditor({
     fs,
     onViewed: (path, snapshot) => cache.record(SESSION, path, snapshot),
     checkFreshness: (path, current) => cache.check(SESSION, path, current),
   });
+}
+
+interface Deferred {
+  promise: Promise<void>;
+  resolve(): void;
+}
+
+function deferred(): Deferred {
+  let resolve!: () => void;
+  const promise = new Promise<void>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
+/** FakeFs whose first read blocks until the test releases it, exposing queue overlap. */
+class GatedFakeFs extends FakeFs {
+  readsStarted = 0;
+  readonly firstReadStarted: Promise<void>;
+  readonly #started = deferred();
+  readonly #release = deferred();
+
+  constructor() {
+    super();
+    this.firstReadStarted = this.#started.promise;
+  }
+
+  release(): void {
+    this.#release.resolve();
+  }
+
+  override async readText(path: string): Promise<string> {
+    this.readsStarted += 1;
+    if (this.readsStarted === 1) {
+      this.#started.resolve();
+      await this.#release.promise;
+    }
+    return super.readText(path);
+  }
+}
+
+/** FakeFs that blocks reads of one path only, leaving other targets independent. */
+class PathGateFakeFs extends FakeFs {
+  readonly #gatePath: string;
+  readonly entered: Promise<void>;
+  readonly #started = deferred();
+  readonly #release = deferred();
+
+  constructor(gatePath: string) {
+    super();
+    this.#gatePath = gatePath;
+    this.entered = this.#started.promise;
+  }
+
+  release(): void {
+    this.#release.resolve();
+  }
+
+  override async readText(path: string): Promise<string> {
+    if (path === this.#gatePath) {
+      this.#started.resolve();
+      await this.#release.promise;
+    }
+    return super.readText(path);
+  }
 }
 
 describe("str_replace_editor view command", () => {
@@ -575,5 +646,104 @@ describe("str_replace_editor direct-entry contract rejection", () => {
     expect(
       strReplaceEditorResultSchema.safeParse({ ok: true, output: "x", extra: true }).success,
     ).toBe(false);
+  });
+});
+
+describe("str_replace_editor target coordination", () => {
+  test("serializes complete disjoint str_replace cycles across editor instances", async () => {
+    const fs = new GatedFakeFs();
+    fs.addFile("/repo/a.py", "alpha\nbeta\ngamma\n");
+    const cache = new SessionFileCache();
+    const editors = [makeEditor(fs, cache), makeEditor(fs, cache), makeEditor(fs, cache)];
+
+    const first = editors[0]!.execute({
+      command: "str_replace",
+      path: "/repo/a.py",
+      old_str: "alpha",
+      new_str: "ALPHA-ONE",
+    });
+    await fs.firstReadStarted;
+    expect(fs.readsStarted).toBe(1);
+
+    const second = editors[1]!.execute({
+      command: "str_replace",
+      path: "/repo/a.py",
+      old_str: "beta",
+      new_str: "BETA-TWO",
+    });
+    const third = editors[2]!.execute({
+      command: "str_replace",
+      path: "/repo/a.py",
+      old_str: "gamma",
+      new_str: "GAMMA-THREE",
+    });
+
+    // The first editor holds the target lock while its read is blocked; the
+    // other editors must not reach their reads yet.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(fs.readsStarted).toBe(1);
+
+    fs.release();
+    const results = await Promise.all([first, second, third]);
+    for (const result of results) {
+      expect(result.ok).toBe(true);
+    }
+    expect(fs.files.get("/repo/a.py")?.content).toBe("ALPHA-ONE\nBETA-TWO\nGAMMA-THREE\n");
+  });
+
+  test("does not block a different target while one target is held", async () => {
+    const fs = new PathGateFakeFs("/repo/a.py");
+    fs.addFile("/repo/a.py", "alpha\n");
+    fs.addFile("/repo/b.py", "beta\n");
+    const cache = new SessionFileCache();
+
+    const held = makeEditor(fs, cache).execute({
+      command: "str_replace",
+      path: "/repo/a.py",
+      old_str: "alpha",
+      new_str: "ALPHA",
+    });
+    await fs.entered;
+
+    const independent = await makeEditor(fs, cache).execute({
+      command: "str_replace",
+      path: "/repo/b.py",
+      old_str: "beta",
+      new_str: "BETA",
+    });
+    expect(independent.ok).toBe(true);
+    expect(fs.files.get("/repo/b.py")?.content).toBe("BETA\n");
+
+    fs.release();
+    expect((await held).ok).toBe(true);
+    expect(fs.files.get("/repo/a.py")?.content).toBe("ALPHA\n");
+  });
+
+  test("a repeated non-noop replacement reports not-found with bytes unchanged", async () => {
+    const fs = new FakeFs();
+    fs.addFile("/repo/a.py", "alpha\nbeta\n");
+    const editor = makeEditor(fs);
+
+    const first = await editor.execute({
+      command: "str_replace",
+      path: "/repo/a.py",
+      old_str: "beta",
+      new_str: "BETA",
+    });
+    expect(first.ok).toBe(true);
+    expect(fs.files.get("/repo/a.py")?.content).toBe("alpha\nBETA\n");
+
+    const repeat = await editor.execute({
+      command: "str_replace",
+      path: "/repo/a.py",
+      old_str: "beta",
+      new_str: "BETA",
+    });
+    expect(repeat.ok).toBe(false);
+    if (!repeat.ok) {
+      expect(repeat.error).toContain("did not appear verbatim");
+    }
+    expect(fs.files.get("/repo/a.py")?.content).toBe("alpha\nBETA\n");
   });
 });

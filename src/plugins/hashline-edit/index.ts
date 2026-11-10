@@ -1,9 +1,9 @@
 // FILE: src/plugins/hashline-edit/index.ts
-// VERSION: 2.0.0
+// VERSION: 2.1.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Route per-model native edit tooling: register hashline_edit and str_replace_editor as native OpenCode 2.0.18 tools, resolve the session edit mode from the captured vvoc routing config, expose exactly one plugin edit tool per actual session model (never touching the host edit/patch contracts), require a native resource permission before any write, transform native read results with true line anchors and freshness tracking, and honor an explicit host permission denial while restoring plugin-owned versus captured host tool definitions by ownership.
-//   SCOPE: Native Plugin.define entry, per-bound-family captured routing resolution, session model capture from native context/model.request hooks, deny-safe native session context tool-list visibility enforcement with plugin-owned versus captured host definition ownership, execute.before visibility/structural guards, execute.after read-anchor transformation and freshness recording, native tool execution with awaited permission before mutation and respected caller abort, bounded post-edit metadata reporting, and editMode telemetry. Pure edit algorithms, anchors, encoding, normalization, and error semantics are unchanged. No V1 chat.message/tool.execute hooks, no V1 tool()/ToolContext.
-//   DEPENDS: [@opencode/plugin, @opencode/plugin/promise/tool, effect (Schema.toJsonSchemaDocument; direct dep T009), zod, zod/v4/core, node:fs/promises, node:path, src/lib/agent-tool-contract.ts, src/plugins/hashline-edit/diff-summary.ts, src/plugins/hashline-edit/edit-operations.ts, src/plugins/hashline-edit/file-text-canonicalization.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/normalize-edits.ts, src/plugins/hashline-edit/routing.ts, src/plugins/hashline-edit/schemas.ts, src/plugins/hashline-edit/session-state.ts, src/plugins/hashline-edit/str-replace-editor.ts, src/plugins/hashline-edit/validation.ts, src/runtime/context.ts]
+//   SCOPE: Native Plugin.define entry, per-bound-family captured routing resolution, session model capture from native context/model.request hooks, deny-safe native session context tool-list visibility enforcement with plugin-owned versus captured host definition ownership, execute.before visibility/structural guards, execute.after read-anchor transformation and freshness recording, native tool execution with awaited permission before mutation and respected caller abort, process-wide canonical-target serialization and session-isolated canonical freshness shared by live handler instances, atomic staged UTF-8 publication for str_replace_editor mutations, bounded post-edit metadata reporting, and editMode telemetry. Pure edit algorithms, anchors, and literal matching are unchanged. No V1 chat.message/tool.execute hooks, no V1 tool()/ToolContext.
+//   DEPENDS: [@opencode/plugin, @opencode/plugin/promise/tool, effect (Schema.toJsonSchemaDocument; direct dep T009), zod, zod/v4/core, node:fs/promises, node:path, src/lib/agent-tool-contract.ts, src/plugins/hashline-edit/atomic-write.ts, src/plugins/hashline-edit/diff-summary.ts, src/plugins/hashline-edit/edit-operations.ts, src/plugins/hashline-edit/file-text-canonicalization.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/normalize-edits.ts, src/plugins/hashline-edit/routing.ts, src/plugins/hashline-edit/schemas.ts, src/plugins/hashline-edit/session-state.ts, src/plugins/hashline-edit/str-replace-editor.ts, src/plugins/hashline-edit/validation.ts, src/runtime/context.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT, M-AGENT-TOOL-CONTRACT, M-NATIVE-RUNTIME, V-M-PLUGIN-HASHLINE-EDIT]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -24,7 +24,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-HASHLINE-DENY-SAFETY T-001 - Honor explicit permission denial and split plugin-owned versus captured host tool definitions in session visibility enforcement.]
+//   LAST_CHANGE: [Direct fix - Serialize str_replace_editor target cycles, share canonical freshness across live handlers and aliases, and publish staged UTF-8 writes atomically with pre-commit cancellation.]
 // END_CHANGE_SUMMARY
 
 import { Plugin } from "@opencode/plugin";
@@ -32,10 +32,10 @@ import { Schema } from "effect";
 import { z } from "zod";
 import { $ZodType, toJSONSchema } from "zod/v4/core";
 import type { ToolContext as NativeToolContext } from "@opencode/plugin/promise/tool";
-import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
+import { dirname, basename, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { readFile, readdir, realpath, stat } from "node:fs/promises";
 import {
   acquireNativeSnapshotRuntime,
   type NativeSnapshotContext,
@@ -43,6 +43,7 @@ import {
 } from "../../runtime/context.js";
 import type { FamilySettingsView } from "../../runtime/session-settings.js";
 import { ContractInputError, formatContractIssues } from "../../lib/agent-tool-contract.js";
+import { createUtf8FileExclusively, writeUtf8FileAtomically } from "./atomic-write.js";
 import { findFirstChangedLine, summarizeEditDiff } from "./diff-summary.js";
 import { applyHashlineEditsWithReport } from "./edit-operations.js";
 import { canonicalizeFileText, restoreFileText } from "./file-text-canonicalization.js";
@@ -421,6 +422,12 @@ export interface HashlineEditRegistration {
 }
 
 // START_BLOCK_FS_HELPERS
+// Like the target lock, freshness must have one process-wide owner. Canonical
+// keys keep native reads and editor views authoritative through path aliases;
+// session keys still isolate observations made by different agents.
+const sharedFileCache = new SessionFileCache();
+let fileCacheOwners = 0;
+
 async function statSnapshot(filePath: string): Promise<FileSnapshot | undefined> {
   try {
     const info = await stat(filePath);
@@ -442,7 +449,20 @@ async function inferTargetKind(target: string): Promise<"file" | "directory"> {
   }
 }
 
-function createNodeStrReplaceFs(): StrReplaceEditorFs {
+/** Resolve symlink aliases for coordination; missing targets resolve through their parent. */
+async function canonicalizeExistingPath(path: string): Promise<string> {
+  try {
+    return await realpath(path);
+  } catch {
+    try {
+      return join(await realpath(dirname(path)), basename(path));
+    } catch {
+      return resolve(path);
+    }
+  }
+}
+
+function createNodeStrReplaceFs(signal?: AbortSignal): StrReplaceEditorFs {
   return {
     async exists(path: string): Promise<boolean> {
       try {
@@ -462,8 +482,18 @@ function createNodeStrReplaceFs(): StrReplaceEditorFs {
     async readText(path: string): Promise<string> {
       return readFile(path, "utf8");
     },
-    async writeText(path: string, content: string): Promise<void> {
-      await writeFile(path, content, "utf8");
+    async writeText(
+      path: string,
+      content: string,
+      options?: { expectedText?: string },
+    ): Promise<void> {
+      await writeUtf8FileAtomically(path, content, { expectedText: options?.expectedText, signal });
+    },
+    async createText(path: string, content: string): Promise<boolean> {
+      return createUtf8FileExclusively(path, content, { signal });
+    },
+    async canonicalize(path: string): Promise<string> {
+      return canonicalizeExistingPath(path);
     },
     async listDir(path: string): Promise<StrReplaceEditorFsEntry[]> {
       const entries = await readdir(path, { withFileTypes: true });
@@ -883,17 +913,20 @@ async function executeStrReplaceEditor(
   publish: PublishMetadata,
   baseDir: string,
   hostHome: string,
+  signal?: AbortSignal,
 ): Promise<string> {
   const requestedPath = requireNonEmptyPath(args.path);
   if (requestedPath === undefined) {
     return "Error: path must be a non-empty path";
   }
   const targetPath = normalizeTargetPath(baseDir, requestedPath, hostHome);
+  const freshnessPath = await canonicalizeExistingPath(targetPath);
   const resolvedArgs: StrReplaceEditorArgs = { ...args, path: targetPath };
   const editor = new StrReplaceEditor({
-    fs: createNodeStrReplaceFs(),
-    onViewed: (path, snapshot) => fileCache.record(sessionID, path, snapshot),
-    checkFreshness: (path, current) => fileCache.check(sessionID, path, current),
+    fs: createNodeStrReplaceFs(signal),
+    signal,
+    onViewed: (_path, snapshot) => fileCache.record(sessionID, freshnessPath, snapshot),
+    checkFreshness: (_path, current) => fileCache.check(sessionID, freshnessPath, current),
   });
 
   const result = await editor.execute(resolvedArgs);
@@ -937,7 +970,9 @@ export function createHashlineEditHandlers(
   options: { readonly nativeDefinitions?: Map<string, NativeToolDefinition> } = {},
 ): HashlineEditRegistration {
   const modelCache = new SessionModelCache();
-  const fileCache = new SessionFileCache();
+  const fileCache = sharedFileCache;
+  fileCacheOwners += 1;
+  let disposed = false;
   const nativeDefinitions = options.nativeDefinitions ?? new Map<string, NativeToolDefinition>();
 
   const resolveMode = (sessionID: string, settings: HashlineEditPluginSettings): EditMode =>
@@ -1145,6 +1180,7 @@ export function createHashlineEditHandlers(
             (u) => context.progress(u),
             baseDir,
             hostHome,
+            context.signal,
           );
         const output = await requestFileEffect(
           context,
@@ -1258,8 +1294,9 @@ export function createHashlineEditHandlers(
       // A successful native read always establishes freshness (needed by the
       // str_replace editor); anchoring additionally requires hashline mode.
       if (targetPath !== undefined) {
-        const snapshot = await statSnapshot(targetPath);
-        if (snapshot) fileCache.record(event.sessionID, targetPath, snapshot);
+        const freshnessPath = await canonicalizeExistingPath(targetPath);
+        const snapshot = await statSnapshot(freshnessPath);
+        if (snapshot) fileCache.record(event.sessionID, freshnessPath, snapshot);
       }
       const settings = await deps.settingsFor(event.sessionID);
       if (settings === undefined || !settings.enabled) return;
@@ -1291,8 +1328,11 @@ export function createHashlineEditHandlers(
   return {
     handlers,
     dispose() {
+      if (disposed) return;
+      disposed = true;
       modelCache.clear();
-      fileCache.clear();
+      fileCacheOwners -= 1;
+      if (fileCacheOwners === 0) fileCache.clear();
     },
   };
 }
