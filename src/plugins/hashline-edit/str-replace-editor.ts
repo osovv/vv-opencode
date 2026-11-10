@@ -1,9 +1,9 @@
 // FILE: src/plugins/hashline-edit/str-replace-editor.ts
-// VERSION: 0.2.0
+// VERSION: 0.3.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Implement the DeepSeek dsh str_replace_editor contract (view/create/str_replace/insert) as a native edit profile.
-//   SCOPE: Command dispatch, dsh-verbatim view formatting and file-dependent error texts, exact-verbatim str_replace matching with occurrence line numbers, insert_line file-length validation, create guard, absolute-path hint, directory listing, output truncation, and view-cache freshness checks. Registered argument shapes and args-only command validation come from schemas.ts; this module reruns that validation at its direct entry before any filesystem access. The model-facing description is owned by tool-description.ts and re-exported here.
-//   DEPENDS: [src/lib/agent-tool-contract.ts, src/plugins/hashline-edit/schemas.ts, src/plugins/hashline-edit/session-state.ts, src/plugins/hashline-edit/tool-description.ts]
+//   SCOPE: Command dispatch, dsh-verbatim view formatting and file-dependent error texts, exact-verbatim str_replace matching with occurrence line numbers, insert_line file-length validation, create guard, absolute-path hint, directory listing, output truncation, and view-cache freshness checks. Registered argument shapes and args-only command validation come from schemas.ts; this module reruns that validation at its direct entry before any filesystem access. Every command runs under a process-global lock keyed by the canonical target so the complete existence/freshness/read/match/write/cache cycle is serialized across editor instances and sessions. Callbacks receive caller-visible paths; the native adapter maps both read and editor observations to shared canonical freshness keys. Cancellation is rechecked after the queue wait and before mutation. The model-facing description is owned by tool-description.ts and re-exported here.
+//   DEPENDS: [src/lib/agent-tool-contract.ts, src/plugins/hashline-edit/schemas.ts, src/plugins/hashline-edit/session-state.ts, src/plugins/hashline-edit/target-lock.ts, src/plugins/hashline-edit/tool-description.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT, M-AGENT-TOOL-CONTRACT]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -14,23 +14,25 @@
 //   STR_REPLACE_TRUNCATION_MARKER - dsh response-clipped marker appended to truncated view output.
 //   StrReplaceEditorArgs - Tool-facing command arguments; schema-derived from schemas.ts.
 //   StrReplaceEditorResult - Ok output or fail-closed error text; schema-derived from schemas.ts.
-//   StrReplaceEditorFs - Filesystem seam used by the editor (node:fs-backed in production, fake in tests).
+//   StrReplaceEditorFs - Filesystem seam used by the editor (node:fs-backed in production, fake in tests), including optional canonicalization and exclusive create.
 //   StrReplaceEditorFsEntry - Directory entry name and type returned by the filesystem seam.
-//   StrReplaceEditorOptions - Editor options: filesystem seam, output cap, and view-cache callbacks.
+//   StrReplaceEditorOptions - Editor options: filesystem seam, output cap, cancellation signal, and view-cache callbacks.
 //   StrReplaceEditor - Executes str_replace_editor commands with dsh semantics and view-cache freshness checks.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-AGENT-TOOL-CONTRACTS T-005 - Moved the description to tool-description.ts (re-exported), derived argument/result types from the single-source contract, and rejected structural/command-invalid arguments at the direct editor entry before any filesystem access.]
+//   LAST_CHANGE: [Direct fix - Serialize complete command cycles by canonical target across editor instances, preserve caller-visible paths, and recheck cancellation before mutation.]
 // END_CHANGE_SUMMARY
 
 import { formatContractIssues } from "../../lib/agent-tool-contract.js";
+import { resolve } from "node:path";
 import type { FileCacheVerdict, FileSnapshot } from "./session-state.js";
 import {
   validateStrReplaceEditorToolInput,
   type StrReplaceEditorResult,
   type StrReplaceEditorToolArgs,
 } from "./schemas.js";
+import { throwIfAborted, withTargetLock } from "./target-lock.js";
 import { STR_REPLACE_EDITOR_DESCRIPTION } from "./tool-description.js";
 
 export { STR_REPLACE_EDITOR_DESCRIPTION };
@@ -56,7 +58,16 @@ export interface StrReplaceEditorFs {
   exists(path: string): Promise<boolean>;
   isDirectory(path: string): Promise<boolean>;
   readText(path: string): Promise<string>;
-  writeText(path: string, content: string): Promise<void>;
+  /**
+   * Replace file text. `expectedText` is the content this command read; the
+   * production filesystem refuses publication when the target no longer
+   * matches it. Fake filesystems may ignore it.
+   */
+  writeText(path: string, content: string, options?: { expectedText?: string }): Promise<void>;
+  /** Atomically create a new file without replacing an existing directory entry. */
+  createText?(path: string, content: string): Promise<boolean>;
+  /** Resolve symlinks for coordination keys; callbacks still receive caller-visible paths. */
+  canonicalize?(path: string): Promise<string>;
   listDir(path: string): Promise<StrReplaceEditorFsEntry[]>;
   stat(path: string): Promise<FileSnapshot | undefined>;
 }
@@ -64,6 +75,7 @@ export interface StrReplaceEditorFs {
 export interface StrReplaceEditorOptions {
   fs: StrReplaceEditorFs;
   maxOutputChars?: number;
+  signal?: AbortSignal;
   onViewed?: (path: string, snapshot: FileSnapshot) => void;
   checkFreshness?: (path: string, current: FileSnapshot | undefined) => FileCacheVerdict;
 }
@@ -143,18 +155,41 @@ export class StrReplaceEditor {
       );
     }
 
-    switch (args.command) {
-      case "view":
-        return this.view(path, args.view_range);
-      case "create":
-        return this.create(path, args.file_text);
-      case "str_replace":
-        return this.strReplace(path, args.old_str, args.new_str);
-      case "insert":
-        return this.insert(path, args.insert_line, args.new_str);
-      default:
-        return fail(`Unknown command: ${String(args.command)}`);
+    // Symlink aliases share one lock; keep caller-visible paths in diagnostics
+    // and let the native adapter canonicalize its freshness callback keys.
+    const coordinationKey = await this.coordinationKey(path);
+    return withTargetLock(
+      coordinationKey,
+      async () => {
+        throwIfAborted(this.options.signal);
+        switch (args.command) {
+          case "view":
+            return this.view(path, args.view_range);
+          case "create":
+            return this.create(path, args.file_text);
+          case "str_replace":
+            return this.strReplace(path, args.old_str, args.new_str);
+          case "insert":
+            return this.insert(path, args.insert_line, args.new_str);
+          default:
+            return fail(`Unknown command: ${String(args.command)}`);
+        }
+      },
+      this.options.signal,
+    );
+  }
+
+  private async coordinationKey(path: string): Promise<string> {
+    try {
+      const canonical = await this.options.fs.canonicalize?.(path);
+      if (canonical !== undefined && canonical.length > 0) {
+        return resolve(canonical);
+      }
+    } catch {
+      // A metadata failure must not prevent the command; fall back to the
+      // lexical target so independent aliases still share one key when known.
     }
+    return resolve(path);
   }
 
   private async statExisting(
@@ -286,12 +321,22 @@ export class StrReplaceEditor {
     if (fileText === undefined) {
       return fail("Parameter `file_text` is required for command: create");
     }
-    if (await this.options.fs.exists(path)) {
-      return fail(
-        `File already exists at: ${path}. Cannot overwrite files using command \`create\`.`,
-      );
+    if (this.options.fs.createText !== undefined) {
+      throwIfAborted(this.options.signal);
+      if (!(await this.options.fs.createText(path, fileText))) {
+        return fail(
+          `File already exists at: ${path}. Cannot overwrite files using command \`create\`.`,
+        );
+      }
+    } else {
+      if (await this.options.fs.exists(path)) {
+        return fail(
+          `File already exists at: ${path}. Cannot overwrite files using command \`create\`.`,
+        );
+      }
+      throwIfAborted(this.options.signal);
+      await this.options.fs.writeText(path, fileText);
     }
-    await this.options.fs.writeText(path, fileText);
     const snapshot = await this.options.fs.stat(path);
     if (snapshot) {
       this.options.onViewed?.(path, snapshot);
@@ -338,10 +383,9 @@ export class StrReplaceEditor {
 
     const offset = offsets[0]!;
     const newValue = newStr ?? "";
-    await this.options.fs.writeText(
-      path,
-      before.slice(0, offset) + newValue + before.slice(offset + oldStr.length),
-    );
+    const after = before.slice(0, offset) + newValue + before.slice(offset + oldStr.length);
+    throwIfAborted(this.options.signal);
+    await this.options.fs.writeText(path, after, { expectedText: before });
     const snapshot = await this.options.fs.stat(path);
     if (snapshot) {
       this.options.onViewed?.(path, snapshot);
@@ -384,7 +428,8 @@ export class StrReplaceEditor {
       ...newStr.split("\n"),
       ...lines.slice(insertLine),
     ].join("\n");
-    await this.options.fs.writeText(path, after);
+    throwIfAborted(this.options.signal);
+    await this.options.fs.writeText(path, after, { expectedText: before });
     const snapshot = await this.options.fs.stat(path);
     if (snapshot) {
       this.options.onViewed?.(path, snapshot);

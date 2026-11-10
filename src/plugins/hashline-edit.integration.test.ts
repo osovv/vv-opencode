@@ -1,9 +1,9 @@
 // FILE: src/plugins/hashline-edit.integration.test.ts
-// VERSION: 2.0.0
+// VERSION: 2.1.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify the native hashline-edit boundary: native read-output anchoring, hash-anchored and dsh edit execution against real temporary files, routing visibility per actual session model, awaited permission-before-write, stale-anchor rejection, and truthful reporting when metadata publication fails.
-//   SCOPE: Native handler seam tests using real temporary files and pinned native tool context/result shapes, plus unchanged pure edit-primitive coverage.
-//   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/plugins/hashline-edit/edit-operation-primitives.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/index.ts, src/plugins/hashline-edit/schemas.ts]
+//   PURPOSE: Verify the native hashline-edit boundary: native read-output anchoring, hash-anchored and dsh edit execution against real temporary files, routing visibility per actual session model, awaited permission-before-write, stale-anchor rejection, truthful reporting when metadata publication fails, and process-wide str_replace_editor target coordination with atomic publication.
+//   SCOPE: Native handler seam tests using real temporary files and pinned native tool context/result shapes, including parallel same-target and alias edits, cancellation/failure release, create conflicts, mode preservation, canonical freshness authority, and registration cleanup; plus unchanged pure edit-primitive coverage.
+//   DEPENDS: [bun:test, node:fs, node:fs/promises, node:os, node:path, src/plugins/hashline-edit/edit-operation-primitives.ts, src/plugins/hashline-edit/hash-computation.ts, src/plugins/hashline-edit/index.ts, src/plugins/hashline-edit/schemas.ts]
 //   LINKS: [M-PLUGIN-HASHLINE-EDIT, V-M-PLUGIN-HASHLINE-EDIT, M-AGENT-TOOL-CONTRACT]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
@@ -16,6 +16,8 @@
 //   createToolContext - Build a pinned native tool context fixture (optionally with a throwing progress).
 //   anchorFor - Build a visible hashline anchor for fixture content.
 //   previousConfigHome - Preserved caller config-home environment.
+//   registrations - Live test registrations disposed after every test.
+//   pluginCleanups - Native setup cleanup callbacks awaited after every test.
 //   Harness - Native handler harness with recording permission calls.
 //   recordModel - Record a session model into the handler cache.
 //   REAL_HOST - Pinned host binary from VVOC_E2E_V2_HOST.
@@ -24,12 +26,22 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-HASHLINE-DENY-SAFETY T-002 - Added deny-all no-op regressions, plugin-owned definition restore coverage, and a realistic host registry fixture without plugin-owned seeds.]
+//   LAST_CHANGE: [Direct fix - Added native-handler regressions for parallel disjoint edits, cross-session staleness, cancellation/failure release, create races, mode preservation, symlink alias coordination, and native-read freshness authority.]
 // END_CHANGE_SUMMARY
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { appendFileSync, symlinkSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import type { ToolContext } from "@opencode/plugin/promise/tool";
@@ -45,6 +57,7 @@ import {
   createHashlineEditHandlers,
   createHashlineEditPlugin,
   type HashlineEditHandlers,
+  type HashlineEditRegistration,
   type HashlinePermissionGuard,
 } from "./hashline-edit/index.js";
 import {
@@ -58,6 +71,8 @@ import {
 import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
 
 const previousConfigHome = process.env.XDG_CONFIG_HOME;
+const registrations = new Set<HashlineEditRegistration>();
+const pluginCleanups = new Set<() => Promise<void>>();
 const METADATA_FAILURE_SECRET = "SECRET_TOKEN_must_not_leak";
 const METADATA_FAILURE_MESSAGE = `${METADATA_FAILURE_SECRET} ${"x".repeat(4096)}`;
 
@@ -65,7 +80,11 @@ beforeEach(() => {
   process.env.XDG_CONFIG_HOME = join(tmpdir(), `vvoc-hashline-empty-config-${process.pid}`);
 });
 
-afterEach(() => {
+afterEach(async () => {
+  for (const cleanup of pluginCleanups) await cleanup();
+  pluginCleanups.clear();
+  for (const registration of registrations) registration.dispose();
+  registrations.clear();
   if (previousConfigHome === undefined) {
     delete process.env.XDG_CONFIG_HOME;
   } else {
@@ -75,6 +94,7 @@ afterEach(() => {
 
 interface Harness {
   handlers: HashlineEditHandlers;
+  dispose(): void;
   readonly permissionCalls: Array<{
     action: string;
     resources: ReadonlyArray<string>;
@@ -92,6 +112,7 @@ function createHarness(
   options: {
     denyPermission?: boolean;
     denyExternal?: boolean;
+    ignoreAbortSignal?: boolean;
     baseDir?: string;
     locations?: Record<string, string>;
     projectRoot?: string;
@@ -113,7 +134,8 @@ function createHarness(
         throw new Error("EXTERNAL_DENIED");
       }
       if (options.denyPermission) throw new Error("PERMISSION_DENIED");
-      if (guardOptions?.signal?.aborted) throw new Error("PERMISSION_ABORTED");
+      if (!options.ignoreAbortSignal && guardOptions?.signal?.aborted)
+        throw new Error("PERMISSION_ABORTED");
       return effect();
     },
   };
@@ -126,7 +148,13 @@ function createHarness(
     permission,
     log: () => undefined,
   });
-  return { handlers: registration.handlers, permissionCalls, permissionFailures: [] };
+  registrations.add(registration);
+  return {
+    handlers: registration.handlers,
+    dispose: () => registration.dispose(),
+    permissionCalls,
+    permissionFailures: [],
+  };
 }
 
 function recordModel(handlers: HashlineEditHandlers, sessionID: string, modelID: string): void {
@@ -861,6 +889,513 @@ describe("HashlineEditPlugin dsh str_replace_editor", () => {
   });
 });
 
+describe("HashlineEditPlugin str_replace_editor target coordination", () => {
+  test("serializes three disjoint parallel replacements in one session with exact bytes", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-concurrent-"));
+    try {
+      const filePath = join(directory, "concurrent.txt");
+      await writeFile(filePath, "alpha one\nbeta two\ngamma three\n", "utf8");
+      const { handlers } = createHarness(undefined, { baseDir: directory });
+      recordModel(handlers, "s1", "deepseek-v4-flash");
+      const { context } = createToolContext({ sessionID: "s1" });
+
+      const results = await Promise.all([
+        handlers.tools.str_replace_editor.execute(
+          { command: "str_replace", path: filePath, old_str: "alpha one", new_str: "ALPHA" },
+          context,
+        ),
+        handlers.tools.str_replace_editor.execute(
+          { command: "str_replace", path: filePath, old_str: "beta two", new_str: "BETA-BETA" },
+          context,
+        ),
+        handlers.tools.str_replace_editor.execute(
+          {
+            command: "str_replace",
+            path: filePath,
+            old_str: "gamma three",
+            new_str: "GAMMA-GAMMA-GAMMA",
+          },
+          context,
+        ),
+      ]);
+
+      for (const result of results) {
+        expect(result.output).toContain("has been edited successfully");
+      }
+      const expected = "ALPHA\nBETA-BETA\nGAMMA-GAMMA-GAMMA\n";
+      const bytes = await readFile(filePath);
+      expect(bytes.equals(Buffer.from(expected, "utf8"))).toBe(true);
+      expect(bytes.includes(0)).toBe(false);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("applies concurrent unread edits from different sessions cumulatively", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-cross-session-"));
+    try {
+      const filePath = join(directory, "shared.txt");
+      await writeFile(filePath, "one\ntwo\n", "utf8");
+      const { handlers } = createHarness(undefined, { baseDir: directory });
+      recordModel(handlers, "sA", "deepseek-v4-flash");
+      recordModel(handlers, "sB", "deepseek-v4-flash");
+
+      const results = await Promise.all([
+        handlers.tools.str_replace_editor.execute(
+          { command: "str_replace", path: filePath, old_str: "one", new_str: "ONE-LONG" },
+          createToolContext({ sessionID: "sA" }).context,
+        ),
+        handlers.tools.str_replace_editor.execute(
+          { command: "str_replace", path: filePath, old_str: "two", new_str: "TWO-LONGER" },
+          createToolContext({ sessionID: "sB" }).context,
+        ),
+      ]);
+
+      for (const result of results) {
+        expect(result.output).toContain("has been edited successfully");
+      }
+      expect(await readFile(filePath, "utf8")).toBe("ONE-LONG\nTWO-LONGER\n");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("independent handler instances share coordination for the same session", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-independent-handlers-"));
+    try {
+      const filePath = join(directory, "shared.txt");
+      await writeFile(filePath, "one\ntwo\nthree\n", "utf8");
+      const first = createHarness(undefined, { baseDir: directory });
+      const second = createHarness(undefined, { baseDir: directory });
+      recordModel(first.handlers, "s1", "deepseek-v4-flash");
+      recordModel(second.handlers, "s1", "deepseek-v4-flash");
+
+      const results = await Promise.all([
+        first.handlers.tools.str_replace_editor.execute(
+          { command: "str_replace", path: filePath, old_str: "one", new_str: "ONE" },
+          createToolContext({ sessionID: "s1" }).context,
+        ),
+        second.handlers.tools.str_replace_editor.execute(
+          { command: "str_replace", path: filePath, old_str: "two", new_str: "TWO-TWO" },
+          createToolContext({ sessionID: "s1" }).context,
+        ),
+        first.handlers.tools.str_replace_editor.execute(
+          { command: "str_replace", path: filePath, old_str: "three", new_str: "THREE-THREE" },
+          createToolContext({ sessionID: "s1" }).context,
+        ),
+      ]);
+
+      for (const result of results) {
+        expect(result.output).toContain("has been edited successfully");
+      }
+      expect(await readFile(filePath, "utf8")).toBe("ONE\nTWO-TWO\nTHREE-THREE\n");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps own queued edits usable and rejects another session's stale view", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-stale-view-"));
+    try {
+      const filePath = join(directory, "viewed.txt");
+      await writeFile(filePath, "alpha\nbeta\ngamma\n", "utf8");
+      const { handlers } = createHarness(undefined, { baseDir: directory });
+      recordModel(handlers, "sA", "deepseek-v4-flash");
+      recordModel(handlers, "sB", "deepseek-v4-flash");
+      const contextA = createToolContext({ sessionID: "sA" }).context;
+      const contextB = createToolContext({ sessionID: "sB" }).context;
+
+      await handlers.tools.str_replace_editor.execute(
+        { command: "view", path: filePath },
+        contextA,
+      );
+      await handlers.tools.str_replace_editor.execute(
+        { command: "view", path: filePath },
+        contextB,
+      );
+
+      const first = await handlers.tools.str_replace_editor.execute(
+        { command: "str_replace", path: filePath, old_str: "alpha", new_str: "ALPHA-ONE" },
+        contextA,
+      );
+      const second = await handlers.tools.str_replace_editor.execute(
+        { command: "str_replace", path: filePath, old_str: "beta", new_str: "BETA-TWO" },
+        contextA,
+      );
+      expect(first.output).toContain("has been edited successfully");
+      expect(second.output).toContain("has been edited successfully");
+
+      const stale = await handlers.tools.str_replace_editor.execute(
+        { command: "str_replace", path: filePath, old_str: "gamma", new_str: "GAMMA" },
+        contextB,
+      );
+      expect(stale.output).toContain("changed since it was last viewed");
+      expect(await readFile(filePath, "utf8")).toBe("ALPHA-ONE\nBETA-TWO\ngamma\n");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("native read freshness records stay authoritative under canonical coordination", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-native-read-"));
+    try {
+      const filePath = join(directory, "read.txt");
+      await writeFile(filePath, "alpha\nbeta\n", "utf8");
+      const { handlers } = createHarness(undefined, { baseDir: directory });
+      recordModel(handlers, "s1", "deepseek-v4-flash");
+      const { context } = createToolContext({ sessionID: "s1" });
+
+      await handlers.after({
+        tool: "read",
+        sessionID: "s1",
+        input: { path: filePath },
+        status: "completed",
+        result: { content: "1: alpha\n2: beta" },
+      });
+
+      const fresh = await handlers.tools.str_replace_editor.execute(
+        { command: "str_replace", path: filePath, old_str: "alpha", new_str: "ALPHA" },
+        context,
+      );
+      expect(fresh.output).toContain("has been edited successfully");
+
+      // A new native read re-establishes freshness; an external mutation after
+      // that read must still be detected under the same caller path.
+      await handlers.after({
+        tool: "read",
+        sessionID: "s1",
+        input: { path: filePath },
+        status: "completed",
+        result: { content: "1: ALPHA\n2: beta" },
+      });
+      await writeFile(filePath, "ALPHA\nexternal\n", "utf8");
+      const stale = await handlers.tools.str_replace_editor.execute(
+        { command: "str_replace", path: filePath, old_str: "beta", new_str: "BETA" },
+        context,
+      );
+      expect(stale.output).toContain("changed since it was last viewed");
+      expect(await readFile(filePath, "utf8")).toBe("ALPHA\nexternal\n");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("symlink alias freshness records survive canonical coordination", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-alias-freshness-"));
+    try {
+      const target = join(directory, "target.txt");
+      const alias = join(directory, "alias.txt");
+      await writeFile(target, "alpha\nbeta\n", "utf8");
+      await symlink(target, alias);
+      const { handlers } = createHarness(undefined, { baseDir: directory });
+      recordModel(handlers, "s1", "deepseek-v4-flash");
+      const { context } = createToolContext({ sessionID: "s1" });
+
+      const viewed = await handlers.tools.str_replace_editor.execute(
+        { command: "view", path: alias },
+        context,
+      );
+      expect(viewed.output).toContain("Here's the content of");
+      await writeFile(target, "alpha\nexternal\n", "utf8");
+
+      const stale = await handlers.tools.str_replace_editor.execute(
+        { command: "str_replace", path: alias, old_str: "external", new_str: "EXTERNAL" },
+        context,
+      );
+      expect(stale.output).toContain("changed since it was last viewed");
+      expect(await readFile(target, "utf8")).toBe("alpha\nexternal\n");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("same-session edits refresh views of the same target through other aliases", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-alias-views-"));
+    try {
+      const target = join(directory, "target.txt");
+      const alias = join(directory, "alias.txt");
+      await writeFile(target, "alpha\nbeta\n", "utf8");
+      await symlink(target, alias);
+      const { handlers } = createHarness(undefined, { baseDir: directory });
+      recordModel(handlers, "s1", "deepseek-v4-flash");
+      const { context } = createToolContext({ sessionID: "s1" });
+      for (const path of [target, alias]) {
+        await handlers.tools.str_replace_editor.execute({ command: "view", path }, context);
+      }
+      const first = await handlers.tools.str_replace_editor.execute(
+        { command: "str_replace", path: target, old_str: "alpha", new_str: "ALPHA-LONG" },
+        context,
+      );
+      const second = await handlers.tools.str_replace_editor.execute(
+        { command: "str_replace", path: alias, old_str: "beta", new_str: "BETA-LONG" },
+        context,
+      );
+      expect(first.output).toContain("has been edited successfully");
+      expect(second.output).toContain("has been edited successfully");
+      expect(await readFile(target, "utf8")).toBe("ALPHA-LONG\nBETA-LONG\n");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("native reads cannot be bypassed through another alias or a later handler instance", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-alias-native-"));
+    try {
+      const target = join(directory, "target.txt");
+      const alias = join(directory, "alias.txt");
+      await writeFile(target, "alpha\nbeta\n", "utf8");
+      await symlink(target, alias);
+      const first = createHarness(undefined, { baseDir: directory });
+      recordModel(first.handlers, "s1", "deepseek-v4-flash");
+      await first.handlers.after({
+        tool: "read",
+        sessionID: "s1",
+        input: { path: alias },
+        status: "completed",
+        result: { content: "1: alpha\n2: beta" },
+      });
+      const second = createHarness(undefined, { baseDir: directory });
+      recordModel(second.handlers, "s1", "deepseek-v4-flash");
+      await writeFile(target, "alpha\nexternal-change\n", "utf8");
+      const result = await second.handlers.tools.str_replace_editor.execute(
+        { command: "str_replace", path: target, old_str: "alpha", new_str: "ALPHA" },
+        createToolContext({ sessionID: "s1" }).context,
+      );
+      expect(result.output).toContain("changed since it was last viewed");
+      expect(await readFile(target, "utf8")).toBe("alpha\nexternal-change\n");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("shared freshness survives one disposal and is cleared after the last owner", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-cache-lifetime-"));
+    try {
+      const path = join(directory, "sample.txt");
+      await writeFile(path, "alpha\n", "utf8");
+      const first = createHarness(undefined, { baseDir: directory });
+      const second = createHarness(undefined, { baseDir: directory });
+      for (const instance of [first, second])
+        recordModel(instance.handlers, "s1", "deepseek-v4-flash");
+      const { context } = createToolContext({ sessionID: "s1" });
+      await first.handlers.tools.str_replace_editor.execute({ command: "view", path }, context);
+      first.dispose();
+      first.dispose();
+      await writeFile(path, "alpha\nexternal\n", "utf8");
+      const stale = await second.handlers.tools.str_replace_editor.execute(
+        { command: "str_replace", path, old_str: "alpha", new_str: "ALPHA" },
+        context,
+      );
+      expect(stale.output).toContain("changed since it was last viewed");
+      second.dispose();
+
+      const next = createHarness(undefined, { baseDir: directory });
+      recordModel(next.handlers, "s1", "deepseek-v4-flash");
+      const fresh = await next.handlers.tools.str_replace_editor.execute(
+        { command: "str_replace", path, old_str: "alpha", new_str: "ALPHA" },
+        context,
+      );
+      expect(fresh.output).toContain("has been edited successfully");
+      expect(await readFile(path, "utf8")).toBe("ALPHA\nexternal\n");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("releases a target after a failed or cancelled edit", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-release-"));
+    try {
+      const filePath = join(directory, "release.txt");
+      await writeFile(filePath, "alpha\nbeta\n", "utf8");
+      const { handlers } = createHarness(undefined, {
+        baseDir: directory,
+        ignoreAbortSignal: true,
+      });
+      recordModel(handlers, "s1", "deepseek-v4-flash");
+
+      const missing = await handlers.tools.str_replace_editor.execute(
+        { command: "str_replace", path: filePath, old_str: "absent", new_str: "x" },
+        createToolContext({ sessionID: "s1" }).context,
+      );
+      expect(missing.output).toContain("did not appear verbatim");
+
+      await expect(
+        handlers.tools.str_replace_editor.execute(
+          { command: "str_replace", path: filePath, old_str: "alpha", new_str: "ALPHA" },
+          createToolContext({ sessionID: "s1", aborted: true }).context,
+        ),
+      ).rejects.toThrow(/abort/i);
+      expect(await readFile(filePath, "utf8")).toBe("alpha\nbeta\n");
+
+      const recovered = await handlers.tools.str_replace_editor.execute(
+        { command: "str_replace", path: filePath, old_str: "beta", new_str: "BETA" },
+        createToolContext({ sessionID: "s1" }).context,
+      );
+      expect(recovered.output).toContain("has been edited successfully");
+      expect(await readFile(filePath, "utf8")).toBe("alpha\nBETA\n");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("preserves BOM, CRLF, and Unicode bytes and supports deletion to empty", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-bytes-"));
+    try {
+      const filePath = join(directory, "bytes.txt");
+      const original = "\uFEFFalpha\r\nbeta\r\n\u{1F600}\r\n";
+      await writeFile(filePath, original, "utf8");
+      const { handlers } = createHarness(undefined, { baseDir: directory });
+      recordModel(handlers, "s1", "deepseek-v4-flash");
+      const { context } = createToolContext({ sessionID: "s1" });
+
+      const replaced = await handlers.tools.str_replace_editor.execute(
+        { command: "str_replace", path: filePath, old_str: "beta", new_str: "" },
+        context,
+      );
+      expect(replaced.output).toContain("has been edited successfully");
+      const expected = "\uFEFFalpha\r\n\r\n\u{1F600}\r\n";
+      expect((await readFile(filePath)).equals(Buffer.from(expected, "utf8"))).toBe(true);
+
+      const emptyTarget = join(directory, "empty.txt");
+      await writeFile(emptyTarget, "gone\n", "utf8");
+      const cleared = await handlers.tools.str_replace_editor.execute(
+        { command: "str_replace", path: emptyTarget, old_str: "gone\n", new_str: "" },
+        context,
+      );
+      expect(cleared.output).toContain("has been edited successfully");
+      const emptyBytes = await readFile(emptyTarget);
+      expect(emptyBytes.length).toBe(0);
+      expect(emptyBytes.includes(0)).toBe(false);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("racing creates produce exactly one success without overwriting", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-create-race-"));
+    try {
+      const filePath = join(directory, "created.txt");
+      const { handlers } = createHarness(undefined, { baseDir: directory });
+      recordModel(handlers, "s1", "deepseek-v4-flash");
+      const { context } = createToolContext({ sessionID: "s1" });
+
+      const results = await Promise.all([
+        handlers.tools.str_replace_editor.execute(
+          { command: "create", path: filePath, file_text: "first\n" },
+          context,
+        ),
+        handlers.tools.str_replace_editor.execute(
+          { command: "create", path: filePath, file_text: "second\n" },
+          context,
+        ),
+      ]);
+
+      const successes = results.filter((result) => result.output.includes("created successfully"));
+      const conflicts = results.filter((result) => result.output.includes("already exists"));
+      expect(successes).toHaveLength(1);
+      expect(conflicts).toHaveLength(1);
+      const content = await readFile(filePath, "utf8");
+      expect(["first\n", "second\n"]).toContain(content);
+      expect((await readFile(filePath)).includes(0)).toBe(false);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("preserves ordinary file modes across replacement", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-mode-"));
+    try {
+      const filePath = join(directory, "mode.txt");
+      await writeFile(filePath, "alpha\n", "utf8");
+      await chmod(filePath, 0o640);
+      const { handlers } = createHarness(undefined, { baseDir: directory });
+      recordModel(handlers, "s1", "deepseek-v4-flash");
+
+      const result = await handlers.tools.str_replace_editor.execute(
+        { command: "str_replace", path: filePath, old_str: "alpha", new_str: "omega" },
+        createToolContext({ sessionID: "s1" }).context,
+      );
+      expect(result.output).toContain("has been edited successfully");
+      expect((await stat(filePath)).mode & 0o777).toBe(0o640);
+      expect(await readFile(filePath, "utf8")).toBe("omega\n");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("coordinates symlink aliases without replacing the link", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-symlink-"));
+    try {
+      const target = join(directory, "target.txt");
+      const alias = join(directory, "alias.txt");
+      await writeFile(target, "alpha\nbeta\n", "utf8");
+      await symlink(target, alias);
+      const { handlers } = createHarness(undefined, { baseDir: directory });
+      recordModel(handlers, "s1", "deepseek-v4-flash");
+      const { context } = createToolContext({ sessionID: "s1" });
+
+      const results = await Promise.all([
+        handlers.tools.str_replace_editor.execute(
+          { command: "str_replace", path: target, old_str: "alpha", new_str: "ALPHA" },
+          context,
+        ),
+        handlers.tools.str_replace_editor.execute(
+          { command: "str_replace", path: alias, old_str: "beta", new_str: "BETA" },
+          context,
+        ),
+      ]);
+
+      for (const result of results) {
+        expect(result.output).toContain("has been edited successfully");
+      }
+      expect(await readFile(target, "utf8")).toBe("ALPHA\nBETA\n");
+      expect(await readFile(alias, "utf8")).toBe("ALPHA\nBETA\n");
+      expect((await lstat(alias)).isSymbolicLink()).toBe(true);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("a failing target does not block a different target", async () => {
+    if (process.getuid?.() === 0) {
+      return;
+    }
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-different-paths-"));
+    const readOnly = join(directory, "readonly.txt");
+    try {
+      const writable = join(directory, "writable.txt");
+      await writeFile(readOnly, "alpha\n", "utf8");
+      await writeFile(writable, "beta\n", "utf8");
+      await chmod(readOnly, 0o444);
+      const { handlers } = createHarness(undefined, { baseDir: directory });
+      recordModel(handlers, "s1", "deepseek-v4-flash");
+      const { context } = createToolContext({ sessionID: "s1" });
+
+      const [failed, succeeded] = await Promise.allSettled([
+        handlers.tools.str_replace_editor.execute(
+          { command: "str_replace", path: readOnly, old_str: "alpha", new_str: "ALPHA" },
+          context,
+        ),
+        handlers.tools.str_replace_editor.execute(
+          { command: "str_replace", path: writable, old_str: "beta", new_str: "BETA" },
+          context,
+        ),
+      ]);
+
+      expect(failed.status).toBe("rejected");
+      expect(succeeded.status).toBe("fulfilled");
+      if (succeeded.status === "fulfilled") {
+        expect(succeeded.value.output).toContain("has been edited successfully");
+      }
+      expect(await readFile(readOnly, "utf8")).toBe("alpha\n");
+      expect(await readFile(writable, "utf8")).toBe("BETA\n");
+    } finally {
+      await chmod(readOnly, 0o644).catch(() => undefined);
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("HashlineEditPlugin truthful reporting", () => {
   test("a metadata publication failure after a successful edit stays truthful", async () => {
     const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-meta-fail-"));
@@ -951,8 +1486,17 @@ describe("HashlineEditPlugin cold-start native definitions", () => {
       },
     };
     const plugin = createHashlineEditPlugin({ acquireRuntime: async () => fakeRuntime as never });
-    await plugin.setup(fakeContext as never);
+    const cleanup = await plugin.setup(fakeContext as never);
+    let disposed = false;
+    const dispose = async () => {
+      if (disposed) return;
+      disposed = true;
+      if (typeof cleanup === "function") await cleanup();
+      pluginCleanups.delete(dispose);
+    };
+    pluginCleanups.add(dispose);
     return {
+      dispose,
       runContext: async (modelID: string, tools: Record<string, unknown>) => {
         const handler = sessionHooks.get("context");
         if (handler === undefined) throw new Error("no context hook");
@@ -1053,6 +1597,32 @@ describe("HashlineEditPlugin cold-start native definitions", () => {
     await runContext("deepseek-chat", tools);
     expect(Object.keys(tools).sort()).toEqual(["str_replace_editor", "write"]);
     expect(tools.str_replace_editor).toBeDefined();
+  });
+
+  test("plugin setup cleanup releases its shared freshness owner", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vvoc-hashline-setup-lifetime-"));
+    try {
+      const plugin = await setupPlugin({ enabled: true, routing: DEFAULT_ROUTING_CONFIG });
+      const path = join(directory, "sample.txt");
+      await writeFile(path, "alpha\n", "utf8");
+      const observer = createHarness(undefined, { baseDir: directory });
+      recordModel(observer.handlers, "s1", "deepseek-v4-flash");
+      const { context } = createToolContext({ sessionID: "s1" });
+      await observer.handlers.tools.str_replace_editor.execute({ command: "view", path }, context);
+      observer.dispose();
+      await plugin.dispose();
+      await writeFile(path, "alpha\nexternal\n", "utf8");
+      const next = createHarness(undefined, { baseDir: directory });
+      recordModel(next.handlers, "s1", "deepseek-v4-flash");
+      const result = await next.handlers.tools.str_replace_editor.execute(
+        { command: "str_replace", path, old_str: "alpha", new_str: "ALPHA" },
+        context,
+      );
+      expect(result.output).toContain("has been edited successfully");
+      expect(await readFile(path, "utf8")).toBe("ALPHA\nexternal\n");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });
 
