@@ -1,3 +1,11 @@
+## 2.6.0 (2026-11-10)
+
+### Summary
+
+Version 2.6.0 fixes a data-corruption bug in the str_replace_editor tool used by the Hashline Edit plugin. Concurrent edits to the same file could previously collide and leave contents corrupted; the plugin now serializes complete read, check, write, and cache cycles per canonical target across sessions in one process, and publishes byte-verified staged UTF-8 writes atomically while preserving file mode and symlinks. As a result, users and agents can safely edit the same files from multiple sessions without producing mangled or truncated content, and failed or cancelled operations recover cleanly instead of leaving stale output behind.
+
+* fix(editor): prevent concurrent str_replace_editor corruption ([a991c13](https://github.com/osovv/vv-opencode/commit/a991c13))
+
 ## 2.5.0 (2026-11-08)
 
 ### Summary
