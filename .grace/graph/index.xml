@@ -41,6 +41,8 @@
         <M-TELEGRAM-BOT-API />
         <M-TELEGRAM-CONFIG />
         <M-PLUGIN-SPEC-GUARD />
+        <M-GUI-SPIKE />
+        <M-PLUGIN-GUI-SETTINGS />
         <M-WEB-CONFIG />
         <M-WEB-HTTP />
         <M-WEB-SEARCH-SERVICE />

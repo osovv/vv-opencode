@@ -94,12 +94,15 @@ the conflict rather than guessing.
   `effect` `4.0.6` (schema-owned peer used by `@opencode/schema` codecs),
   `zod` `4.1.8`, `@opentui/{core,keymap,solid}` `0.8.2`, `solid-js` `1.9.15`.
   There is no `@opencode-ai/*` dependency.
-- Public plugins: eleven native server plugins (Guardian, Hashline Edit, Model
+- Public plugins: twelve native server plugins (Guardian, Hashline Edit, Model
   Roles, System Context Injection, Workflow, Secrets Redaction, Web Tools, Tool
-  History Compaction, Analytics, Peak Hours, Spec Guard) plus the native TUI
-  plugin (`/context` inspector, analytics indicator, branding footer, peak-hours
-  banner). One pinned base-package entry in the native `plugins` array serves
-  both the `./server` and `./tui` exports.
+  History Compaction, Analytics, Peak Hours, Spec Guard, GUI Settings) plus the
+  native TUI plugin (`/context` inspector, analytics indicator, branding footer,
+  peak-hours banner) and the experimental `./gui-experimental` GUI part (vvoc
+  settings page stub, profile composer pill, and the `vvoc.gui.v1` RPC over the
+  conservative defaults write). One pinned base-package entry in the native
+  `plugins` array serves the `./server` and `./tui` exports; the GUI part is
+  loaded by OpenCode's GUI from the same package's `./gui-experimental` export.
 
 ## Repository Map
 
@@ -113,8 +116,9 @@ the conflict rather than guessing.
 | Native runtime | `src/runtime/*` | Shared native context/snapshot/client/permissions/model/auxiliary/coordination services and the read-only context-inspection RPC (`M-NATIVE-RUNTIME`). |
 | Managed agents/skills | `src/lib/managed-agents.ts`, `src/lib/managed-skills.ts`, `templates/` | Installed by `vvoc install`/`sync`. |
 | Model roles/presets | `src/lib/model-roles.ts`, `src/lib/agent-models.ts`, `src/lib/vvoc-preset-registry.ts` | Semantic role resolution and built-in presets. |
-| Plugins | `src/plugins/` | Eleven native server plugin entry points and plugin-local tests. |
+| Plugins | `src/plugins/` | Twelve native server plugin entry points and plugin-local tests. |
 | TUI plugin | `src/tui.tsx`, `src/tui/context/` | Default native TUI module, `/context` collection/analysis/dialog, and focused tests. |
+| GUI part (experimental) | `src/gui-experimental.tsx`, `src/rpc.ts`, `scripts/vite-gui.ts` | The `./gui-experimental` window part: vvoc settings page stub, profile composer pill, the `vvoc.gui.v1` RPC contract, and the Vite-preset CommonJS bundle. |
 | Workflow engine | `src/plugins/workflow/` | Protocol, state, transitions, host/cancellation mapping, tooling, repair, and persistence. |
 | Real-host harness | `scripts/e2e-v2.ts`, `scripts/e2e-v2/*` | Installed-package native parity harness (`M-E2E-V2-HARNESS`); run with `bun run e2e:v2`. |
 | Release automation | `scripts/release-*.ts`, `.github/workflows/publish.yml` | Follow deployment policy; do not duplicate it here. |

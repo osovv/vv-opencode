@@ -182,8 +182,22 @@ The server plugins run inside the OpenCode server process; **ContextTuiPlugin** 
 | **AnalyticsPlugin** | Local-only token and cache telemetry per model step, a live `cache NN%` indicator in the TUI, and `vvoc analytics cache-hit-rate` for retrospective comparison. |
 | **PeakHoursPlugin** | Warns or blocks models whose provider is in peak-priced hours right now, suggests connected off-peak providers, and shows a persistent orange banner in the TUI. |
 | **SpecGuardPlugin** | Deterministic host-side verification of spec-package artifacts: annotates reads with lint verdicts and validates writes; in enforce mode refuses writes that would break the format. |
+| **GuiSettingsPlugin** | Registers the versioned GUI RPC (`vvoc.gui.v1`) so the experimental GUI window part can read the effective vvoc defaults, write the orchestration profile through the same conservative CLI path as `vvoc orchestration set`, and receive honest stub/unsupported session-settings verdicts. |
 | **TelegramBridgePlugin** | Runs a single-owner Telegram bot inside the OpenCode server process: one private-chat DM topic per active session with a live status emoji in the topic title, a General control topic, manual permission and question buttons, and durable state that survives `opencode service restart`. |
 | **ContextTuiPlugin** | The `/context` inspector: an honest, scrollable TUI dialog showing context-window usage by category, tool, and MCP server. |
+
+### The experimental GUI part (spike)
+
+The package also ships a minimal experimental GUI part: the `./gui-experimental` export that OpenCode's GUI loads as a plugin's window half (the GUI SDK, `@opencode/plugin/gui`). The upstream API is experimental and may change between releases — the `-experimental` export name says so on purpose. Used surface: `@opencode/plugin` **2.2.5** (`./gui`, `./gui/vite`), probed live against an OpenCode **2.2.6** host (`@opencode/cli@2.2.6`, sha256-checked download).
+
+What it contains today:
+
+- A "vvoc" settings page stub (host ui components, English i18n catalog) and a composer pill showing the current orchestration profile from the effective vvoc config.
+- The portable versioned RPC contract `vvoc.gui.v1` (`src/rpc.ts`; Effect Schema codecs bridged to the portable Standard Schema RPC surface): `defaults.get` reads a bounded effective-defaults projection (profile, three plugin toggles, config source), `defaults.set` writes the orchestration profile through the same conservative CLI write path as `vvoc orchestration set` (explicit global/project scope, strict parse, kept-if-unchanged, canonical output), `session.get` answers with an honest stub read from the effective config, and `session.patch` answers `unsupported` until session-owned settings exist.
+
+Web vs Desktop verdict (live probe, host 2.2.6): **the web GUI does not load plugin `./gui-experimental` bundles.** A paired browser (`opencode serve` web app) fetched the plugin inventory but never requested `/api/plugin/gui`, and the contributed "vvoc" page does not appear in the web settings. The serving half works — the server returns the prebuilt CommonJS bundle for `id=vvoc` — so the missing half is the web app's loader, not the plugin. The Desktop app was not available on the probe machine, so the Desktop half is unverified here; the GUI SDK documents Desktop windows as the loading environment and its `Declarations.os` states that a plugin from the config runs only in the desktop app. Until a Desktop probe says otherwise, treat the GUI part as Desktop-only.
+
+Build: `bun run build` also runs the Vite preset (`scripts/vite-gui.ts`; devDependencies `vite` 7.3.7, `vite-plugin-solid` 2.11.10, `solid-js` 1.9.15) producing one CommonJS bundle at `dist/gui-experimental.cjs` from `src/gui-experimental.tsx` — app-provided modules (Solid, Effect, `@opencode/plugin/gui`, `@opencode/schema/rpc`, `@opencode/client`) stay external and every dynamic import is inlined, per the preset contract.
 
 ### Managed agents
 

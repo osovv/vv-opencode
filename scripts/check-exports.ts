@@ -27,7 +27,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-CONTEXT-TUI-PLUGIN - Added TSX source lookup and TUI plugin export recognition.]
+//   LAST_CHANGE: [GUI spike skeleton - Recognized bundler-built CommonJS export targets (./dist/*.cjs) and their src/tsx|ts entry twins.]
 // END_CHANGE_SUMMARY
 
 import { readFileSync } from "node:fs";
@@ -75,6 +75,15 @@ function getExportPaths(exports: PackageExports): Map<string, ExportEntry> {
 }
 
 function resolveDistPath(importPath: string): string | null {
+  const bundled = importPath.match(/^\.\/dist\/(.+)\.cjs$/);
+  if (bundled) {
+    const basePath = "src/" + bundled[1];
+    for (const extension of [".tsx", ".ts"]) {
+      const candidate = basePath + extension;
+      if (checkExportExists(candidate).exists) return candidate;
+    }
+    return basePath + ".tsx";
+  }
   const match = importPath.match(/^\.\/dist\/(.+)\.js$/);
   if (!match) return null;
   const basePath = "src/" + match[1];
