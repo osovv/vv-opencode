@@ -1,3 +1,11 @@
+## <small>2.6.1 (2026-11-22)</small>
+
+### Summary
+
+Version 2.6.1 fixes runtime session handling so that session-created reconciliation, family-settings resolution and birth, and auxiliary work only act on sessions whose location directory matches the plugin runtime. Role application is now location-owned, family roots keep their native model, and creation reconciliation compares the freshly read session model instead of the creation event. This prevents cross-location interference and keeps sessions outside the runtime's location read-only, which matters for users running multiple locations who need predictable model selection and isolation between them; foreign-location and family-root coverage was added to lock in the behavior.
+
+* fix(runtime): isolate session mutation to the owning location ([613510f](https://github.com/osovv/vv-opencode/commit/613510f))
+
 ## 2.6.0 (2026-11-10)
 
 ### Summary
