@@ -1,8 +1,8 @@
 // FILE: src/plugins/model-roles.integration.test.ts
 // VERSION: 3.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify the native ModelRolesPlugin delegation and the shared runtime's session-owned family settings: lazy root birth, lineage child resolution, restart parity, explicit metadata changes, one-shot creation reconciliation, config watching, auxiliary title children, and the one-shot legacy migration.
-//   SCOPE: Deterministic fake-native-host assertions with an isolated data home; no real host, network, or V1 client.
+//   PURPOSE: Verify the native ModelRolesPlugin delegation and the shared runtime's session-owned family settings: lazy root birth, lineage child resolution, restart parity, explicit metadata changes, location-owned one-shot creation reconciliation that leaves family roots native, config watching, auxiliary title children, and the one-shot legacy migration.
+//   SCOPE: Deterministic fake-native-host assertions with an isolated data home and foreign-location session views; no real host, network, or V1 client.
 //   DEPENDS: [bun:test, node:fs/promises, node:crypto, @opencode/schema/agent, @opencode/schema/model, @opencode/schema/provider, src/lib/vvoc-config.js, src/plugins/model-roles/index.js, src/runtime/context.js, src/runtime/session-settings.js, src/runtime/types.js]
 //   LINKS: [M-PLUGIN-MODEL-ROLES, M-NATIVE-RUNTIME, V-M-PLUGIN-MODEL-ROLES]
 //   ROLE: TEST
@@ -27,7 +27,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SESSION-OWNED-SETTINGS T-003 - Rewrote the suite for session-owned settings: birth, resolution, restart parity, reconciliation, and migration replace the binding/guard coverage.]
+//   LAST_CHANGE: [Direct fix - Added foreign-location and family-root coverage: roots keep their native model, foreign creation events and hooks never switch, birth, or generate aux work, and a fresh session model suppresses duplicate reconciliation.]
+//   PREVIOUS: [C-SESSION-OWNED-SETTINGS T-003 - Rewrote the suite for session-owned settings: birth, resolution, restart parity, reconciliation, and migration replace the binding/guard coverage.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test, afterEach } from "bun:test";
@@ -689,6 +690,110 @@ describe("session-owned family settings", () => {
 });
 
 describe("creation reconciliation", () => {
+  const FOREIGN_DIRECTORY = "/workspace/foreign";
+
+  test("a family root keeps its native model", async () => {
+    await isolateDataHome();
+    const project = await createProject({ smart: "prov/m-x" });
+    const context = new FakeNativeContext(project);
+    context.addAgent("vv-controller");
+    context.addModel("prov", "m-x");
+    context.addModel("prov", "m-other");
+    makeSession(context, "ses_root", { agent: "vv-controller" });
+    context.sessionModels.set("ses_root", { providerID: "prov", modelID: "m-other" });
+    const runtime = await acquireRuntime(context, { enabled: true });
+
+    context.events.push({
+      type: "session.created",
+      data: { sessionID: "ses_root", location: { directory: project } },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(context.switchCalls).toEqual([]);
+    await runtime.release();
+  });
+
+  test("creation events for another location are ignored", async () => {
+    await isolateDataHome();
+    const project = await createProject({ smart: "prov/m-x" });
+    const context = new FakeNativeContext(project);
+    context.addAgent("vv-controller");
+    context.addModel("prov", "m-x");
+    makeSession(context, "ses_foreign_root", {
+      locationDirectory: FOREIGN_DIRECTORY,
+      agent: "vv-controller",
+    });
+    makeSession(context, "ses_foreign_child", {
+      parentID: "ses_foreign_root",
+      locationDirectory: FOREIGN_DIRECTORY,
+      agent: "vv-controller",
+    });
+    context.sessionModels.set("ses_foreign_child", { providerID: "prov", modelID: "m-stale" });
+    const runtime = await acquireRuntime(context, { enabled: true });
+
+    context.events.push({
+      type: "session.created",
+      data: {
+        sessionID: "ses_foreign_child",
+        location: { directory: FOREIGN_DIRECTORY },
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(context.switchCalls).toEqual([]);
+    expect(context.updateCalls).toEqual([]);
+    expect(await runtime.settings.configFor("ses_foreign_root")).toBeUndefined();
+    await runtime.release();
+  });
+
+  test("foreign context and title hooks do not birth settings or generate aux work", async () => {
+    await isolateDataHome();
+    const project = await createProject({ smart: "prov/m-x" });
+    const context = new FakeNativeContext(project);
+    makeSession(context, "ses_foreign_root", {
+      locationDirectory: FOREIGN_DIRECTORY,
+      agent: "vv-controller",
+    });
+    const runtime = await acquireRuntime(context, { enabled: true });
+
+    await context.invoke("context", { sessionID: "ses_foreign_root" });
+    await context.invoke("title", {
+      sessionID: "ses_foreign_root",
+      messages: [{ role: "user", content: "hello" }],
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(context.updateCalls).toEqual([]);
+    expect(context.generateCalls).toEqual([]);
+    expect(context.importCalls).toEqual([]);
+    await runtime.release();
+  });
+
+  test("a fresh session model prevents a duplicate reconciliation switch", async () => {
+    await isolateDataHome();
+    const project = await createProject({ smart: "prov/m-x" });
+    const context = new FakeNativeContext(project);
+    context.addAgent("vv-controller");
+    context.addModel("prov", "m-x");
+    makeSession(context, "ses_root");
+    makeSession(context, "ses_child", { parentID: "ses_root", agent: "vv-controller" });
+    context.sessionModels.set("ses_child", { providerID: "prov", modelID: "m-x" });
+    const runtime = await acquireRuntime(context, { enabled: true });
+
+    context.events.push({
+      type: "session.created",
+      data: {
+        sessionID: "ses_child",
+        location: { directory: project },
+        model: { id: "m-stale", providerID: "prov" },
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(context.switchCalls).toEqual([]);
+    await runtime.release();
+  });
+
   test("a host-created child adopts the family role model exactly once after a config flip", async () => {
     await isolateDataHome();
     const project = await createProject({ smart: "prov/m-x" });
