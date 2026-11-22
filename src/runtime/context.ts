@@ -1,8 +1,8 @@
 // FILE: src/runtime/context.ts
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Acquire, share by exact plugin-context identity, and release the lifecycle-managed native runtime and the centralized native runtime (client/permissions/settings/config/model/auxiliary) consumed by every later native plugin, resolving session-owned family settings from the family root's metadata.
-//   SCOPE: Context-identity reference-counted registries, per-acquisition idempotent leases, lazy authenticated-client caching, permission-service exposure, native model/agent overlay capture, default-model transform, config.updated reconfiguration, lazy family-settings birth and resolution through host-verified lineage with read-modify-write metadata writes, one-shot creation reconciliation for host-created children, session-deletion cache hygiene, cross-context coordination, the read-only context-inspection RPC, and idempotent teardown without stopping the host. No candidate staging, no dispatch guard, no family snapshot store, no service discovery until a client is requested, no location-only sharing, no global configuration singleton, and no V1 compatibility facade.
+//   PURPOSE: Acquire, share by exact plugin-context identity, and release the lifecycle-managed native runtime and the centralized native runtime (client/permissions/settings/config/model/auxiliary) consumed by every later native plugin, resolving session-owned family settings from the family root's metadata only for sessions owned by this runtime's location.
+//   SCOPE: Context-identity reference-counted registries, per-acquisition idempotent leases, lazy authenticated-client caching, permission-service exposure, native model/agent overlay capture, default-model transform, config.updated reconfiguration, location-owned family-settings birth and resolution through host-verified lineage with read-modify-write metadata writes, one-shot creation reconciliation for host-created location-owned children, session-deletion cache hygiene, cross-context coordination, the read-only context-inspection RPC, and idempotent teardown without stopping the host. No candidate staging, no dispatch guard, no family snapshot store, no service discovery until a client is requested, no location-only sharing, no global configuration singleton, and no V1 compatibility facade.
 //   DEPENDS: [node:crypto, @opencode/plugin, src/lib/config-layers.ts, src/runtime/client.ts, src/runtime/coordination.ts, src/runtime/context-inspection.ts, src/runtime/model-registry.ts, src/runtime/permissions.ts, src/runtime/session-settings.ts, src/runtime/snapshot-config.ts, src/runtime/types.ts]
 //   LINKS: [M-NATIVE-RUNTIME, V-M-NATIVE-RUNTIME]
 //   ROLE: RUNTIME
@@ -23,8 +23,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SESSION-OWNED-SETTINGS T-002 - Replaced the family-binding snapshot service and dispatch guard with session-owned settings: lazy root birth, lineage resolution, RMW metadata writes, one-shot creation reconciliation, and the legacy-binding migration.]
-//   PREVIOUS: [Direct fix follow-up - The pump-missed user-choice capture in bindFor now ends the first-work tolerance too, keeping every explicit-choice path symmetric with the event pump so a stale window can never admit a later bare-base dispatch.]
+//   LAST_CHANGE: [Direct fix - Session mutation, settings birth, and auxiliary work are now limited to sessions whose location matches this runtime; family roots stay native, and creation reconciliation compares the freshly read session model.]
+//   PREVIOUS: [C-SESSION-OWNED-SETTINGS T-002 - Replaced the family-binding snapshot service and dispatch guard with session-owned settings: lazy root birth, lineage resolution, RMW metadata writes, one-shot creation reconciliation, and the legacy-binding migration.]
 // END_CHANGE_SUMMARY
 
 import { randomBytes } from "node:crypto";
@@ -663,6 +663,21 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
       ): Promise<import("./types.js").NativeSessionView> =>
         toSessionView(await ctx.session.get({ sessionID }));
 
+      // A host-wide event/hook fan-out can present sessions from other
+      // locations to this runtime. The session's location directory is cached
+      // on every read so settings resolution can enforce one ownership test
+      // without a second host round trip.
+      const sessionDirectories = new Map<string, string | undefined>();
+      const readSessionTracked = async (
+        sessionID: string,
+      ): Promise<import("./types.js").NativeSessionView> => {
+        const view = await readSession(sessionID);
+        sessionDirectories.set(sessionID, view.locationDirectory);
+        return view;
+      };
+      const ownsDirectory = (directory: string | undefined): boolean =>
+        directory === undefined || directory === ctx.location.directory;
+
       const readConfig = async (directory: string): Promise<EffectiveRuntimeConfig> => {
         const vvoc = effectiveRuntimeConfig(await loadEffectiveVvocConfig({ cwd: directory }));
         const rawIntent = await readRawOpenCodeModelIntent(directory);
@@ -795,7 +810,7 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
       const familyOf = async (sessionID: string): Promise<string> => {
         const cached = familyRoots.get(sessionID);
         if (cached !== undefined) return cached;
-        const root = await resolveSessionFamily({ sessionID, readSession });
+        const root = await resolveSessionFamily({ sessionID, readSession: readSessionTracked });
         familyRoots.set(sessionID, root);
         return root;
       };
@@ -840,7 +855,11 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
         const pending = birthInFlight.get(familyId);
         if (pending !== undefined) return pending;
         const run = withFamilyLock(familyId, async () => {
-          const fresh = await readSession(familyId);
+          const fresh = await readSessionTracked(familyId);
+          // Only the runtime that owns the family root's directory may birth
+          // its settings. A host-wide hook fan-out can deliver a foreign root
+          // here; writing it would apply this location's config to that family.
+          if (!ownsDirectory(fresh.locationDirectory)) return undefined;
           const existing = readSettingsFromMetadata(fresh.metadata);
           if (existing !== undefined && "settings" in existing) {
             bornRoots.add(familyId);
@@ -856,7 +875,7 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
           // lock; a failed fresh read falls back to the last fully read config.
           let effective = state.config;
           try {
-            effective = await readConfig(ctx.location.directory);
+            effective = await readConfig(fresh.locationDirectory ?? ctx.location.directory);
           } catch {
             diagnostic("Fresh config read failed at birth; using the cached effective config.");
           }
@@ -891,9 +910,13 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
           diagnostic(`Family resolution failed: ${describePumpError(error).slice(0, 160)}`);
           return undefined;
         }
+        // Only the location that owns the requesting session resolves its
+        // behavior. Host-wide hooks deliver foreign sessions to every runtime;
+        // resolving them here would apply this location's config to them.
+        if (!ownsDirectory(sessionDirectories.get(sessionID))) return undefined;
         let root: import("./types.js").NativeSessionView;
         try {
-          root = await readSession(familyId);
+          root = await readSessionTracked(familyId);
         } catch {
           return fallbackView(familyId);
         }
@@ -906,7 +929,11 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
         if (read !== undefined && "error" in read) {
           diagnostic("Family settings are invalid; resolving the live configuration.");
         }
-        if (!bornRoots.has(familyId) && isFamilyRootView(root)) {
+        if (!isFamilyRootView(root)) return fallbackView(familyId);
+        // A foreign root without a settings record cannot be birthed here; the
+        // owning runtime performs that write when its location is active.
+        if (!ownsDirectory(root.locationDirectory)) return undefined;
+        if (!bornRoots.has(familyId)) {
           const born = await birthRoot(familyId);
           if (born !== undefined) {
             const view = buildView(familyId, born, "metadata", root);
@@ -925,6 +952,7 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
           bornRoots.clear();
           birthInFlight.clear();
           reconciledChildren.clear();
+          sessionDirectories.clear();
           familyLocks.clear();
         },
       };
@@ -937,13 +965,19 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
        */
       const reconcileCreatedChild = async (created: {
         readonly sessionID: string;
-        readonly model?: ModelSelection | undefined;
+        readonly locationDirectory?: string | undefined;
       }): Promise<void> => {
         if (!state.roleOverride) return;
         if (reconciledChildren.has(created.sessionID)) return;
-        reconciledChildren.add(created.sessionID);
-        const view = await readSession(created.sessionID).catch(() => undefined);
+        // The host delivers every location's creation event to every runtime.
+        // Only the runtime that owns the session's directory may touch it.
+        if (!ownsDirectory(created.locationDirectory)) return;
+        const view = await readSessionTracked(created.sessionID).catch(() => undefined);
         if (view === undefined) return;
+        if (!ownsDirectory(view.locationDirectory)) return;
+        // A family root's model is native and is never switched or validated;
+        // role application at creation targets host-created children only.
+        if (isFamilyRootView(view)) return;
         const auxiliary = decodeAuxiliaryMetadata(view.metadata);
         if (auxiliary !== undefined) return;
         if (view.agent !== undefined && INTERNAL_PRIMARY_AGENTS.has(view.agent)) return;
@@ -953,7 +987,10 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
         if (settings === undefined) return;
         const expected = settings.roleModels[role];
         if (expected === undefined) return;
-        if (sameModelSelection(created.model ?? view.model, expected)) return;
+        // Compare against the freshly read session, not the creation event:
+        // another runtime may already have applied the expected selection.
+        if (sameModelSelection(view.model, expected)) return;
+        reconciledChildren.add(created.sessionID);
         await ctx.session.switchModel({ sessionID: created.sessionID, model: toRef(expected) });
       };
       // END_BLOCK_SETTINGS_SERVICE
@@ -1072,6 +1109,7 @@ function initializeNativeSnapshotRuntime<Client extends NativeForkClient>(
                   familyRoots.delete(sessionID);
                   bornRoots.delete(sessionID);
                   reconciledChildren.delete(sessionID);
+                  sessionDirectories.delete(sessionID);
                 }
               }
             } catch (error) {

@@ -2,7 +2,7 @@
 // VERSION: 3.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify effective-config extraction, role/agent binding parsing, canonical selection normalization, and native event decoding.
-//   SCOPE: vvoc snapshot policy derivation, invalid-binding failure, canonical variant handling, and session-creation/model-selection/config-update decoding; no native host.
+//   SCOPE: vvoc snapshot policy derivation, invalid-binding failure, canonical variant handling, and session-creation location/model-selection/config-update decoding; no native host.
 //   DEPENDS: [bun:test, src/lib/config-layers.js, src/lib/vvoc-config.js, src/runtime/snapshot-config.js, src/runtime/types.js]
 //   LINKS: [M-NATIVE-RUNTIME, V-M-NATIVE-RUNTIME]
 //   ROLE: TEST
@@ -14,7 +14,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SESSION-OWNED-SETTINGS T-002 - Coverage narrowed to the surviving extraction, parsing, and event-decoding helpers.]
+//   LAST_CHANGE: [Direct fix - Session-creation decoding coverage now asserts the envelope/data location directory used for ownership checks.]
+//   PREVIOUS: [C-SESSION-OWNED-SETTINGS T-002 - Coverage narrowed to the surviving extraction, parsing, and event-decoding helpers.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -91,13 +92,20 @@ describe("canonical selection normalization", () => {
 });
 
 describe("event decoding", () => {
-  test("session.created decodes the creation model", () => {
+  test("session.created decodes the session location from the envelope or data", () => {
     expect(
       decodeSessionCreatedEvent({
         type: "session.created",
-        data: { sessionID: "ses_1", model: { id: "m1", providerID: "prov", variant: "default" } },
+        location: { directory: "/workspace/envelope" },
+        data: { sessionID: "ses_1", location: { directory: "/workspace/data" } },
       }),
-    ).toEqual({ sessionID: "ses_1", model: { providerID: "prov", modelID: "m1" } });
+    ).toEqual({ sessionID: "ses_1", locationDirectory: "/workspace/envelope" });
+    expect(
+      decodeSessionCreatedEvent({
+        type: "session.created",
+        data: { sessionID: "ses_1", location: { directory: "/workspace/data" } },
+      }),
+    ).toEqual({ sessionID: "ses_1", locationDirectory: "/workspace/data" });
     expect(decodeSessionCreatedEvent({ type: "session.deleted" })).toBeUndefined();
     expect(
       decodeSessionCreatedEvent({ type: "session.created", data: { sessionID: "ses_1" } }),

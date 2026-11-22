@@ -1,7 +1,7 @@
 // FILE: src/runtime/snapshot-config.ts
 // VERSION: 3.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Extract the effective runtime policy (roles, agent bindings, full vvoc document) from a loaded vvoc configuration and decode the native session-creation events the runtime consumes for creation-time role reconciliation.
+//   PURPOSE: Extract the effective runtime policy (roles, agent bindings, full vvoc document) from a loaded vvoc configuration and decode the native session-creation events the runtime consumes for location-owned creation reconciliation.
 //   SCOPE: Effective role/agent-binding extraction, strict role-selection parsing, native event decoding for session creation and model selection, config-update event identification, and canonical selection normalization. No persistence, no admission, no dispatch validation, no location reload, and no credential handling.
 //   DEPENDS: [src/lib/config-layers.ts, src/lib/model-roles.ts, src/runtime/types.ts]
 //   LINKS: [M-NATIVE-RUNTIME, V-M-NATIVE-RUNTIME]
@@ -17,13 +17,14 @@
 //   deepCloneConfig - Deep-copy a config document into an immutable captured value.
 //   canonicalModelVariant - Collapse the native absent/`default` variant to undefined.
 //   normalizeModelSelection - Normalize one selection to its canonical variant form.
-//   decodeSessionCreatedEvent - Decode the session's creation model for creation-time reconciliation.
+//   decodeSessionCreatedEvent - Decode the created session's id and location for creation-time reconciliation.
 //   decodeModelSelectedEvent - Decode a native explicit model-selection event.
 //   isConfigUpdateEvent - True when a native config change invalidates cached effective config.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SESSION-OWNED-SETTINGS T-002 - Dropped the behaviour projection/hash, initial-selection provenance classification, accepted-input decoding, and config-watch plumbing; role parsing now fails with plain errors because no admission layer remains.]
+//   LAST_CHANGE: [Direct fix - Session creation decoding now carries the event/session location instead of a creation-time model, so reconciliation can enforce location ownership.]
+//   PREVIOUS: [C-SESSION-OWNED-SETTINGS T-002 - Dropped the behaviour projection/hash, initial-selection provenance classification, accepted-input decoding, and config-watch plumbing; role parsing now fails with plain errors because no admission layer remains.]
 // END_CHANGE_SUMMARY
 
 import type { VvocConfigSnapshot } from "../lib/config-layers.js";
@@ -123,18 +124,26 @@ export function normalizeModelSelection(selection: ModelSelection): ModelSelecti
   };
 }
 
-/** Decode a native `session.created` payload carrying the session's initial model. */
+/** Decode a native `session.created` payload carrying the session's location. */
 export function decodeSessionCreatedEvent(
   event: RuntimeEvent,
-): { readonly sessionID: string; readonly model?: ModelSelection | undefined } | undefined {
+): { readonly sessionID: string; readonly locationDirectory?: string | undefined } | undefined {
   if (event.type !== "session.created") return undefined;
   const data = event.data;
   if (typeof data !== "object" || data === null) return undefined;
   const record = data as Record<string, unknown>;
   const sessionID = record.sessionID;
   if (typeof sessionID !== "string") return undefined;
-  const model = decodeModelRef(record.model);
-  return { sessionID, ...(model === undefined ? {} : { model }) };
+  const locationDirectory =
+    decodeLocationDirectory(event.location) ?? decodeLocationDirectory(record.location);
+  return { sessionID, ...(locationDirectory === undefined ? {} : { locationDirectory }) };
+}
+
+function decodeLocationDirectory(value: unknown): string | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const record = value as Record<string, unknown>;
+  const directory = record.directory;
+  return typeof directory === "string" && directory.length > 0 ? directory : undefined;
 }
 
 function decodeModelRef(value: unknown): ModelSelection | undefined {

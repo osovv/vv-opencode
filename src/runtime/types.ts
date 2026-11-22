@@ -58,8 +58,8 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SESSION-OWNED-SETTINGS T-002 - Removed the snapshot vocabulary (family capture, staged candidates, admission/guard/store contracts and error classes) and slimmed EffectiveRuntimeConfig; session-owned settings types live in session-settings.ts.]
-//   PREVIOUS: [C-HOST-COMPAT-WINDOW T-002 - Replaced the exact SUPPORTED_SERVICE_VERSION string with the host-compat window predicate: discovery now accepts any stable host inside the supported major-bounded window, and DeepMutable is owned locally because the host package no longer ships @opencode/plugin/promise/types.]
+//   LAST_CHANGE: [Direct fix - RuntimeEvent now exposes the native event envelope location so creation decoding can enforce location ownership.]
+//   PREVIOUS: [C-SESSION-OWNED-SETTINGS T-002 - Removed the snapshot vocabulary (family capture, staged candidates, admission/guard/store contracts and error classes) and slimmed EffectiveRuntimeConfig; session-owned settings types live in session-settings.ts.]
 // END_CHANGE_SUMMARY
 
 import type {
@@ -183,6 +183,8 @@ export interface RuntimeEvent {
   readonly data?: unknown;
   /** Native event creation time in epoch milliseconds, when supplied. */
   readonly created?: unknown;
+  /** Native event envelope location, when supplied. */
+  readonly location?: unknown;
   /** Native durable envelope carrying the per-aggregate sequence. */
   readonly durable?: { readonly aggregateID?: unknown; readonly seq?: unknown } | undefined;
 }
