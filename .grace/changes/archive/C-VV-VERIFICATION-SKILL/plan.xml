@@ -1,0 +1,149 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-VV-VERIFICATION-SKILL>
+    <IntentSummary>Add the vv-verification managed skill as one language-agnostic decision workflow plus six on-demand references, make vv-spec and vv-plan demand verification intent inside their existing fields, register the skill through MANAGED_SKILL_NAMES, update the exact install/sync surface counts, document it in README, and synchronize the owning GRACE projections.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-CLI-MANAGED-SKILLS</Value>
+        <Value>V-M-CLI-MANAGED-SKILLS</Value>
+        <Value>src/lib/managed-skills.ts</Value>
+        <Value>src/lib/managed-skills.test.ts</Value>
+        <Value>src/lib/opencode.test.ts</Value>
+        <Value>templates/skills</Value>
+        <Value>README.md</Value>
+        <Value>.grace/graph/main.xml</Value>
+        <Value>.grace/verification/main.xml</Value>
+      </MustExist>
+      <MustContain><File>src/lib/managed-skills.ts</File><Text>vvoc-usage-analytics</Text></MustContain>
+      <MustContain><File>README.md</File><Text>### Managed skills</Text></MustContain>
+      <MustContain><File>.grace/graph/main.xml</File><Text>M-CLI-MANAGED-SKILLS</Text></MustContain>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-CLI-MANAGED-SKILLS</Module>
+      </MustVerify>
+      <MustContain><File>src/lib/managed-skills.ts</File><Text>vv-verification</Text></MustContain>
+      <MustContain><File>templates/skills/vv-verification/SKILL.md</File><Text>name: vv-verification</Text></MustContain>
+      <MustContain><File>templates/skills/vv-verification/SKILL.md</File><Text>evidence ledger</Text></MustContain>
+      <MustContain><File>templates/skills/vv-verification/references/strategy.md</File><Text>## Test levels</Text></MustContain>
+      <MustContain><File>templates/skills/vv-verification/references/oracles.md</File><Text>## Oracle catalog</Text></MustContain>
+      <MustContain><File>templates/skills/vv-verification/references/evidence.md</File><Text>## Evidence ledger</Text></MustContain>
+      <MustContain><File>templates/skills/vv-verification/references/formal.md</File><Text>## Limits</Text></MustContain>
+      <MustContain><File>templates/skills/vv-verification/references/maintenance.md</File><Text>## Stale tests</Text></MustContain>
+      <MustContain><File>templates/skills/vv-verification/references/create-your-verification-stack.md</File><Text>## Write VERIFICATION.md</Text></MustContain>
+      <MustContain><File>templates/skills/vv-verification/references/create-your-verification-stack.md</File><Text>## Create the verification CLI</Text></MustContain>
+      <MustContain><File>templates/skills/vv-verification/references/create-your-verification-stack.md</File><Text>## Generate the project skills</Text></MustContain>
+      <MustContain><File>templates/skills/vv-verification/references/create-your-verification-stack.md</File><Text>maintain-verification</Text></MustContain>
+      <MustContain><File>templates/skills/vv-spec/SKILL.md</File><Text>verification intent</Text></MustContain>
+      <MustContain><File>templates/skills/vv-plan/SKILL.md</File><Text>inspectable evidence</Text></MustContain>
+      <MustContain><File>src/lib/managed-skills.test.ts</File><Text>vv-verification</Text></MustContain>
+      <MustContain><File>src/lib/opencode.test.ts</File><Text>toHaveLength(33)</Text></MustContain>
+      <MustContain><File>README.md</File><Text>vv-verification</Text></MustContain>
+      <MustContain><File>.grace/graph/main.xml</File><Text>vv-verification</Text></MustContain>
+      <MustContain><File>.grace/verification/main.xml</File><Text>vv-verification</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/lib/managed-skills.test.ts src/lib/opencode.test.ts src/lib/spec-lint.test.ts src/commands/lint.test.ts</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run check</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run build</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run pack:check</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <DurableScope>
+      <GraphAnchors>
+        <M-CLI-MANAGED-SKILLS />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-CLI-MANAGED-SKILLS />
+      </VerificationAnchors>
+      <ContextArtifact>requirements.xml</ContextArtifact>
+      <ContextArtifact>technology.xml</ContextArtifact>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>.grace/changes/active/C-VV-VERIFICATION-SKILL/spec.xml</File>
+      <File>.grace/changes/active/C-VV-VERIFICATION-SKILL/plan.xml</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/main.xml</File>
+      <File>.grace/changes/archive/C-VV-VERIFICATION-SKILL/design-context.xml</File>
+      <File>README.md</File>
+      <File>src/lib/managed-skills.ts</File>
+      <File>src/lib/managed-skills.test.ts</File>
+      <File>src/lib/opencode.test.ts</File>
+      <File>templates/skills/vv-spec/SKILL.md</File>
+      <File>templates/skills/vv-spec/references/spec-template.xml</File>
+      <File>templates/skills/vv-plan/SKILL.md</File>
+      <File>templates/skills/vv-plan/references/plan-template.xml</File>
+      <File>templates/skills/vv-verification/SKILL.md</File>
+      <File>templates/skills/vv-verification/references/strategy.md</File>
+      <File>templates/skills/vv-verification/references/oracles.md</File>
+      <File>templates/skills/vv-verification/references/evidence.md</File>
+      <File>templates/skills/vv-verification/references/formal.md</File>
+      <File>templates/skills/vv-verification/references/maintenance.md</File>
+      <File>templates/skills/vv-verification/references/create-your-verification-stack.md</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Write the vv-verification skill body and its six references.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>SKILL.md has YAML frontmatter with name vv-verification and a discovery description covering tests, oracles, evidence, and formal verification; the body carries the claim-to-evidence workflow, risk classification, oracle selection, evidence ledger, hard stops, language rule, and reference routing.</Criterion>
+          <Criterion>strategy.md, oracles.md, evidence.md, formal.md, and maintenance.md carry their stable heading anchors and remain language-agnostic, with no framework mandate and no bundled script. create-your-verification-stack.md carries its stable heading anchors (Write VERIFICATION.md, Create the verification CLI, Generate the project skills, Register the skills, Never impose a framework) and teaches generating VERIFICATION.md, a thin CLI wrapper in the repository's own runner, and the project-local verify and maintain-verification skills at the repository's skill convention with approval-gated registration.</Criterion>
+          <Criterion>The content is principle-based: it avoids empirical statistics, named studies, vendors, people, and internal source pointers; contested claims are labeled; differential and metamorphic oracles are marked as general testing theory.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-skills.test.ts</Command>
+          <Command>grep -c '^## ' templates/skills/vv-verification/references/*.md</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Require verification intent in vv-spec and vv-plan without changing XML contracts.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>vv-spec testing.strategy and testing.coverage guidance requires material claims, oracles, evidence artifacts, residual risks, and deliberate non-coverage; the spec template comments explain the expectation and add no element.</Criterion>
+          <Criterion>vv-plan acceptance and verification guidance requires a named property and oracle per criterion and inspectable evidence per command; the plan template comments explain the expectation and add no element.</Criterion>
+          <Criterion>src/lib/spec-lint.test.ts and src/commands/lint.test.ts still pass over the shipped templates.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-skills.test.ts src/lib/spec-lint.test.ts src/commands/lint.test.ts</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Register vv-verification, extend contract tests, and pin the install/sync surface.</Title>
+        <DependsOn>T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>MANAGED_SKILL_NAMES contains vv-verification exactly once; loader, path, install, and reference-discovery logic are unchanged.</Criterion>
+          <Criterion>managed-skills.test.ts asserts registration, frontmatter, decision-workflow markers, the exact sorted six-reference list, every reference anchor, and vv-spec/vv-plan verification-intent delivery.</Criterion>
+          <Criterion>opencode.test.ts pins the 33-file install/sync surface, the 31-file vv-spec-skip case, and vv-verification sample paths; edited module contracts, maps, and change summaries remain accurate and paired.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-skills.test.ts src/lib/opencode.test.ts</Command>
+          <Command>bun run typecheck</Command>
+          <Command>bun run lint</Command>
+          <Command>bun run fmt:check</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Document the skill, synchronize GRACE, and run the integrated gate.</Title>
+        <DependsOn>T-003</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>README lists vv-verification with its trigger and deliverables and marks it additive; M-CLI-MANAGED-SKILLS and V-M-CLI-MANAGED-SKILLS describe the skill, its six references, and the spec/plan integration.</Criterion>
+          <Criterion>The full gate passes with fresh output, including bun run check, bun run build, bun run pack:check, vvoc lint, grace lint, and grace status.</Criterion>
+          <Criterion>The diff contains only approved implementation, template, test, documentation, and lifecycle files, with no generated dist edit and a clean git diff --check.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run check</Command>
+          <Command>bun run build</Command>
+          <Command>bun run pack:check</Command>
+          <Command>bun src/cli.ts lint --path .</Command>
+          <Command>grace lint --path .</Command>
+          <Command>grace status --path .</Command>
+          <Command>git diff --check</Command>
+        </Verification>
+      </T-004>
+    </ImplementationPlan>
+  </C-VV-VERIFICATION-SKILL>
+</GraceChangePlan>
