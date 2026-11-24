@@ -1,4 +1,4 @@
-<GraceChangePlan graceVersion="4.0" status="approved">
+<GraceChangePlan graceVersion="4.0" status="applied">
   <C-WRITE-FOR-HUMANS-SKILL>
     <IntentSummary>Add the vv-write-for-humans managed skill — a fidelity-first editorial contract for engineering prose (level-A meaning invariants, A/B/C edit authority, four edit modes, reader-behavior deletion/addition tests, genre sufficiency criteria, EN/RU pattern catalogs, fidelity casebook) — as bundled templates with three on-demand references, register it in MANAGED_SKILL_NAMES so install/sync/doctor cover it through the existing loop, cover it with loader and content-marker tests, document it in README, run the bounded manual evaluation, and synchronize the owning GRACE graph and verification projections.</IntentSummary>
     <BaselineAssertions>

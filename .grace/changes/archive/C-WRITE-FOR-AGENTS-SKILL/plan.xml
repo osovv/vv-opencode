@@ -1,4 +1,4 @@
-<GraceChangePlan graceVersion="4.0" status="approved">
+<GraceChangePlan graceVersion="4.0" status="applied">
   <C-WRITE-FOR-AGENTS-SKILL>
     <IntentSummary>Add the vv-write-for-agents managed skill — compilation of raw intent into minimal sufficient task specifications for text an agent executes, structure and addressability, session update semantics, pointer craft, and a validation reference — as bundled templates inside the bounded volume, register it in MANAGED_SKILL_NAMES, cover it with loader, content-marker, banned-token, and volume tests, document it in README, run the bounded manual evaluation, and synchronize the owning GRACE graph and verification projections.</IntentSummary>
     <BaselineAssertions>
