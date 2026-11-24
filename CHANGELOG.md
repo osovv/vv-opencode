@@ -1,3 +1,20 @@
+## <small>2.7.1 (2026-11-24)</small>
+
+### Summary
+
+Version 2.7.1 expands the bundled managed skills that guide day-to-day work. A new vv-verification skill adds one language-agnostic decision workflow with six on-demand references covering strategy, oracles, evidence, formal methods, maintenance, and bootstrapping a project verification stack, while vv-spec and vv-plan now ask for verification intent inside their existing fields so plans name the property and oracle behind each criterion. Two new writing skills, vv-write-for-humans for reader-facing prose and vv-write-for-agents for agent-executed instructions, are hardened with clearer trigger wording and tighter content, banned-token, and volume gates so they install predictably. The design-guidance skill is renamed from vv-design-principles to vv-ui-design-principles, so anyone invoking the old name should switch to the new one. Install and sync test expectations are now derived from the skill registry, keeping counts accurate as skills are added, and the guidance docs gained a rule against piping gate commands without pipefail plus a pinned reviewer prompt shape.
+
+* refactor(skills): rename vv-design-principles to vv-ui-design-principles ([1d5c5e2](https://github.com/osovv/vv-opencode/commit/1d5c5e2))
+* docs: steering and review-template follow-ups from session reflection ([0098498](https://github.com/osovv/vv-opencode/commit/0098498))
+* docs(grace): add approved C-WRITE-FOR-AGENTS-SKILL spec bundle ([9ade2d0](https://github.com/osovv/vv-opencode/commit/9ade2d0))
+* docs(grace): add approved C-WRITE-FOR-HUMANS-SKILL spec bundle ([bf3729a](https://github.com/osovv/vv-opencode/commit/bf3729a))
+* docs(grace): document vv-verification and archive C-VV-VERIFICATION-SKILL ([41eb1fd](https://github.com/osovv/vv-opencode/commit/41eb1fd))
+* feat(skills): add vv-verification and require verification intent ([088339d](https://github.com/osovv/vv-opencode/commit/088339d))
+* feat(skills): add vv-write-for-humans and vv-write-for-agents writing skills ([b979d56](https://github.com/osovv/vv-opencode/commit/b979d56))
+* test(opencode): derive managed-skill install/sync counts from the registry ([8c0d650](https://github.com/osovv/vv-opencode/commit/8c0d650))
+* fix(skills): harden writing-skill gates and align routing/ask-trigger wording ([984ca1c](https://github.com/osovv/vv-opencode/commit/984ca1c)), closes [#57](https://github.com/osovv/vv-opencode/issues/57)
+* chore: apply and archive C-WRITE-FOR-HUMANS-SKILL and C-WRITE-FOR-AGENTS-SKILL ([160e54b](https://github.com/osovv/vv-opencode/commit/160e54b))
+
 ## 2.7.0 (2026-11-24)
 
 ### Summary
