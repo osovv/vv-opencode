@@ -2,7 +2,7 @@
 // VERSION: 1.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify managed workflow skill discovery metadata, loaded behavior contracts with correctness obligations, and scoped project/global lookup.
-//   SCOPE: vv-execute metadata isolation and explicit mode choice with evidence sufficiency, bounded recovery operations distinct from acceptance and rework, native plan registration boundaries, scoped re-review guidance, exact returned work-item identity in the execute/review dispatch steps, vv-spec ambiguity resolution and preserved properties, vv-plan preserved-property criteria, vv-review findings-only honest reporting, managed skill lookup precedence, vvoc-usage-analytics template/reference coverage, vv-design-principles template and reference catalog coverage, the vv-write-for-humans / vv-write-for-agents writing-skill contracts with consumer-safe language, banned-token, and volume gates, and vv-verification registration, decision workflow, six-reference anchors, and vv-spec/vv-plan verification-intent delivery.
+//   SCOPE: vv-execute metadata isolation and explicit mode choice with evidence sufficiency, bounded recovery operations distinct from acceptance and rework, native plan registration boundaries, scoped re-review guidance, exact returned work-item identity in the execute/review dispatch steps, vv-spec ambiguity resolution and preserved properties, vv-plan preserved-property criteria, vv-review findings-only honest reporting, managed skill lookup precedence, vvoc-usage-analytics template/reference coverage, vv-ui-design-principles template and reference catalog coverage, the vv-write-for-humans / vv-write-for-agents writing-skill contracts with consumer-safe language, banned-token, and volume gates, and vv-verification registration, decision workflow, six-reference anchors, and vv-spec/vv-plan verification-intent delivery.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/managed-skills.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CLI-MANAGED-SKILLS, V-M-CLI-MANAGED-SKILLS]
 //   ROLE: TEST
@@ -340,14 +340,14 @@ describe("vvoc-usage-analytics managed skill", () => {
   });
 });
 
-describe("vv-design-principles managed skill", () => {
+describe("vv-ui-design-principles managed skill", () => {
   test("registers in MANAGED_SKILL_NAMES and loads a template with frontmatter", async () => {
     const { MANAGED_SKILL_NAMES } = await import("./managed-skills.js");
-    expect(MANAGED_SKILL_NAMES).toContain("vv-design-principles");
+    expect(MANAGED_SKILL_NAMES).toContain("vv-ui-design-principles");
 
-    const template = await loadManagedSkillTemplate("vv-design-principles");
+    const template = await loadManagedSkillTemplate("vv-ui-design-principles");
     const { frontmatter, body } = splitFrontmatter(template);
-    expect(frontmatter).toContain("name: vv-design-principles");
+    expect(frontmatter).toContain("name: vv-ui-design-principles");
     expect(frontmatter).toContain("subtractive AI-slop audit");
     expect(frontmatter).toContain("DESIGN.md");
     expect(body).toContain("references/slop-tells.md");
@@ -359,17 +359,17 @@ describe("vv-design-principles managed skill", () => {
   test("ships the slop-tells, quality-floor, and design-md references", async () => {
     const { listManagedSkillReferenceNames, loadManagedSkillReference } =
       await import("./managed-skills.js");
-    const names = await listManagedSkillReferenceNames("vv-design-principles");
+    const names = await listManagedSkillReferenceNames("vv-ui-design-principles");
     expect(names.sort()).toEqual(["design-md.md", "quality-floor.md", "slop-tells.md"]);
 
-    const slopTells = await loadManagedSkillReference("vv-design-principles", "slop-tells.md");
+    const slopTells = await loadManagedSkillReference("vv-ui-design-principles", "slop-tells.md");
     expect(slopTells).toContain("Dithering");
     expect(slopTells).toContain("eyebrow");
     expect(slopTells).toContain("Instrument Serif");
     expect(slopTells).toContain("more than five on a page is a redesign");
 
     const qualityFloor = await loadManagedSkillReference(
-      "vv-design-principles",
+      "vv-ui-design-principles",
       "quality-floor.md",
     );
     expect(qualityFloor).toContain("4.5:1");
@@ -382,7 +382,7 @@ describe("vv-design-principles managed skill", () => {
     expect(qualityFloor).toContain("lorem ipsum");
     expect(qualityFloor).toContain("prefers-reduced-motion");
 
-    const designMd = await loadManagedSkillReference("vv-design-principles", "design-md.md");
+    const designMd = await loadManagedSkillReference("vv-ui-design-principles", "design-md.md");
     expect(designMd).toContain("DESIGN.md");
     expect(designMd).toContain("propose creating");
     expect(designMd).toContain("Walk upward from the file you are editing");

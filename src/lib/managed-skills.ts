@@ -20,7 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WRITE-FOR-HUMANS-SKILL T-002, C-WRITE-FOR-AGENTS-SKILL T-002, C-VV-VERIFICATION-SKILL T-003 - Register the vv-write-for-humans, vv-write-for-agents, and vv-verification skills alongside the workflow and guidance family; reference loading is unchanged.]
+//   LAST_CHANGE: [DIRECT-FIX - Rename the bundled design guidance skill to vv-ui-design-principles so its UI scope is explicit next to GRACE change-design artifacts.]
 // END_CHANGE_SUMMARY
 
 import { readdir, readFile } from "node:fs/promises";
@@ -37,7 +37,7 @@ export const MANAGED_SKILL_NAMES = [
   "vv-handoff",
   "vv-write-for-humans",
   "vv-write-for-agents",
-  "vv-design-principles",
+  "vv-ui-design-principles",
   "vvoc-usage-analytics",
 ] as const;
 
