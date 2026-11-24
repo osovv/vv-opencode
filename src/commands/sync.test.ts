@@ -253,6 +253,39 @@ test("sync migrates legacy orchestration sections with a backup and completes", 
   }
 });
 
+test("a project-scope sync also migrates the global document", async () => {
+  const configHome = await mkdtemp(join(tmpdir(), "vvoc-sync-orchestration-project-"));
+  const projectDir = await mkdtemp(join(tmpdir(), "vvoc-sync-orchestration-project-cwd-"));
+  const initialCwd = process.cwd();
+
+  try {
+    const vvocDir = join(configHome, "vvoc");
+    const globalConfigPath = join(vvocDir, "vvoc.json");
+    await mkdir(vvocDir, { recursive: true });
+    const legacy = createDefaultVvocConfig() as ReturnType<typeof createDefaultVvocConfig> &
+      Record<string, unknown>;
+    legacy.orchestration = { profile: "balanced" };
+    const original = `${JSON.stringify(legacy, null, 2)}\n`;
+    await writeFile(globalConfigPath, original, "utf8");
+
+    process.chdir(projectDir);
+    await captureConsoleLog(() => runSyncCommand({ scope: "project", "config-dir": configHome }));
+
+    const migrated = JSON.parse(await readFile(globalConfigPath, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    expect(migrated).not.toHaveProperty("orchestration");
+    const backups = (await readdir(vvocDir)).filter((name) => name.includes("vvoc-backup"));
+    expect(backups).toHaveLength(1);
+    expect(await readFile(join(vvocDir, backups[0]!), "utf8")).toBe(original);
+  } finally {
+    process.chdir(initialCwd);
+    await rm(configHome, { recursive: true, force: true });
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});
+
 async function runSyncCommand(args: Record<string, unknown>): Promise<void> {
   await runSync(args, { inspectRuntime: async () => SUPPORTED_RUNTIME });
 }

@@ -2377,6 +2377,26 @@ describe("workflow plugin integration", () => {
     ).rejects.toThrow("LAUNCH_REJECTED_ROUND_LIMIT");
   });
 
+  test("a family without a recorded profile receives no workflow protocol guidance", async () => {
+    const { plugin } = await createWorkflowPluginHarness();
+    const sentinel = { marker: true };
+    const output = {
+      message: { agent: "vv-controller", sessionID: "session-no-profile", system: "base" },
+      tools: { work_item_open: sentinel },
+    } as {
+      message: { agent: string; sessionID: string; system?: string };
+      tools?: Record<string, unknown>;
+    };
+
+    await plugin["chat.message"]?.({} as never, output as never);
+
+    // No profile means no profile-selected protocol; the tool stays registered
+    // and visible for explicit tracked work.
+    expect(output.message.system).toBe("base");
+    expect(output.tools?.work_item_open).toEqual({ description: "work_item_open", input: {} });
+    expect(plugin.tool?.work_item_open).toBeDefined();
+  });
+
   test("workflow tools and guidance are restricted to vv-controller", async () => {
     const { plugin } = await createWorkflowPluginHarness("balanced");
     await expect(

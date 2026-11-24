@@ -88,7 +88,12 @@ export async function runSync(
     cwd: process.cwd(),
     configDir,
   });
-  const vvocMigration = await migrateVvocOrchestration([projectPaths, paths]);
+  const globalPaths = await resolvePaths({
+    scope: "global",
+    cwd: process.cwd(),
+    configDir,
+  });
+  const vvocMigration = await migrateVvocOrchestration([projectPaths, globalPaths]);
   for (const migratedDocument of vvocMigration.migrated) {
     console.log(
       `Migrated legacy orchestration from ${migratedDocument.path} (removed: ${migratedDocument.sections.join(", ")}; backup: ${migratedDocument.backupPath})`,

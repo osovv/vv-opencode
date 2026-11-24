@@ -109,6 +109,23 @@ test("reports a document without orchestration as unchanged and writes no backup
   });
 });
 
+test("preserves untouched formatting while removing the section", async () => {
+  await withConfigDir(async ({ configPath }) => {
+    const original =
+      '{\n    "version": 3,\n    "orchestration": {\n        "profile": "balanced"\n    },\n    "roles": {\n        "default": "prov/m"\n    }\n}\n';
+    await writeFile(configPath, original, "utf8");
+
+    const outcome = await migrateVvocOrchestration([{ vvocConfigPath: configPath }]);
+
+    expect(outcome.migrated[0]?.sections).toEqual(["orchestration"]);
+    const migrated = await readFile(configPath, "utf8");
+    expect(migrated).not.toContain("orchestration");
+    expect(migrated).toContain('    "version": 3,');
+    expect(migrated).toContain('        "default": "prov/m"');
+    expect(JSON.parse(migrated)).toEqual({ version: 3, roles: { default: "prov/m" } });
+  });
+});
+
 test("leaves invalid JSON untouched so strict validation fails loudly", async () => {
   await withConfigDir(async ({ configPath }) => {
     const original = '{ "version": 3, "orchestration": { "profile": "balanced" }, }\n';
