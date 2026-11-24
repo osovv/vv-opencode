@@ -4,11 +4,11 @@ DESIGN.md is the project-owned record of its design decisions. The skill's audit
 
 ## Discovery
 
-Walk upward from the file you are editing and stop at the first hit:
+Walk upward from the file you are editing, staying inside the current package, and stop at the first hit:
 
-1. `DESIGN.md` in the directory of the code being edited or its nearest ancestor — monorepo packages own their own file, and the closest file is the one that governs this work.
-2. `docs/DESIGN.md` or `.design/DESIGN.md` inside the same package, as fallbacks when the package has no root file.
-3. The repository-root `DESIGN.md`, which supplies project-wide defaults when the package has no nearer file.
+1. `DESIGN.md` in the directory of the code being edited or its nearest ancestor within the package — monorepo packages own their own file, and the closest file is the one that governs this work.
+2. `docs/DESIGN.md` or `.design/DESIGN.md` inside the package, as fallbacks when the package has no root file.
+3. The repository-root `DESIGN.md`, which supplies project-wide defaults when the package itself has no file.
 
 If two candidate files sit at the same level with overlapping scope, ask the user which one governs instead of guessing. If none exists, follow the missing-file procedure below.
 

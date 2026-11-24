@@ -114,10 +114,6 @@ Sources: Charles Liu's "20 More AI Design Slop Indicators", Anthropic's frontend
 *Why it reads machine-made:* 01 / 02 / 03 markers imply order and process even when sections are independent — structural devices used as decoration.
 *Replace with:* numbering only for genuine sequences (steps, timelines).
 
-### Middle-dot meta strings
-*Why it reads machine-made:* "A · B · C" meta strings are template chrome that appears regardless of subject.
-*Replace with:* ordinary separators or plain sentences.
-
 ### Arrows on every button and link
 *Why it reads machine-made:* a trailing "→" appended to every label is a costume for affordance; when everything has one, it means nothing.
 *Replace with:* keep the arrow only where direction or progression is the point.
@@ -201,6 +197,10 @@ Sources: Charles Liu's "20 More AI Design Slop Indicators", Anthropic's frontend
 ### Forced contrast slogans
 *Why it reads machine-made:* "Not a feature. A platform." and two-word sentences make every line a slogan, which flattens meaning into cadence.
 *Replace with:* explain the distinction when it matters; otherwise state the information.
+
+### Middle-dot meta strings
+*Why it reads machine-made:* "A · B · C" meta strings are template chrome that appears regardless of subject.
+*Replace with:* ordinary separators or plain sentences.
 
 ### Noun-heavy titles and feature lists
 *Why it reads machine-made:* titles that read like product categories tell nobody who the page is for or what changes for them.
