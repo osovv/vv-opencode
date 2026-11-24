@@ -1,5 +1,15 @@
 # Verification Strategy
 
+## Contents
+- Risk first
+- Test levels
+- Cost and confidence
+- CI split
+- Coverage is a weak signal
+- Choosing a level
+- Layered example
+- Anti-patterns
+
 Use this reference to choose **where** to verify a claim. The oracle choice (what counts as correct) lives in `oracles.md`; this file decides the level, cost, and CI placement.
 
 ## Risk first

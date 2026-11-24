@@ -1,5 +1,13 @@
 # Oracle Design
 
+## Contents
+- The oracle problem
+- Oracle catalog
+- Selection matrix
+- Fixtures
+- The external-information test
+- Anti-patterns
+
 An oracle is the mechanism that decides whether an observed result is correct. The hardest part of verification is not running the code; it is knowing what the right answer is.
 
 ## The oracle problem

@@ -1,5 +1,14 @@
 # Evidence-Based Testing
 
+## Contents
+- High-assurance traceability
+- Specification to invariant to proof to log check
+- Evidence ledger
+- Self-verification versus independent verification
+- Acceptance and review language
+- Confidence tiers
+- What this does not prove
+
 Evidence-based testing starts from the practice used for life-critical systems: code must demonstrate that a stated requirement is satisfied, not merely pass a green test. The practical question is not "do the tests pass?" but "what evidence proves this claim, and where is it recorded?"
 
 ## High-assurance traceability

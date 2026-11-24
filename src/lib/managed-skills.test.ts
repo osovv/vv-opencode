@@ -413,10 +413,10 @@ describe("vv-write-for-humans managed skill", () => {
       "explicit user request, then project conventions, then this skill's defaults",
     );
     expect(body).toContain("never normalize existing text");
-    expect(body).toContain('mode name="Draft"');
-    expect(body).toContain('mode name="Copyedit"');
-    expect(body).toContain('mode name="Restructure"');
-    expect(body).toContain('mode name="Audit"');
+    expect(body).toContain("| Draft |");
+    expect(body).toContain("| Copyedit |");
+    expect(body).toContain("| Restructure |");
+    expect(body).toContain("| Audit |");
     expect(body).toContain("deletion test");
     expect(body).toContain("addition test");
     expect(body).toContain("references/genres.md");
