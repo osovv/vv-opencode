@@ -1,3 +1,12 @@
+## 2.8.0 (2026-11-24)
+
+### Summary
+
+Version 2.8.0 standardizes all eleven managed skills on a canonical six-block grammar with scope, workflow, rules, and done blocks plus optional artifact and refs sections, removing the old universal root, identity, and task envelopes while preserving the skills' existing obligations. It also unifies the VV-plan and VV-execute execution vocabulary, restores English-output rules and lifecycle guidance, adds contents sections to long references, and introduces a deterministic grammar and reference gate that rejects malformed structures such as nested or uppercase elements, unterminated CDATA, and missing or poorly placed contents. These changes give users more consistent, predictable skill prompts and stronger validation that installed skills remain well-formed.
+
+* fix(skills): restore preserved obligations and harden grammar gate ([135285e](https://github.com/osovv/vv-opencode/commit/135285e))
+* feat(skills): adopt canonical six-block grammar for managed skills ([0bb0e0a](https://github.com/osovv/vv-opencode/commit/0bb0e0a))
+
 ## <small>2.7.1 (2026-11-24)</small>
 
 ### Summary
