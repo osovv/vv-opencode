@@ -1,0 +1,27 @@
+<GraceChangeDesignContext graceVersion="4.0">
+  <Change>C-WRITE-FOR-HUMANS-SKILL</Change>
+  <NormativeStatus>non-normative</NormativeStatus>
+  <Rationale>The skill's identity is a spine no public skill currently offers, assembled from adapted MIT-licensed community material plus original parts. The spine: (1) evidence discipline transposed into an editorial contract — every claim traceable to a source, limited verification never widened into a guarantee; this mirrors the controller's own acceptance discipline and is the leading principle; (2) an A/B/C edit-authority model — meaning invariant, clarity default, project style — because existing skills classify patterns by priority, not by permission to edit; (3) artifact-versus-utterance scope, because prose that outlives the conversation warrants the full contract while chat replies warrant only fidelity and proportionality; (4) reader-behavior deletion and addition tests (a no-op test from public agent-instructions guidance, transposed to human readers), replacing length targets; (5) English/Russian parity, with the Russian section grounded in the Russian editorial tradition (kantselyarit lineage) and absent from every surveyed public skill; (6) a fidelity casebook grown from real counterexamples — possibility-plus-condition spans, byte-exact criteria, behavior rules, domain terms — rather than a generic word list. Derivation audit of the reviewed proposal: the editing-contract skeleton and protected-content taxonomy condense a public editing-contract skill; structure patterns rework a public AI-tell catalog; genre framing draws on a public documentation-forms model; the humans-side original weight is the A/B/C model, artifact/utterance axis, mode-by-permission table, Russian section, casebook, and trap-task suite. Shipped content is authored fresh from the spec's Goals, so no source attribution ships inside the skill.</Rationale>
+  <Alternatives>
+    <Alternative>Adopt an existing public writing skill wholesale: rejected — English-only calibration, AI-tell framing, and no fidelity contract tied to evidence discipline.</Alternative>
+    <Alternative>Ship the reviewed proposal unchanged: rejected — missing attribution, maintainer evals material inside the shipped tree, Russian coverage and the evidence-discipline principle not yet the leading frame.</Alternative>
+    <Alternative>A single combined skill covering both human and agent audiences: rejected by the product owner — the two audiences have different quality criteria and different contracts; the agent-facing skill may follow separately.</Alternative>
+    <Alternative>Ship a checker script in v1 (regex catalogs, dash and sentence-length metrics): rejected — mechanical style scores do not test meaning preservation, invite false authority, and the cheapest real discriminators (no-op and trap tasks) are manual.</Alternative>
+    <Alternative>Keep the eval protocol as a shipped evals.md inside the skill: rejected — OpenCode surfaces a supporting-file sample to the loading agent, so maintainer instructions would pollute runtime context; verification ownership in this repository lives in the GRACE lifecycle, and the house position is that deterministic tests assert instruction delivery, not model evaluation.</Alternative>
+  </Alternatives>
+  <DeferredDecisions>
+    <Decision>Exact wording and ordering of SKILL.md sections; the content-marker set for tests; which concrete synthetic examples populate the casebook (implementation-plan decisions under AC-12).</Decision>
+    <Decision>Pinning the exact credit URLs for adapted sources so same-named public skills cannot be confused (implementation-plan decision supporting AC-11).</Decision>
+    <Decision>Whether a repeatable manual-eval runbook later moves to docs/ — only if the practice recurs after this change.</Decision>
+    <Decision>The companion agent-facing skill (name, scope, whether it is a rewrite around vvoc domain material or a credited condensation) — separate specification.</Decision>
+    <Decision>Whether the skill later gains a project-style configuration hook (for example a documented place for a repo's dialect or terminology decisions) — not in v1.</Decision>
+  </DeferredDecisions>
+  <Scenarios>
+    <Scenario>Copyedit of a README whose source code shows the client only reads the cache: the metaphor is replaced only because the operation can be named from the code; without the code the metaphor stays or the gap is flagged.</Scenario>
+    <Scenario>A cleanup pass meets "may return stale data if the refresh fails": the filler around the clause may go; may and if stay; zero edits is a stated valid outcome when nothing is justified.</Scenario>
+    <Scenario>A report claims tests are green after one suite ran: the edited text names the suite that ran and what was not run; the limited check is never widened into a general guarantee.</Scenario>
+    <Scenario>A Russian design note full of kantselyarit chains: verbs are restored, the possibility hedge survives, the actor appears only if the source names it, and no anglicization of register occurs.</Scenario>
+    <Scenario>An audit-mode request over a file with filler inside a quoted passage and prose inside code strings: the protected spans are reported, not rewritten.</Scenario>
+    <Scenario>A drafting request with insufficient sources ("expired token" trap): the gap is flagged or asked about; no plausible specific is invented to make the text feel concrete.</Scenario>
+  </Scenarios>
+</GraceChangeDesignContext>
