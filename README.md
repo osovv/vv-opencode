@@ -206,7 +206,7 @@ The complete controller prompt has seven sections: `task_and_scope`, `project_co
 
 ### Managed skills
 
-Two families: `vv-*` skills guide the work protocol, while `vvoc-*` skills operate and observe the vvoc/OpenCode tooling itself.
+Two families: `vv-*` skills guide the work protocol and design guidance, while `vvoc-*` skills operate and observe the vvoc/OpenCode tooling itself.
 
 | Skill | When to use it | What it gives you |
 |---|---|---|
@@ -216,6 +216,7 @@ Two families: `vv-*` skills guide the work protocol, while `vvoc-*` skills opera
 | `vv-review` | You want findings, not fixes | A review-only workflow that reports spec/code issues and stops before implementation |
 | `vv-reflect` | A long development, debugging, ops, or investigation session exposed environment friction or produced reusable knowledge | Dispatches the read-only `vv-reflector` subagent over the session and its subagent tree — or the streaming `--archive` aggregate when the question spans sessions/projects — then applies environment improvements (documents, steering, guardrails, skills, tooling) or lessons/runbooks only after per-entry approval |
 | `vv-handoff` | You are ending a session and want the visible context preserved | A redacted XML note at `.vvoc/handoff/YYYY-MM-DD-<session-slug>/handoff.xml`, written from already-visible context only |
+| `vv-design-principles` | You are building, redesigning, or reviewing web or app UI and want craft, not generic output | A token-plan-first process, a measurable quality floor, a subtractive AI-slop audit, and a project `DESIGN.md` design-system anchor — with catalogs loaded on demand from three references. Additive: it coexists with any personal design skill |
 | `vvoc-usage-analytics` | You ask about token usage, cache hit rate, costs, or caching regressions | Read-only analysis across `vvoc analytics`, the analytics JSONL, and historical `opencode.db` data |
 
 Skills are discovered by OpenCode through the native `skills` string array in `opencode.json(c)` — `vvoc install`/`sync` write the path reference and maintain the OpenCode skills-directory symlink. OpenCode supplies the available descriptions and loading instructions; the full skill is loaded when selected or explicitly invoked. The controller prompt does not repeat that catalog or its loading protocol.
@@ -362,7 +363,7 @@ An explicit `--channel latest|rc` argument may only confirm the derived channel;
 
 ### Stability and compatibility
 
-Since 1.0, vv-opencode treats the daily-driver surface as stable. The compatibility surfaces are: `vvoc install` / `vvoc sync` / `vvoc launch`, the supported host window (`>=2.0.18 <3.0.0`), the managed skill names (`vv-spec`, `vv-plan`, `vv-execute`, `vv-review`, `vv-reflect`, `vv-handoff`), the published package exports, canonical vvoc schema v3, and the date-prefixed `.vvoc/specs/YYYY-MM-DD-<slug>/` artifact layout. Breaking workflow or config changes are documented in release notes. The project still prefers conservative, explicit changes over hidden migration magic: user-owned config is never silently clobbered, and invalid current config fails loudly.
+Since 1.0, vv-opencode treats the daily-driver surface as stable. The compatibility surfaces are: `vvoc install` / `vvoc sync` / `vvoc launch`, the supported host window (`>=2.0.18 <3.0.0`), the managed skill names (`vv-spec`, `vv-plan`, `vv-execute`, `vv-review`, `vv-reflect`, `vv-handoff`; `vv-design-principles` and `vvoc-usage-analytics` are additive), the published package exports, canonical vvoc schema v3, and the date-prefixed `.vvoc/specs/YYYY-MM-DD-<slug>/` artifact layout. Breaking workflow or config changes are documented in release notes. The project still prefers conservative, explicit changes over hidden migration magic: user-owned config is never silently clobbered, and invalid current config fails loudly.
 
 ### Deterministic local launch
 

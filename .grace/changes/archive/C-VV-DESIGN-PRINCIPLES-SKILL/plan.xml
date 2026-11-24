@@ -1,0 +1,135 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-VV-DESIGN-PRINCIPLES-SKILL>
+    <IntentSummary>Add the vv-design-principles managed skill — a build-and-audit design process (token plan, quality floor, subtractive slop audit, DESIGN.md design-system anchor) — as bundled templates with three on-demand references, register it in MANAGED_SKILL_NAMES so install/sync/doctor cover it through the existing loop, cover it with loader tests, document it in README, and synchronize the owning GRACE graph and verification projections.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-CLI-MANAGED-SKILLS</Value>
+        <Value>V-M-CLI-MANAGED-SKILLS</Value>
+        <Value>src/lib/managed-skills.ts</Value>
+        <Value>src/lib/managed-skills.test.ts</Value>
+        <Value>src/lib/opencode.test.ts</Value>
+        <Value>templates/skills</Value>
+        <Value>README.md</Value>
+        <Value>.grace/graph/main.xml</Value>
+        <Value>.grace/verification/main.xml</Value>
+      </MustExist>
+      <MustContain><File>src/lib/managed-skills.ts</File><Text>vvoc-usage-analytics</Text></MustContain>
+      <MustContain><File>README.md</File><Text>### Managed skills</Text></MustContain>
+      <MustContain><File>.grace/graph/main.xml</File><Text>M-CLI-MANAGED-SKILLS</Text></MustContain>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-CLI-MANAGED-SKILLS</Module>
+      </MustVerify>
+      <MustContain><File>src/lib/managed-skills.ts</File><Text>vv-design-principles</Text></MustContain>
+      <MustContain><File>templates/skills/vv-design-principles/SKILL.md</File><Text>name: vv-design-principles</Text></MustContain>
+      <MustContain><File>templates/skills/vv-design-principles/SKILL.md</File><Text>DESIGN.md</Text></MustContain>
+      <MustContain><File>templates/skills/vv-design-principles/references/slop-tells.md</File><Text>Dithering</Text></MustContain>
+      <MustContain><File>templates/skills/vv-design-principles/references/slop-tells.md</File><Text>eyebrow</Text></MustContain>
+      <MustContain><File>templates/skills/vv-design-principles/references/quality-floor.md</File><Text>4.5:1</Text></MustContain>
+      <MustContain><File>templates/skills/vv-design-principles/references/quality-floor.md</File><Text>44px</Text></MustContain>
+      <MustContain><File>templates/skills/vv-design-principles/references/design-md.md</File><Text>DESIGN.md</Text></MustContain>
+      <MustContain><File>templates/skills/vv-design-principles/references/design-md.md</File><Text>propose creating</Text></MustContain>
+      <MustContain><File>src/lib/managed-skills.test.ts</File><Text>vv-design-principles</Text></MustContain>
+      <MustContain><File>README.md</File><Text>vv-design-principles</Text></MustContain>
+      <MustContain><File>.grace/graph/main.xml</File><Text>vv-design-principles</Text></MustContain>
+      <MustContain><File>.grace/verification/main.xml</File><Text>vv-design-principles</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/lib/managed-skills.test.ts src/lib/opencode.test.ts</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run typecheck</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <DurableScope>
+      <GraphAnchors>
+        <M-CLI-MANAGED-SKILLS />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-CLI-MANAGED-SKILLS />
+      </VerificationAnchors>
+      <ContextArtifact>requirements.xml</ContextArtifact>
+      <ContextArtifact>technology.xml</ContextArtifact>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>.grace/changes/active/C-VV-DESIGN-PRINCIPLES-SKILL/plan.xml</File>
+      <File>templates/skills/vv-design-principles/SKILL.md</File>
+      <File>templates/skills/vv-design-principles/references/slop-tells.md</File>
+      <File>templates/skills/vv-design-principles/references/quality-floor.md</File>
+      <File>templates/skills/vv-design-principles/references/design-md.md</File>
+      <File>src/lib/managed-skills.ts</File>
+      <File>src/lib/managed-skills.test.ts</File>
+      <File>src/lib/opencode.test.ts</File>
+      <File>README.md</File>
+      <File>.grace/graph/index.xml</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/index.xml</File>
+      <File>.grace/verification/main.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Write the vv-design-principles skill templates with the build-and-audit process and three references.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>templates/skills/vv-design-principles/SKILL.md has YAML frontmatter with name vv-design-principles and a description whose triggers (building, redesigning, or reviewing web/app UI, visual craft, design quality, AI-slop audit, DESIGN.md) stay distinguishable from other managed and user-level skills; the body keeps the compact two-phase process: token plan first, then build against the quality floor, then a subtractive audit pass.</Criterion>
+          <Criterion>SKILL.md encodes the measured principles, not just a blacklist: one bold move per page, fix by removing rather than adding, a tell may remain only when the brief genuinely calls for it and the choice is stated, and the audit reports removed tells and deliberate keeps.</Criterion>
+          <Criterion>references/slop-tells.md catalogs tells grouped by category (typography, color and contrast, layout and space, motion, copy, imagery, template chrome) where each entry states the tell, why it reads as machine-made, and the replacement, drawing on the researched sources (Charles Liu's 20 indicators including dithering and Instrument Serif, eyebrow overuse, pulsing dots, made-up stats; Anthropic default clusters; Impeccable and Paralect catalogs).</Criterion>
+          <Criterion>references/quality-floor.md lists measurable DOs with numbers: WCAG AA contrast 4.5:1 body and 3:1 large, body text around 16px minimum, line-height near 1.5, measure 65-75 characters, visible keyboard focus, 44px touch targets, heading order without skipped levels, reduced-motion handling, content visible by default without entrance-animation gating, real content instead of lorem or placeholder imagery, and empty/error/loading states.</Criterion>
+          <Criterion>references/design-md.md defines the DESIGN.md contract: common discovery locations, the documented system fields (fonts, colors, type sizes, radii, spacing, motion), how the audit validates token choices against it, and that the skill proposes creating or filling the file from the approved token plan when it is missing, with the brief winning over DESIGN.md only where DESIGN.md itself defers.</Criterion>
+          <Criterion>Language is English and the content stays guidance for the agent with no executable code or vvoc schema references.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>grace lint --path . --assertions current</Command>
+          <Command>grep -c "vv-design-principles" templates/skills/vv-design-principles/SKILL.md</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Register vv-design-principles in the managed-skill registry and extend loader tests.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>MANAGED_SKILL_NAMES contains vv-design-principles and the module contract comment and map describe the family accurately; no other registry behavior changes.</Criterion>
+          <Criterion>managed-skills.test.ts gains a describe block asserting registration, frontmatter name and trigger phrases, discovery of exactly the three reference files, and stable content anchors from each reference and from SKILL.md.</Criterion>
+          <Criterion>Install/sync/doctor coverage for the new name is proven through the existing loop tests in opencode.test.ts or, where the shared loop already parameterizes over MANAGED_SKILL_NAMES, the existing assertions are confirmed sufficient without duplication.</Criterion>
+          <Criterion>Edited module contracts, maps, and change summaries remain accurate and paired.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-skills.test.ts src/lib/opencode.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Document the skill in README and synchronize GRACE graph and verification ownership.</Title>
+        <DependsOn>T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>README lists vv-design-principles in the managed skills table with its trigger context, states that it is additive and coexists with user-level design skills, and keeps the compatibility-surface sentence truthful about the managed name list.</Criterion>
+          <Criterion>The M-CLI-MANAGED-SKILLS graph purpose covers the design-principles templates and references without renaming existing skills, and any dependent module descriptions remain accurate.</Criterion>
+          <Criterion>The V-M-CLI-MANAGED-SKILLS verification scenario mentions the new skill's registration, reference discovery, and content anchors, and its declared TestFiles and Checks still match the actual verification surface.</Criterion>
+          <Criterion>Graph and verification indexes directly own every referenced anchor, and no archived or unrelated GRACE entries are modified.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>grace lint --path . --parallel-preflight</Command>
+          <Command>grace lint --path .</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Run the integrated repository gate and confirm the additive package surface.</Title>
+        <DependsOn>T-003</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>The focused test command from the specification passes with fresh output, and bun run check passes with typecheck, lint, formatting, GRACE markup, tool-contract gate, and all tests green.</Criterion>
+          <Criterion>bun run build and bun run pack:check pass, proving the new template files are included in the packed package surface without export changes.</Criterion>
+          <Criterion>git diff contains only approved implementation, template, test, documentation, and GRACE lifecycle files with no generated dist edits, no user-owned OpenCode or vvoc config changes, and no modifications outside the observed write scope.</Criterion>
+          <Criterion>No retroactive change bundles are created and archived C-* bundles remain untouched.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-skills.test.ts src/lib/opencode.test.ts</Command>
+          <Command>bun run check</Command>
+          <Command>bun run build</Command>
+          <Command>bun run pack:check</Command>
+          <Command>grace lint --path .</Command>
+          <Command>grace status --path .</Command>
+          <Command>git diff --check</Command>
+        </Verification>
+      </T-004>
+    </ImplementationPlan>
+  </C-VV-DESIGN-PRINCIPLES-SKILL>
+</GraceChangePlan>

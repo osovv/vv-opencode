@@ -2,7 +2,7 @@
 // VERSION: 1.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify managed workflow skill discovery metadata, loaded behavior contracts with correctness obligations, and scoped project/global lookup.
-//   SCOPE: vv-execute metadata isolation and explicit mode choice with evidence sufficiency, bounded recovery operations distinct from acceptance and rework, native plan registration boundaries, scoped re-review guidance, exact returned work-item identity in the execute/review dispatch steps, vv-spec ambiguity resolution and preserved properties, vv-plan preserved-property criteria, vv-review findings-only honest reporting, managed skill lookup precedence, and vvoc-usage-analytics template/reference coverage.
+//   SCOPE: vv-execute metadata isolation and explicit mode choice with evidence sufficiency, bounded recovery operations distinct from acceptance and rework, native plan registration boundaries, scoped re-review guidance, exact returned work-item identity in the execute/review dispatch steps, vv-spec ambiguity resolution and preserved properties, vv-plan preserved-property criteria, vv-review findings-only honest reporting, managed skill lookup precedence, vvoc-usage-analytics template/reference coverage, and vv-design-principles template and reference catalog coverage.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/managed-skills.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CLI-MANAGED-SKILLS, V-M-CLI-MANAGED-SKILLS]
 //   ROLE: TEST
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-PROMPT-SYNC-DOCTOR-ARCHIVE T-001 - Updated vv-execute and vv-review identity assertions for the literal header, state map, standalone fields, and launch-rejection guidance.]
+//   LAST_CHANGE: [C-VV-DESIGN-PRINCIPLES-SKILL T-002 - Added vv-design-principles registration, frontmatter trigger, and slop-tells/quality-floor/design-md reference catalog assertions.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -337,6 +337,57 @@ describe("vvoc-usage-analytics managed skill", () => {
     expect(reference).toContain("mode=ro");
     expect(reference).toContain("step-finish");
     expect(reference).toContain("1.18.x");
+  });
+});
+
+describe("vv-design-principles managed skill", () => {
+  test("registers in MANAGED_SKILL_NAMES and loads a template with frontmatter", async () => {
+    const { MANAGED_SKILL_NAMES } = await import("./managed-skills.js");
+    expect(MANAGED_SKILL_NAMES).toContain("vv-design-principles");
+
+    const template = await loadManagedSkillTemplate("vv-design-principles");
+    const { frontmatter, body } = splitFrontmatter(template);
+    expect(frontmatter).toContain("name: vv-design-principles");
+    expect(frontmatter).toContain("subtractive AI-slop audit");
+    expect(frontmatter).toContain("DESIGN.md");
+    expect(body).toContain("references/slop-tells.md");
+    expect(body).toContain("references/quality-floor.md");
+    expect(body).toContain("references/design-md.md");
+    expect(body).toContain("Fix by removal before addition");
+  });
+
+  test("ships the slop-tells, quality-floor, and design-md references", async () => {
+    const { listManagedSkillReferenceNames, loadManagedSkillReference } =
+      await import("./managed-skills.js");
+    const names = await listManagedSkillReferenceNames("vv-design-principles");
+    expect(names.sort()).toEqual(["design-md.md", "quality-floor.md", "slop-tells.md"]);
+
+    const slopTells = await loadManagedSkillReference("vv-design-principles", "slop-tells.md");
+    expect(slopTells).toContain("Dithering");
+    expect(slopTells).toContain("eyebrow");
+    expect(slopTells).toContain("Instrument Serif");
+    expect(slopTells).toContain("more than five on a page is a redesign");
+
+    const qualityFloor = await loadManagedSkillReference(
+      "vv-design-principles",
+      "quality-floor.md",
+    );
+    expect(qualityFloor).toContain("4.5:1");
+    expect(qualityFloor).toContain("44px");
+    expect(qualityFloor).toContain("65–75");
+    expect(qualityFloor).toContain("16px");
+    expect(qualityFloor).toContain("near 1.5");
+    expect(qualityFloor).toContain("focus is always visible");
+    expect(qualityFloor).toContain("Real content");
+    expect(qualityFloor).toContain("lorem ipsum");
+    expect(qualityFloor).toContain("prefers-reduced-motion");
+
+    const designMd = await loadManagedSkillReference("vv-design-principles", "design-md.md");
+    expect(designMd).toContain("DESIGN.md");
+    expect(designMd).toContain("propose creating");
+    expect(designMd).toContain("Walk upward from the file you are editing");
+    expect(designMd).toContain("## Precedence");
+    expect(designMd).toContain("Never silently add a token");
   });
 });
 
