@@ -1,3 +1,17 @@
+## 2.7.0 (2026-11-24)
+
+### Summary
+
+Version 2.7.0 adds the vv-design-principles managed skill, giving agents a build-and-audit design process for web and app UI: it plans design tokens before writing code, enforces a measurable quality floor, runs a subtractive audit against a catalog of generic design tells, and anchors decisions in a project DESIGN.md design-system file, with the tell catalog, quality-floor numbers, and DESIGN.md contract loaded on demand from three bundled references. The skill is registered in the managed-skill list so vvoc install and sync ship it and doctor can report drift, and it is documented in the README as an additive companion to existing design skills. The release also tightens DESIGN.md discovery so it stays within the current package, reorganizes and clarifies several catalog entries for more accurate guidance, and improves the quality-floor verification steps to distinguish what was actually checked from what still needs confirmation.
+
+* chore: apply and archive C-VV-DESIGN-PRINCIPLES-SKILL ([bd2707d](https://github.com/osovv/vv-opencode/commit/bd2707d))
+* fix(skills): bound DESIGN.md discovery and recategorize copy tell ([e54538c](https://github.com/osovv/vv-opencode/commit/e54538c))
+* fix(skills): resolve review findings in vv-design-principles wording ([b53bb11](https://github.com/osovv/vv-opencode/commit/b53bb11))
+* docs(grace): document vv-design-principles and sync skill ownership ([6b35c3e](https://github.com/osovv/vv-opencode/commit/6b35c3e))
+* feat(skills): add vv-design-principles templates and references ([69cc704](https://github.com/osovv/vv-opencode/commit/69cc704))
+* feat(skills): register vv-design-principles and cover its catalog ([8f2f334](https://github.com/osovv/vv-opencode/commit/8f2f334))
+* grace: approve C-VV-DESIGN-PRINCIPLES-SKILL spec and plan ([1f16e30](https://github.com/osovv/vv-opencode/commit/1f16e30))
+
 ## <small>2.6.1 (2026-11-22)</small>
 
 ### Summary
