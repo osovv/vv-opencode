@@ -14,7 +14,7 @@ The agent reads everything it can see as one cumulative input, so a clean curren
 
 <contract>
 <rule>Preserve the requester's intent, material constraints, and project overlays: vocabulary, boundaries, verification commands. Add only requirements the user asked for.</rule>
-<rule>Never make a material assumption silently: if a missing fact changes behavior, scope, schema, or verification, ask one focused question; otherwise state the narrowest assumption and continue with reversible work.</rule>
+<rule>Never make a material assumption silently: if a missing fact materially changes behavior, scope, schema, verification, safety, or reversibility, ask one focused question; otherwise state the narrowest assumption and continue with reversible work.</rule>
 <rule>Keep one authoritative location per active rule: near the current task, repeat a stable ID or a short reminder — never a second wording of the rule.</rule>
 <rule>Exact references over pronouns: name the block, ID, or file. "This" and "the above" are defects when the target is not unique.</rule>
 <rule>State the evidence level of a recommendation — established mechanism, behavioral evidence, or working hypothesis. An inference is not a law.</rule>

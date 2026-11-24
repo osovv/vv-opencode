@@ -32,7 +32,7 @@ Non-goals are economical: name the likely drift directions, not every imaginable
 "Analyze as deeply as possible" + "answer very briefly" →
 `Perform a comprehensive analysis. Return only the highest-impact findings, each in at most five lines.`
 "No questions" + "no assumptions" → a switching policy:
-`If a missing fact materially changes the result, ask one focused question. Otherwise state the narrowest reasonable assumption and continue.`
+`If a missing fact trips the contract's ask-trigger (it materially changes behavior, scope, schema, verification, safety, or reversibility), ask one focused question. Otherwise state the narrowest reasonable assumption and continue.`
 
 ## Minimal sufficient specification
 
@@ -40,7 +40,7 @@ The target is a minimal sufficient specification — every field earns its place
 
 ## Ambiguity policy
 
-If missing information materially changes safety, scope, external effects, or an irreversible result — ask one focused question. Otherwise state the narrowest reasonable assumption visibly and continue with reversible work: `Assumption: "new version" means a sibling file, not a replacement. Effect: the existing document stays unchanged.` If the assumption turns out false, stop and rebuild the route; do not continue silently on the old interpretation.
+If missing information materially changes behavior, scope, schema, verification, safety, or reversibility — the contract's ask-trigger — ask one focused question. Otherwise state the narrowest reasonable assumption visibly and continue with reversible work: `Assumption: "new version" means a sibling file, not a replacement. Effect: the existing document stays unchanged.` If the assumption turns out false, stop and rebuild the route; do not continue silently on the old interpretation.
 
 ## Negation: action vs topic
 

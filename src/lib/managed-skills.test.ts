@@ -399,6 +399,7 @@ describe("vv-write-for-humans managed skill", () => {
     const template = await loadManagedSkillTemplate("vv-write-for-humans");
     const { frontmatter, body } = splitFrontmatter(template);
     expect(frontmatter).toContain("name: vv-write-for-humans");
+    expect(frontmatter).toContain("drafting, copyediting, restructuring, or auditing");
     expect(frontmatter).toContain("engineering prose");
     expect(frontmatter).toContain("may be left unchanged");
     expect(frontmatter).toContain("Not for agent-facing instructions");
@@ -510,7 +511,7 @@ describe("vv-write-for-agents managed skill", () => {
 
     for (const text of shippedTexts) {
       expect(text).not.toMatch(/\.grace\b/);
-      expect(text).not.toMatch(/grace lint/);
+      expect(text).not.toMatch(/\bgrace\s+(lint|status|module|file|verification|check|--)/);
       expect(text).not.toMatch(/\b[MV]-[A-Z]/);
       expect(text).not.toMatch(/\bGD-[A-Z]/);
     }
@@ -521,6 +522,12 @@ describe("vv-write-for-agents managed skill", () => {
     );
     expect(skillDirEntries.map((entry) => entry.name).sort()).toEqual(["SKILL.md", "references"]);
     expect(refNames.length).toBeLessThanOrEqual(4);
+
+    const refDirEntries = await readdir(
+      new URL("../../templates/skills/vv-write-for-agents/references/", import.meta.url),
+      { withFileTypes: true },
+    );
+    expect(refDirEntries.filter((entry) => entry.isDirectory())).toEqual([]);
 
     const lineCount = (text: string): number => text.replace(/\n$/, "").split("\n").length;
     const totalLines =

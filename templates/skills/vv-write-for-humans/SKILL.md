@@ -1,6 +1,6 @@
 ---
 name: vv-write-for-humans
-description: Use when writing or editing engineering prose for human readers — README and docs, PR descriptions, design notes/RFD/ADR, commit messages, reports and final answers, error messages, substantive replies — or when a draft reads vague, inflated, or hedged beyond the evidence. Preserves facts, modality, conditions, and protected content; good text may be left unchanged. Not for agent-facing instructions, code, or marketing copy.
+description: Use when drafting, copyediting, restructuring, or auditing engineering prose for human readers — README and docs, PR descriptions, design notes/RFD/ADR, commit messages, reports and final answers, error messages, substantive replies — or when a draft reads vague, inflated, or hedged beyond the evidence. Preserves facts, modality, conditions, and protected content; good text may be left unchanged. Not for agent-facing instructions, code, or marketing copy.
 ---
 
 <skill>
