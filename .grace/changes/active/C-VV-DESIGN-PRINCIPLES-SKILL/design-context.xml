@@ -1,0 +1,32 @@
+<GraceChangeDesignContext graceVersion="4.0">
+  <Change>C-VV-DESIGN-PRINCIPLES-SKILL</Change>
+  <NormativeStatus>non-normative</NormativeStatus>
+  <Rationale>
+    The skill is built from measured public research, not taste alone. Sources:
+
+    - Charles Liu, "20 More AI Design Slop Indicators" (YouTube Shorts, 2026-11-23, captured in ~/llm-wiki raw/2026-11-24-6b1a9632-*): 20 recent tells — arrows on every button, dots between words, eyebrow overuse, cream backgrounds, one italic word in the headline, sparkle icons, everything in a card, the words "quiet" and "real", numbered sections, pulsing green dots, blurry hero glows, Instrument Serif, colored left borders, three icon cards in a row, pills above the headline, made-up stats, two-word sentences, sections fading on scroll, dithering. Core thesis: the density of tells, not any single one, gives a page away.
+    - Anthropic frontend-design skill (anthropics/skills): the two-pass process (token plan, then review the plan against the brief for genericity before coding), the five AI-default clusters (cream #F4F1EA + terracotta, near-black + acid green, broadsheet hairlines, the SaaS-card kit, template chrome), and the "remove one accessory" self-critique rule.
+    - Impeccable slop catalog (impeccable.style/slop, 68 patterns): splits findings into AI slop vs quality vs design-system checks; quality floor numbers (WCAG AA 4.5:1 / 3:1, body ~16px, line-height ~1.5, 65-75ch measure, 44px targets, heading order, reduced motion, visible-by-default content) come from its detector rule set.
+    - Paralect "21 signs of AI slop": per-tell why/fix pairs (side-stripe cards, borders everywhere, glassmorphism, fake proof, placeholder imagery, monospace labels).
+    - Solo Design /build-frontend teardown: measured evidence that written "be distinctive" guidance scored equal-to-worse than no guidance on 5 of 6 components (bento 7.0 to 11.7 failures) while a mechanical subtractive gate drove failures near zero — hence the skill's subtractive audit pass, not a blacklist.
+    - Adrian Krebs' Show HN scoring of 1,590 pages (22% heavy, 32% mild slop) and no-code.supply's warning that designing by dodging a list just selects the next default (ban Inter and purple, get Instrument Serif and mono captions) — hence the deliberate-deviation rule: a tell may stay when the brief genuinely calls for it and the choice is stated.
+
+    The DESIGN.md anchor follows Impeccable's design-system checks: fonts, colors, type sizes, and radii outside a documented system are the cheapest drift signal, and the audit pass uses the file as the first reference point before any external rule.
+  </Rationale>
+  <Alternatives>
+    <Alternative>Ship the catalog as a README appendix or a docs page instead of a skill — rejected: it would load on every request rather than on demand through skill routing, and it could not evolve with the package.</Alternative>
+    <Alternative>Add a vvoc schema section for optional skills so design guidance is opt-in — rejected for this change: a full config feature (schema, migration, tests) is out of proportion; the skill is harmless by default because it triggers only on design work.</Alternative>
+    <Alternative>Extend the user-level frontend-design skill instead — rejected: it lives outside the package, is upstream-owned, and would not sync or version with vvoc installs.</Alternative>
+    <Alternative>Include a mechanical detector (regex/code rules like the measured gate) — rejected: repository scope is guidance, and a detector belongs in a separate tool change if wanted later.</Alternative>
+  </Alternatives>
+  <DeferredDecisions>
+    <Decision>Exact wording and the final tell list inside slop-tells.md (the plan fixes the structure and anchors; the catalog body is written during implementation from the sources above).</Decision>
+    <Decision>Whether a future mechanical detector reads DESIGN.md directly or through a generated check script.</Decision>
+    <Decision>Whether vv-design-principles eventually replaces user-level frontend-design on any machine — explicitly left to the user.</Decision>
+  </DeferredDecisions>
+  <Scenarios>
+    <Scenario>Build: user asks for a landing page. The skill plans tokens first, checks for DESIGN.md, proposes creating it from the plan when missing, builds against the quality floor, then runs the subtractive audit and reports removed tells and deliberate keeps.</Scenario>
+    <Scenario>Audit: user points the skill at an existing page. It inventories tells by category, counts density per section, flags quality-floor violations with numbers, and proposes removals plus DESIGN.md updates — without rebuilding the page.</Scenario>
+    <Scenario>Install: a user runs vvoc install or sync on any project; the new skill appears beside the other managed skills, doctor reports it only when its body drifts from the installed package, and a user-edited copy is kept rather than clobbered.</Scenario>
+  </Scenarios>
+</GraceChangeDesignContext>

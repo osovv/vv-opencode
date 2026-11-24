@@ -1,0 +1,45 @@
+<GraceChangeSpec graceVersion="4.0" status="approved">
+  <C-VV-DESIGN-PRINCIPLES-SKILL>
+    <Summary>Add the vv-design-principles managed skill: a build-and-audit design process anchored on a project DESIGN.md design-system file, shipped as bundled templates with on-demand references.</Summary>
+    <Problem>vv-opencode ships managed skills for the work protocol and vvoc tooling, but nothing covers visual and interaction craft. Coding agents without craft guidance converge on machine-recognizable "AI slop" patterns; research shows generic written encouragement ("be distinctive") can score worse than no guidance, while a subtractive audit pass against a concrete tell catalog reverses it. The package also has no design-system anchor file, so project-specific design decisions have nowhere to live or be checked.</Problem>
+    <Goals>
+      <Goal>Add managed skill vv-design-principles with a compact SKILL.md process: design token plan, build against a measurable quality floor, subtractive slop audit, and deliberate-deviation reporting.</Goal>
+      <Goal>Anchor the skill on a project DESIGN.md: discover it, validate token choices against it, and propose creating or filling it when missing; ship the DESIGN.md contract as an on-demand reference.</Goal>
+      <Goal>Ship the slop-tell catalog and the measurable quality floor as additional on-demand references sourced from public research (Charles Liu's 20 indicators, Anthropic frontend-design defaults, Impeccable, Paralect, Show HN slop scoring).</Goal>
+      <Goal>Register the skill through the existing managed-skills machinery so install, sync, doctor drift reporting, and packed templates cover it without new config surface.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>Skill content is in English, uses YAML frontmatter like other managed templates, and keeps SKILL.md compact with details in on-demand references.</Constraint>
+      <Constraint>The package surface change is additive only: one MANAGED_SKILL_NAMES entry plus template files. No vvoc schema, plugin, agent, model-role, or config changes; install/sync/doctor coverage follows from the existing loop over managed names.</Constraint>
+      <Constraint>Existing managed install/sync semantics stay untouched: user-owned skill files keep created/kept/skipped protection, references only sync when the parent skill is not skipped.</Constraint>
+      <Constraint>Do not modify the user's personal frontend-design skill or any existing bundled vv-* or vvoc-* skill content.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>No mechanical slop detector, linter, CI gate, or browser tooling; the catalog is agent guidance, not a code checker.</NonGoal>
+      <NonGoal>No optional-skills config list or vvoc schema extension.</NonGoal>
+      <NonGoal>No changes to managed agents, the vv-* work-protocol skills, or plugin runtime behavior.</NonGoal>
+      <NonGoal>No automatic migration or removal of user-level design skills on any machine.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>vvoc install creates the managed skills directory entry vv-design-principles/SKILL.md plus references slop-tells.md, quality-floor.md, and design-md.md; vvoc sync refreshes them idempotently and preserves user-owned files under the existing rules.</Criterion>
+      <Criterion>MANAGED_SKILL_NAMES contains vv-design-principles, and install/sync reports plus doctor managed-skill drift warnings cover the new name through the existing loop without code changes outside the registry and tests.</Criterion>
+      <Criterion>Managed-skills tests assert the registration, frontmatter name and description triggers, discovery of exactly the three references, and stable content anchors for the slop-tell catalog, the quality floor (contrast, type size, line height, measure, focus, targets, reduced motion, real content), and the DESIGN.md contract (discover, validate against, propose creation).</Criterion>
+      <Criterion>README documents the skill in the managed skills table and the compatibility surface stays truthful; GRACE graph and verification state reflect the new skill inside this change lifecycle.</Criterion>
+      <Criterion>grace lint --path . passes with the approved bundle and updated durable graph/verification state.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-CLI-MANAGED-SKILLS />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/lib/managed-skills.test.ts src/lib/opencode.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>grace lint --path .</ExpectedCommand>
+      <ExpectedEvidence>Fresh test output asserts the new skill registration, template frontmatter, the three shipped references, and catalog content anchors; opencode tests cover install/sync/doctor behavior for the new managed name; grace lint reports no errors with the active change bundle and updated graph/verification state.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>The skill is agent guidance, not executable tooling; runtime behavior changes only through the managed-skill registry entry and its install/sync surface.</Assumption>
+      <Assumption>vv-design-principles coexists with user-level design skills; the frontmatter description keeps its triggers distinguishable from building/auditing requests that other skills may also claim.</Assumption>
+      <Assumption>DESIGN.md is a plain markdown file the agent reads and writes in the user's project; the skill defines its contract but vvoc does not lint or manage the file itself.</Assumption>
+    </Assumptions>
+  </C-VV-DESIGN-PRINCIPLES-SKILL>
+</GraceChangeSpec>
