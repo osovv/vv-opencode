@@ -46,6 +46,11 @@
         <snippet><![CDATA[
 // code here
 ]]></snippet>
+        <!--
+          Each acceptance criterion names the property and the oracle.
+          Each verification command exercises the changed behavior and produces
+          inspectable evidence. Use the vv-verification references for vocabulary.
+        -->
         <acceptance>
           <criterion></criterion>
         </acceptance>

@@ -1,0 +1,54 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-VV-VERIFICATION-SKILL>
+    <Summary>Add the vv-verification managed skill: one language-agnostic decision workflow plus six on-demand references for verification strategy, oracle design, evidence-based testing, formal verification, test maintenance, and project-specific verification-stack bootstrap. Also make vv-spec and vv-plan require verification intent inside their existing fields.</Summary>
+    <Problem>vv-opencode ships managed skills for specification, planning, execution, review, reflection, handoff, design guidance, and usage analytics, but nothing teaches an agent how to decide what evidence proves a change. Agents default to green tests, generated tests that mirror the implementation, and stale suites that silently override the specification. Those are well-known failure modes: a green test is not proof; tests generated from the same context as the code add little; tests can outrank the specification; and stale tests are rarely reviewed. A language-agnostic verification skill is the missing decision layer.</Problem>
+    <Goals>
+      <Goal>Add managed skill vv-verification with a compact claim-to-evidence workflow: state the claim, classify risk, choose an oracle and test level, reproduce defects, consider formal methods, design an evidence ledger, verify independently when material, record residual risk, and maintain the stack.</Goal>
+      <Goal>Ship six on-demand references: strategy, oracles, evidence, formal methods, maintenance, and a create-your-verification-stack bootstrap that generates the project-local stack — VERIFICATION.md, a thin verification CLI in the repository's own runner, and the verify and maintain-verification skills at the repository's skill convention — all portable across languages and grounded in the repository's own commands.</Goal>
+      <Goal>Teach vv-spec and vv-plan to require material claims, oracle choices, evidence artifacts, and residual risks inside the existing testing, acceptance, and verification fields, without adding XML elements or changing lint contracts.</Goal>
+      <Goal>Register the skill through the existing managed-skill machinery so install, sync, tests, doctor drift reporting, README, and packed templates cover it without new config surface.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>Skill artifacts are in English; dialogue follows the user's language, matching the vv-spec and vv-plan convention.</Constraint>
+      <Constraint>The package surface change is additive: one MANAGED_SKILL_NAMES entry plus template files. No runtime logic change beyond appending the managed name and its contract tests; no new dependency, public export, CLI command, config schema, or spec/plan XML element.</Constraint>
+      <Constraint>The skill is language-agnostic and must not impose a test framework, runner, or bundled executable helper. create-your-verification-stack instructs the agent to discover the repository's own commands and generate VERIFICATION.md, a thin CLI wrapper, and the project-local verify and maintain-verification skills; registration in user-owned agent config happens only with explicit approval.</Constraint>
+      <Constraint>Full AI-eval engineering is out of scope; an eval run may be used as one oracle. The skill must state this boundary.</Constraint>
+      <Constraint>The shipped skill is principle-based: no empirical statistics, named studies, vendors, people, or internal source pointers. The non-normative design-context preserves the source base and corrected figures for maintainers.</Constraint>
+      <Constraint>Existing managed install/sync semantics stay untouched: user-owned skill files keep created/kept/skipped protection, references only sync when the parent skill is not skipped, and the exact surface counts in src/lib/opencode.test.ts are updated rather than bypassed.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>No new spec, plan, or design-context XML element and no parser, lint, or lifecycle contract change.</NonGoal>
+      <NonGoal>No runtime enforcement, workflow gate, permission, checkpoint, hook, or public export change.</NonGoal>
+      <NonGoal>No bundled executable helper, test-runner wrapper, or language-specific framework scaffold.</NonGoal>
+      <NonGoal>No full AI-eval harness, LLM-judge implementation, eval dataset, or benchmark runner.</NonGoal>
+      <NonGoal>No automatic test generation, coverage target, mutation-testing default, or mandatory formal proof for ordinary changes.</NonGoal>
+      <NonGoal>No change to user-owned configuration, unrelated managed skills, agent prompts, or existing correctness-obligation wording.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>templates/skills/vv-verification/SKILL.md has YAML frontmatter with name vv-verification and a discovery description covering tests, oracles, evidence, and formal verification; the body carries the claim-to-evidence workflow, risk classification, oracle selection, evidence ledger, hard stops, language rule, and reference routing without mandating a language or framework.</Criterion>
+      <Criterion>Six references ship with stable heading anchors: strategy (Test levels, CI split), oracles (Oracle catalog, Selection matrix), evidence (Evidence ledger, Confidence tiers), formal (Tooling notes, Limits), maintenance (Stale tests, Mutation testing and kill matrix), and create-your-verification-stack (Write VERIFICATION.md, Create the verification CLI, Generate the project skills, Register the skills, Never impose a framework).</Criterion>
+      <Criterion>vv-spec and vv-plan require verification intent inside their existing fields and template comments, with the spec and plan template element sets unchanged; the shipped template lint tests and the command-level template lint test still pass.</Criterion>
+      <Criterion>MANAGED_SKILL_NAMES contains vv-verification; managed-skills tests assert registration, frontmatter, decision-workflow markers, the exact sorted six-reference list, every reference anchor, and vv-spec/vv-plan verification-intent delivery.</Criterion>
+      <Criterion>src/lib/opencode.test.ts pins the 33-file install/sync surface and the 31-file vv-spec-skip case and asserts vv-verification sample paths. README lists the skill as additive; M-CLI-MANAGED-SKILLS and V-M-CLI-MANAGED-SKILLS describe it.</Criterion>
+      <Criterion>Fresh targeted tests, bun run check, bun run build, bun run pack:check, vvoc lint, grace lint, and grace status pass; the diff contains only intended files, no generated dist edit, and git diff --check is clean.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-CLI-MANAGED-SKILLS />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/lib/managed-skills.test.ts src/lib/opencode.test.ts src/lib/spec-lint.test.ts src/commands/lint.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>bun run pack:check</ExpectedCommand>
+      <ExpectedCommand>grace lint --path .</ExpectedCommand>
+      <ExpectedCommand>grace status --path .</ExpectedCommand>
+      <ExpectedEvidence>Fresh deterministic tests assert skill delivery, the six-reference catalog with stable anchors, vv-spec/vv-plan verification-intent wording, unchanged template element sets, and the exact install/sync surface counts. The wider gate proves the packed package includes the new templates. Tests assert instruction delivery, not model behavior.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>The change design was approved by the user in conversation before implementation; this GraceChangeSpec and its plan are the durable record.</Assumption>
+      <Assumption>OpenCode routes skills by frontmatter description; one rich verification description reaches the intended sessions without a second skill.</Assumption>
+      <Assumption>Agents can discover a repository's real test commands and CI split well enough to write a useful VERIFICATION.md.</Assumption>
+      <Assumption>The shipped references carry no attributed practitioner claims; the source base lives in the non-normative design-context and never outranks the repository's own contracts or executed observations.</Assumption>
+    </Assumptions>
+  </C-VV-VERIFICATION-SKILL>
+</GraceChangeSpec>

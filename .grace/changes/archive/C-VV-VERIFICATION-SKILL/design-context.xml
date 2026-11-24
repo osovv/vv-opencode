@@ -1,0 +1,48 @@
+<GraceChangeDesignContext graceVersion="4.0">
+  <Change>C-VV-VERIFICATION-SKILL</Change>
+  <NormativeStatus>non-normative</NormativeStatus>
+  <Rationale>
+    Verification is one decision workflow: what claim, what oracle, what evidence, what residual risk. Splitting it by test type would create overlapping skills and routing ambiguity for requests such as "write tests" or "prove this works". One entry point with on-demand references matches the existing vv-design-principles pattern and keeps the loaded body small.
+
+    The skill must work across languages and stacks. A bundled inventory or runner script would either be language-specific or too generic to be useful, so create-your-verification-stack instructs the agent to discover the repository's own commands and write a project-local VERIFICATION.md.
+
+    The vv-spec and vv-plan workflows already have the right fields. Adding XML elements would force parser, lint, and lifecycle changes for no additional expressiveness, so verification intent is carried inside testing.strategy, testing.coverage, task acceptance, and task verification. This follows the repository's existing prompt-level correctness-obligation approach.
+
+    The shipped surface stays minimal: only the bootstrap reference ships. Invoking it in a fresh project generates the project-local stack — VERIFICATION.md as the data layer, a thin verification CLI wrapping the repository's own runner, and two generated skills (verify and maintain-verification) placed at the repository's skill convention, default .agents/skills/. Each layer stays thin so nothing drifts: data in the map, method in the shipped skill, behavior in the CLI, routing in the generated skills. Registering generated skills in user-owned agent config is approval-gated and never silent. Practitioner verification-skill sets that pair a create step with a recurring maintain step informed this split.
+
+    Full AI-eval engineering has different artifacts, statistics, and failure modes from code verification. The first version keeps an eval run as one possible oracle and leaves a dedicated eval workflow for later.
+
+    The shipped skill is deliberately principle-based. The source base that informed it lives here, in non-normative design memory, rather than in the skill's happy path.
+
+    Standards and high-assurance practice:
+    - DO-178C (avionics): certification evidence is requirements-based and traceable; developer tests alone do not satisfy the independence and coverage objectives at higher assurance levels. The standard does not mandate or forbid TDD.
+    - IEC 62304 (medical devices): the same trace-and-evidence principle.
+    - Common Criteria: higher evaluation assurance levels require formal verification and independent checking.
+
+    Research and measurements:
+    - TDFlow (EACL 2026, arXiv 2510.23761): with human-written tests, 88.8% pass rate on SWE-Bench Lite, an absolute improvement of 27.8 points over the next best system (Agentless, 61.0%); 94.3% on SWE-Bench Verified with human-written tests versus 68.0% with its own generated tests. The paper's conclusion is that reproduction-test generation is the bottleneck, not patch generation.
+    - Beyond Heuristics? (ESEM 2026, LIPIcs.ESEM.2026.47): top LLM-agent combinations reached 89.5% target-bug reproduction on 210 Java runtime-exception bugs across 66 projects, surpassing state-of-the-art unit-test generation tools. The often-repeated "53% unit-test baseline" is a secondary retelling and is not used as a normative claim.
+    - Building to the Test (arXiv 2606.28430): 222 Playwright tests, 18 runs, three oracle-availability conditions, using production agents from OpenAI and Anthropic. Without the oracle, the library was unfinished but directionally correct. With the oracle, the score was near-perfect but the library left dead or absent. The authors call this "building to the test" and the broader disposition "validation self-awareness"; secondary coverage groups it with reward hacking.
+    - Practitioner reports on TDD with coding agents are mixed and contested; they informed the caution but are not treated as law.
+    - Practitioner verification-skill sets (for example pstack) pair a create-verification-skill step with a recurring maintain-verification-skill step and keep a project feature map as materialized memory; this informed the generated verify and maintain-verification skills and the "every failure becomes a check" incident loop.
+
+    Formal methods:
+    - TLA+ model checking and Lean proofs are the techniques used for state, concurrency, and algorithm claims. Known limits are formalization gap, kernel or tool bugs, cost, and model drift. A documented formalization-gap case is arXiv 2610.08144; a small trusted kernel can still have soundness bugs. These are reasons to state residual risk, not reasons to avoid formal methods.
+  </Rationale>
+  <Alternatives>
+    <Alternative>Two skills split into test design and formal verification — rejected because evidence-based testing is the bridge between them and would either be duplicated or force one skill to own the other's core.</Alternative>
+    <Alternative>Three skills split by test type — rejected for maximum routing ambiguity and maintenance cost.</Alternative>
+    <Alternative>Bundled multi-language test inventory script — rejected as high-maintenance, low-portability, and easy to rot.</Alternative>
+    <Alternative>New verification_intent XML element in spec and plan — rejected for schema and lint churn plus a second source of truth beside the existing testing and verification fields.</Alternative>
+    <Alternative>Include LLM-judge and eval-harness design in vv-verification — rejected as too broad for a first version and not supported by a language-agnostic reference set.</Alternative>
+  </Alternatives>
+  <DeferredDecisions>
+    <Decision>Add a companion eval-engineering skill for AI pipelines.</Decision>
+    <Decision>Add optional executable helpers for ledger validation or test inventory.</Decision>
+  </DeferredDecisions>
+  <Scenarios>
+    <Scenario>Bug fix: the skill routes to a failing reproduction or target test first, then the narrowest regression command, and records the failing-before and passing-after outputs in the evidence ledger. Stale or contradictory tests are surfaced before the fix.</Scenario>
+    <Scenario>High-risk state or concurrency flow: the skill routes to a statechart and TLA+ model check, maps any counterexample back to code, and adds a deterministic regression test. If tooling is unavailable, it records the residual risk instead of claiming proof.</Scenario>
+    <Scenario>Repository without an explicit verification map: the agent runs the bootstrap reference, discovers the project's own commands, writes VERIFICATION.md with the smallest useful stack, and avoids imposing a framework.</Scenario>
+  </Scenarios>
+</GraceChangeDesignContext>
