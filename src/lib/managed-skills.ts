@@ -10,7 +10,7 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   MANAGED_SKILL_NAMES - Canonical vvoc-managed skill names: vv-* work-protocol skills plus vvoc-* tooling skills.
+//   MANAGED_SKILL_NAMES - Canonical vvoc-managed skill names: vv-* work-protocol and guidance skills plus vvoc-* tooling skills.
 //   ManagedSkillName - Type for vvoc-managed skill names.
 //   getManagedSkillFilePath - Resolves the skill file path inside a vvoc skills directory.
 //   loadManagedSkillTemplate - Loads the bundled skill template for a managed skill.
@@ -20,7 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-PROMPT-SYNC-DOCTOR-ARCHIVE T-003 - Reference discovery now returns regular files only so an accidental directory in a bundled references folder cannot be read as a skill reference.]
+//   LAST_CHANGE: [C-VV-DESIGN-PRINCIPLES-SKILL T-002 - Register vv-design-principles with its slop-tells, quality-floor, and design-md references as the bundled design guidance skill.]
 // END_CHANGE_SUMMARY
 
 import { readdir, readFile } from "node:fs/promises";
@@ -34,6 +34,7 @@ export const MANAGED_SKILL_NAMES = [
   "vv-execute",
   "vv-reflect",
   "vv-handoff",
+  "vv-design-principles",
   "vvoc-usage-analytics",
 ] as const;
 
