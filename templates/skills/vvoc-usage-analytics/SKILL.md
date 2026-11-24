@@ -25,7 +25,7 @@ OpenCode's database is strictly read-only: always connect with a `?mode=ro` URI 
 - Use OpenCode's own SQLite database for history that predates the plugin and for per-session cost aggregates. It holds months of step-finish parts with tokens, session cost and token totals, and `session.version` — the OpenCode version. Always read it with the validated snippets in references/opencode-db-queries.md (`?mode=ro` URI). This is the only source that can answer "how did caching look before vvoc analytics existed" and "what did sessions cost".
 - Tables over prose for any comparison; columns in the CLI's spirit (GROUP, STEPS, COVERAGE, HIT-RATE, CACHE-READ, CACHE-WRITE, FRESH-IN or their subset).
 - Every number carries its source (CLI / JSONL / opencode.db) and time range.
-- State validation context for db queries: the snippets were validated against OpenCode 1.18.x, and the supported host window is 2.0.18 and newer. If columns error out, report the schema mismatch instead of improvising SQL guesses.
+- State validation context for db queries: the snippets were validated against OpenCode 1.18.x, and the supported host window is 2.0.18 and newer, below 3.0.0. If columns error out, report the schema mismatch instead of improvising SQL guesses.
 - Interpretation stays factual: rising/falling hit rate, coverage share, outliers. Avoid unfounded causal claims; a vvoc version bump and a project switch can co-occur.
 </rules>
 

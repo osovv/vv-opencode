@@ -18,7 +18,7 @@ Dispatch the read-only vv-reflector subagent to analyze the current session and 
 </workflow>
 
 <rules>
-- Use only the current visible chat context for session history; the reflector reads the recorded session and subagent sessions read-only.
+- Use the current visible chat context and repository files as evidence for dispatching and applying changes. Use only the current visible chat context for session history; the reflector reads the recorded session and subagent sessions read-only.
 - Do not analyze the session yourself before dispatching; the reflector is the analyst.
 - If the reflector reports it could not locate the extractor or the target session, report that to the user and stop; do not fall back to inline analysis.
 - Do not use or create .vvoc/reflect.jsonc or any reflect-specific config.

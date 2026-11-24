@@ -4,6 +4,11 @@
 - When to use
 - Discover the repository
 - Write VERIFICATION.md
+  - Commands
+  - Claim map
+  - Environments and fixtures
+  - Known gaps
+  - Maintenance
 - Create the verification CLI
 - Generate the project skills
 - Register the skills

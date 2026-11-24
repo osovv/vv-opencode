@@ -25,6 +25,7 @@ Use this skill when a change needs a correctness claim, when a bug needs reprodu
 </workflow>
 
 <rules>
+- Write skill artifacts, plans, evidence ledgers, and reports in English by default. Use the user's language only for dialogue; if the user explicitly requests a different document language, follow that request.
 - A green test is not proof. It proves that the test ran and passed, not that the specification is satisfied.
 - The oracle must carry external information. A test generated from the same context as the code tends to mirror the code.
 - Separate the oracle from the implementer. When the implementer can see the exact tests, it can optimize for the tests instead of the specification.

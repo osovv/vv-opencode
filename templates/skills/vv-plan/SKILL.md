@@ -28,6 +28,7 @@ The spec's top-level &lt;status&gt; MUST be approved. If the status is draft, mi
 </workflow>
 
 <rules>
+- Write the plan document in English by default. Use the user's language only for dialogue; if the user explicitly requests a different document language, follow that request.
 - The top-level &lt;status&gt; element is the plan lifecycle status and MUST be one of: draft, approved, applied. When first saving, set draft. Change it to approved only after the user explicitly reads/reviews and approves the final plan, or after a recorded delegated authority explicitly covers the planning stage; a reserved plan-approval stop still waits. Never set applied yourself; applied is reserved for vv-execute after successful execution.
 - Every XML element is named for grep extraction. Use `grep '&lt;TASK-T-' plan.xml` to list tasks, `grep '&lt;criterion&gt;' plan.xml` for all criteria, `grep '&lt;task_id&gt;' plan.xml` for the dependency graph, and `grep '&lt;COMPONENT-' plan.xml` for the component map.
 - Milestones reflect contract or integration boundaries — not a fixed task-count interval. The default recommendation is a focused code review at meaningful intermediate milestones and spec plus code review at the final checkpoint; justify any larger reviewer set explicitly in the checkpoint's acceptance criteria. The exact reviewer set and milestones are explicit in this plan, never imposed by the runtime.
@@ -48,6 +49,7 @@ Plan document format:
 - Load the template from `references/plan-template.xml` and fill every element.
 - The plan contains two major sections: architecture (components, contracts, dependencies) and tasks (implementation steps with code snippets).
 - Save plan.xml as a sibling of spec.xml in the same spec package directory: .vvoc/specs/&lt;id&gt;/plan.xml.
+- Three independent review stages: spec → are the requirements correct, complete, and unambiguous; plan → does every requirement map to a task and do contracts match spec intent; code → does the code implement every contract and do tests verify every acceptance criterion.
 
 Snippet format:
 - Every task contains a &lt;snippet&gt; element wrapped in CDATA. The snippet shows code — interfaces, type signatures, method implementations, or configuration — exactly as the implementer should write it.
