@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Managed inline prompt reconciliation asserts the consolidated controller body and retained memory/delegation sections.]
+//   LAST_CHANGE: [DIRECT-FIX - Managed-skill install/sync result counts are derived from MANAGED_SKILL_NAMES and reference discovery instead of hardcoded totals, so adding a skill no longer edits five literals.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -864,12 +864,29 @@ describe("managed prompt install", () => {
   });
 });
 describe("managed skill files", () => {
+  async function expectedManagedSkillResultCount(
+    options: { skippedSkill?: import("./managed-skills.js").ManagedSkillName } = {},
+  ) {
+    const { MANAGED_SKILL_NAMES, listManagedSkillReferenceNames } =
+      await import("./managed-skills.js");
+    let count = 0;
+    for (const name of MANAGED_SKILL_NAMES) {
+      count += 1 + (await listManagedSkillReferenceNames(name)).length;
+    }
+    if (options.skippedSkill) {
+      // A skipped skill still yields one result entry for its SKILL.md, but its
+      // references are not synced, so only the reference count drops.
+      count -= (await listManagedSkillReferenceNames(options.skippedSkill)).length;
+    }
+    return count;
+  }
+
   test("installManagedSkillFiles creates skill files for all managed skills", async () => {
     const projectDir = await mkdtemp(join(tmpdir(), "vvoc-managed-skills-"));
     try {
       const paths = await resolvePaths({ scope: "project", cwd: projectDir });
       const results = await installManagedSkillFiles(paths, { force: true });
-      expect(results).toHaveLength(33); // 11 SKILL.md + 22 reference files
+      expect(results).toHaveLength(await expectedManagedSkillResultCount()); // one SKILL.md plus its references per managed skill
       expect(results.every((r) => r.action === "created")).toBe(true);
       expect(results.some((r) => r.path.endsWith(join("vv-verification", "SKILL.md")))).toBe(true);
       expect(
@@ -914,7 +931,9 @@ describe("managed skill files", () => {
       await writeFile(join(saveDir, "SKILL.md"), "# My custom skill\n", "utf8");
 
       const results = await installManagedSkillFiles(paths, { force: false });
-      expect(results).toHaveLength(31); // 1 vv-spec skip + 10 other SKILL.md + 20 refs (plan, verification x6, usage-analytics, tool-contracts, session-graph, design-principles x3, humans x3, agents x4; vv-spec refs not synced when vv-spec skipped)
+      expect(results).toHaveLength(
+        await expectedManagedSkillResultCount({ skippedSkill: "vv-spec" }),
+      ); // vv-spec yields a skipped SKILL.md entry; its references are not synced
       const vvSpec = results.find((r) => r.path.includes("vv-spec"));
       expect(vvSpec?.action).toBe("skipped");
       expect(vvSpec?.reason).toContain("has no YAML frontmatter");
@@ -944,7 +963,7 @@ describe("managed skill files", () => {
     try {
       const paths = await resolvePaths({ scope: "project", cwd: projectDir });
       const results = await syncManagedSkillFiles(paths, { force: false });
-      expect(results).toHaveLength(33); // 11 SKILL.md + 22 reference files
+      expect(results).toHaveLength(await expectedManagedSkillResultCount()); // one SKILL.md plus its references per managed skill
       expect(results.every((r) => r.action === "created")).toBe(true);
       expect(results.some((r) => r.path.endsWith(join("vv-verification", "SKILL.md")))).toBe(true);
       expect(
@@ -1033,7 +1052,7 @@ describe("managed skill files", () => {
       await installManagedSkillFiles(paths, { force: true });
       const results = await syncManagedSkillFiles(paths, { force: false });
       const kept = results.filter((r) => r.action === "kept");
-      expect(kept).toHaveLength(33); // 11 SKILL.md + 22 reference files
+      expect(kept).toHaveLength(await expectedManagedSkillResultCount()); // one SKILL.md plus its references per managed skill
       expect(kept.some((r) => r.path.endsWith(join("vv-handoff", "SKILL.md")))).toBe(true);
       expect(
         kept.some((r) => r.path.endsWith(join("vv-execute", "references", "tool-contracts.md"))),
@@ -1049,7 +1068,7 @@ describe("managed skill files", () => {
       const paths = await resolvePaths({ scope: "project", cwd: projectDir });
       await installManagedSkillFiles(paths, { force: true });
       const results = await syncManagedSkillFiles(paths, { force: true });
-      expect(results).toHaveLength(33); // 11 SKILL.md + 22 reference files
+      expect(results).toHaveLength(await expectedManagedSkillResultCount()); // one SKILL.md plus its references per managed skill
       expect(results.some((r) => r.path.endsWith(join("vv-handoff", "SKILL.md")))).toBe(true);
       expect(results.some((r) => r.path.endsWith(join("vv-design-principles", "SKILL.md")))).toBe(
         true,

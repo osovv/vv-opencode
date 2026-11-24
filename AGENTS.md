@@ -276,7 +276,7 @@ File-local reference:
 | A module, dependency, data flow, or public export | `.grace/graph/*`, `src/index.ts`, `package.json#exports` as applicable | `bun run check`, `bun run build`; add `bun run pack:check` for exports/package surface |
 | A test strategy, critical scenario, command gate, or log marker | `.grace/verification/*` | Targeted tests plus the recorded gate command |
 | Real-host parity rows, harness guards, or installed-artifact evidence | `scripts/e2e-v2.ts`, `scripts/e2e-v2/*`, `M-E2E-V2-HARNESS`/`V-M-E2E-V2-HARNESS`, parity evidence | `bun test scripts/e2e-v2.test.ts` plus `bun run e2e:v2` when the host and pinned binary are available |
-| Managed agent or skill content | `templates/`, loader tests, README when user-facing behavior changes | `bun test src/lib/managed-agents.test.ts` or the owning loader test, then `bun run check` |
+| Managed agent or skill content | `templates/`, the owning loader test (`src/lib/managed-agents.test.ts` for agents; `src/lib/managed-skills.test.ts` plus `src/lib/opencode.test.ts` for skills — the latter asserts global install/sync file counts), README when user-facing behavior changes | `bun test src/lib/managed-skills.test.ts src/lib/opencode.test.ts` (skills) or `bun test src/lib/managed-agents.test.ts` (agents), then `bun run check` |
 | Workflow protocol/state/transitions/persistence | All affected files under `src/plugins/workflow/`, graph, verification | `bun test src/plugins/workflow.integration.test.ts`, `bun run typecheck`, `bun run build` |
 | Release behavior or package/schema versioning | `.grace/context/deployment.xml`, release scripts/tests, changelog/schema/package metadata | `bun run release:check`, `bun run check`, `bun run pack:check` |
 | Native host window, native dependency pins, or the live host contract gate | `package.json` (`engines.opencode`, pins), `src/lib/opencode/plugin-registration.ts`, `.grace/context/technology.xml`, README | Targeted config tests, `bun run check`, and `bun run contracts:host` against the pinned 2.0.18 host |
@@ -311,6 +311,11 @@ grace status --path .
 Choose checks by impact; do not run heavyweight release gates for a trivial isolated
 change unless repository state or the requested scope requires them. Before release,
 run `bun run release:check`, `bun run check`, and `bun run pack:check`.
+
+Never pipe a gate command into `tail` or `grep` without `set -o pipefail` (or
+`${PIPESTATUS[0]}`): a pipeline exits with the last command's status, so
+`grace lint --path . | tail` reports success even when lint failed, and chaining
+`&& git commit` after such a pipe commits an unverified tree.
 
 ## Completion Checklist
 
