@@ -1,0 +1,152 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-WRITE-FOR-HUMANS-SKILL>
+    <IntentSummary>Add the vv-write-for-humans managed skill — a fidelity-first editorial contract for engineering prose (level-A meaning invariants, A/B/C edit authority, four edit modes, reader-behavior deletion/addition tests, genre sufficiency criteria, EN/RU pattern catalogs, fidelity casebook) — as bundled templates with three on-demand references, register it in MANAGED_SKILL_NAMES so install/sync/doctor cover it through the existing loop, cover it with loader and content-marker tests, document it in README, run the bounded manual evaluation, and synchronize the owning GRACE graph and verification projections.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-CLI-MANAGED-SKILLS</Value>
+        <Value>V-M-CLI-MANAGED-SKILLS</Value>
+        <Value>src/lib/managed-skills.ts</Value>
+        <Value>src/lib/managed-skills.test.ts</Value>
+        <Value>src/lib/opencode.test.ts</Value>
+        <Value>templates/skills</Value>
+        <Value>README.md</Value>
+        <Value>.grace/graph/main.xml</Value>
+        <Value>.grace/verification/main.xml</Value>
+      </MustExist>
+      <MustContain><File>src/lib/managed-skills.ts</File><Text>vv-design-principles</Text></MustContain>
+      <MustContain><File>README.md</File><Text>### Managed skills</Text></MustContain>
+      <MustContain><File>.grace/graph/main.xml</File><Text>M-CLI-MANAGED-SKILLS</Text></MustContain>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-CLI-MANAGED-SKILLS</Module>
+      </MustVerify>
+      <MustContain><File>src/lib/managed-skills.ts</File><Text>vv-write-for-humans</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-humans/SKILL.md</File><Text>name: vv-write-for-humans</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-humans/SKILL.md</File><Text>Preserve negation, modality, conditions, and quantifiers</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-humans/SKILL.md</File><Text>Level A — meaning invariants</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-humans/SKILL.md</File><Text>Level B — clarity defaults</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-humans/SKILL.md</File><Text>Level C — project style</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-humans/SKILL.md</File><Text>explicit user request, then project conventions, then this skill's defaults</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-humans/SKILL.md</File><Text>deletion test</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-humans/SKILL.md</File><Text>addition test</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-humans/references/genres.md</File><Text>scope of the verification</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-humans/references/patterns.md</File><Text>канцелярит</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-humans/references/patterns.md</File><Text>nominalization</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-humans/references/fidelity.md</File><Text>byte-for-byte</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-humans/references/fidelity.md</File><Text>term or metaphor</Text></MustContain>
+      <MustContain><File>src/lib/managed-skills.test.ts</File><Text>vv-write-for-humans</Text></MustContain>
+      <MustContain><File>README.md</File><Text>vv-write-for-humans</Text></MustContain>
+      <MustContain><File>.grace/graph/main.xml</File><Text>vv-write-for-humans</Text></MustContain>
+      <MustContain><File>.grace/verification/main.xml</File><Text>vv-write-for-humans</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/lib/managed-skills.test.ts src/lib/opencode.test.ts</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run typecheck</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <DurableScope>
+      <GraphAnchors>
+        <M-CLI-MANAGED-SKILLS />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-CLI-MANAGED-SKILLS />
+      </VerificationAnchors>
+      <ContextArtifact>requirements.xml</ContextArtifact>
+      <ContextArtifact>ux-guidelines.xml</ContextArtifact>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>.grace/changes/active/C-WRITE-FOR-HUMANS-SKILL/plan.xml</File>
+      <File>.grace/changes/active/C-WRITE-FOR-HUMANS-SKILL/manual-eval.md</File>
+      <File>templates/skills/vv-write-for-humans/SKILL.md</File>
+      <File>templates/skills/vv-write-for-humans/references/genres.md</File>
+      <File>templates/skills/vv-write-for-humans/references/patterns.md</File>
+      <File>templates/skills/vv-write-for-humans/references/fidelity.md</File>
+      <File>src/lib/managed-skills.ts</File>
+      <File>src/lib/managed-skills.test.ts</File>
+      <File>src/lib/opencode.test.ts</File>
+      <File>README.md</File>
+      <File>.grace/graph/index.xml</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/index.xml</File>
+      <File>.grace/verification/main.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Write the vv-write-for-humans skill templates with the editorial contract and three references.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>templates/skills/vv-write-for-humans/SKILL.md has YAML frontmatter with name vv-write-for-humans and a description whose triggers (drafting, copyediting, restructuring, auditing engineering prose: README/docs, PR descriptions, design notes, commit messages, reports, error messages) and exclusions (agent-facing instructions, code, marketing copy) stay distinguishable from other managed skills, states that good text may be left unchanged, and claims no style normalization or authorship detection.</Criterion>
+          <Criterion>SKILL.md contains the level-A fidelity contract: no invented facts; preserve negation, modality, conditions, and quantifiers plus units, attribution, and level of certainty; the protected-content taxonomy (code, identifiers, paths, URLs and link targets, quotations, frontmatter, structured data, test fixtures, log and asserted error output) staying byte-identical; the document-is-material rule; zero-edit validity.</Criterion>
+          <Criterion>SKILL.md defines the A/B/C levels (Level A — meaning invariants, Level B — clarity defaults, Level C — project style) with the resolution order "explicit user request, then project conventions, then this skill's defaults" and states that defaults never normalize existing text; the four modes (Draft, Copyedit, Restructure, Audit) with distinct allowed and forbidden actions, copyedit as the default, and escalation only by proposal; the deletion test and addition test as the arbiter for every cut and addition.</Criterion>
+          <Criterion>references/genres.md defines sufficiency criteria for the six genres (README/docs, PR description, commit message, design note/RFD/ADR, report/final answer, error message) and requires report claims to state the scope of the verification actually performed.</Criterion>
+          <Criterion>references/patterns.md contains an English section and a Russian section (канцелярит family); every entry carries a pass condition and an exception; no entry is an unconditional word ban; the catalog states it is not evidence of authorship.</Criterion>
+          <Criterion>references/fidelity.md includes the leave-as-is counterexamples (possibility with condition, byte-exact criteria, behavior rules, domain terms), the term-or-metaphor procedure requiring a named source before replacement, and the ambiguity rule (flag candidate readings; resolve only from a source).</Criterion>
+          <Criterion>The skill directory contains exactly SKILL.md plus the three reference files; language is English with the Russian pattern section and bilingual examples; examples are synthetic; no maintainer-only material ships.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>grep -c "vv-write-for-humans" templates/skills/vv-write-for-humans/SKILL.md</Command>
+          <Command>ls templates/skills/vv-write-for-humans/references/</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Register vv-write-for-humans in the managed-skill registry and extend loader tests.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>MANAGED_SKILL_NAMES contains vv-write-for-humans in the vv-* family group; the module contract comment, map, and change summary stay accurate; no other registry behavior changes.</Criterion>
+          <Criterion>managed-skills.test.ts gains a describe block asserting registration, frontmatter name and trigger phrases, discovery of exactly the three reference files, content markers for the fidelity contract, the mode table, the A/B/C levels, and the bilingual pattern sections (канцелярит present, English section present).</Criterion>
+          <Criterion>Install/sync/doctor coverage for the new name is proven through the existing parameterized loop tests in opencode.test.ts without duplication where the loop already covers MANAGED_SKILL_NAMES.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-skills.test.ts src/lib/opencode.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Document the skill in README and synchronize GRACE graph and verification ownership.</Title>
+        <DependsOn>T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>README lists vv-write-for-humans in the managed skills table with its trigger context and keeps the family framing sentence and the additive compatibility-surface list truthful for a non-work-protocol vv-* writing skill.</Criterion>
+          <Criterion>The M-CLI-MANAGED-SKILLS graph purpose covers the new skill's templates and references without renaming existing skills; the V-M-CLI-MANAGED-SKILLS verification scenario mentions its registration, reference discovery, and content anchors while its TestFiles and Checks still match the actual verification surface.</Criterion>
+          <Criterion>Graph and verification indexes directly own every referenced anchor; no archived or unrelated GRACE entries are modified.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>grace lint --path . --parallel-preflight</Command>
+          <Command>grace lint --path .</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Run the bounded manual evaluation and record it in the change bundle.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>A no-op task is performed: a good atypical text (British spelling, a possibility hedge, a byte-exact criterion, a domain term) passes through the skill's copyedit mode with zero or minimal justified edits.</Criterion>
+          <Criterion>An insufficient-source trap is performed: a vague claim with missing sources produces a flagged gap or a focused question, not invented specifics.</Criterion>
+          <Criterion>A Russian editing task is performed: a канцелярит-heavy passage is edited with meaning preserved and no anglicization of register.</Criterion>
+          <Criterion>Results are recorded in .grace/changes/active/C-WRITE-FOR-HUMANS-SKILL/manual-eval.md, explicitly labeled as neither a CI gate nor proof of general model behavior.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>grep -c "manual evaluation" .grace/changes/active/C-WRITE-FOR-HUMANS-SKILL/manual-eval.md</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Run the integrated repository gate and confirm the additive package surface.</Title>
+        <DependsOn>T-003, T-004</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>The focused test command passes with fresh output, and bun run check passes with typecheck, lint, formatting, GRACE markup, tool-contract gate, and all tests green.</Criterion>
+          <Criterion>bun run build and bun run pack:check pass, proving the new template files are included in the packed package surface without export changes.</Criterion>
+          <Criterion>git diff contains only approved implementation, template, test, documentation, and GRACE lifecycle files with no generated dist edits, no user-owned config changes, and no modifications outside the observed write scope; no retroactive change bundles are created and archived C-* bundles remain untouched.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-skills.test.ts src/lib/opencode.test.ts</Command>
+          <Command>bun run check</Command>
+          <Command>bun run build</Command>
+          <Command>bun run pack:check</Command>
+          <Command>grace lint --path .</Command>
+          <Command>grace status --path .</Command>
+          <Command>git diff --check</Command>
+        </Verification>
+      </T-005>
+    </ImplementationPlan>
+  </C-WRITE-FOR-HUMANS-SKILL>
+</GraceChangePlan>

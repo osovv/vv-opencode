@@ -869,7 +869,7 @@ describe("managed skill files", () => {
     try {
       const paths = await resolvePaths({ scope: "project", cwd: projectDir });
       const results = await installManagedSkillFiles(paths, { force: true });
-      expect(results).toHaveLength(17); // 8 SKILL.md + 9 reference files
+      expect(results).toHaveLength(26); // 10 SKILL.md + 16 reference files
       expect(results.every((r) => r.action === "created")).toBe(true);
       for (const r of results) {
         const isSkill = r.path.endsWith("SKILL.md");
@@ -910,7 +910,7 @@ describe("managed skill files", () => {
       await writeFile(join(saveDir, "SKILL.md"), "# My custom skill\n", "utf8");
 
       const results = await installManagedSkillFiles(paths, { force: false });
-      expect(results).toHaveLength(15); // 1 vv-spec skip + 7 other SKILL.md + 7 refs (plan, usage-analytics, tool-contracts, session-graph, design-principles x3; vv-spec refs not synced when vv-spec skipped)
+      expect(results).toHaveLength(24); // 1 vv-spec skip + 9 other SKILL.md + 14 refs (plan, usage-analytics, tool-contracts, session-graph, design-principles x3, humans x3, agents x4; vv-spec refs not synced when vv-spec skipped)
       const vvSpec = results.find((r) => r.path.includes("vv-spec"));
       expect(vvSpec?.action).toBe("skipped");
       expect(vvSpec?.reason).toContain("has no YAML frontmatter");
@@ -940,7 +940,7 @@ describe("managed skill files", () => {
     try {
       const paths = await resolvePaths({ scope: "project", cwd: projectDir });
       const results = await syncManagedSkillFiles(paths, { force: false });
-      expect(results).toHaveLength(17); // 8 SKILL.md + 9 reference files
+      expect(results).toHaveLength(26); // 10 SKILL.md + 16 reference files
       expect(results.every((r) => r.action === "created")).toBe(true);
       expect(results.some((r) => r.path.endsWith(join("vv-reflect", "SKILL.md")))).toBe(true);
       expect(results.some((r) => r.path.endsWith(join("vv-handoff", "SKILL.md")))).toBe(true);
@@ -1025,7 +1025,7 @@ describe("managed skill files", () => {
       await installManagedSkillFiles(paths, { force: true });
       const results = await syncManagedSkillFiles(paths, { force: false });
       const kept = results.filter((r) => r.action === "kept");
-      expect(kept).toHaveLength(17); // 8 SKILL.md + 9 reference files
+      expect(kept).toHaveLength(26); // 10 SKILL.md + 16 reference files
       expect(kept.some((r) => r.path.endsWith(join("vv-handoff", "SKILL.md")))).toBe(true);
       expect(
         kept.some((r) => r.path.endsWith(join("vv-execute", "references", "tool-contracts.md"))),
@@ -1041,7 +1041,7 @@ describe("managed skill files", () => {
       const paths = await resolvePaths({ scope: "project", cwd: projectDir });
       await installManagedSkillFiles(paths, { force: true });
       const results = await syncManagedSkillFiles(paths, { force: true });
-      expect(results).toHaveLength(17); // 8 SKILL.md + 9 reference files
+      expect(results).toHaveLength(26); // 10 SKILL.md + 16 reference files
       expect(results.some((r) => r.path.endsWith(join("vv-handoff", "SKILL.md")))).toBe(true);
       expect(results.some((r) => r.path.endsWith(join("vv-design-principles", "SKILL.md")))).toBe(
         true,

@@ -2,7 +2,7 @@
 // VERSION: 1.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify managed workflow skill discovery metadata, loaded behavior contracts with correctness obligations, and scoped project/global lookup.
-//   SCOPE: vv-execute metadata isolation and explicit mode choice with evidence sufficiency, bounded recovery operations distinct from acceptance and rework, native plan registration boundaries, scoped re-review guidance, exact returned work-item identity in the execute/review dispatch steps, vv-spec ambiguity resolution and preserved properties, vv-plan preserved-property criteria, vv-review findings-only honest reporting, managed skill lookup precedence, vvoc-usage-analytics template/reference coverage, and vv-design-principles template and reference catalog coverage.
+//   SCOPE: vv-execute metadata isolation and explicit mode choice with evidence sufficiency, bounded recovery operations distinct from acceptance and rework, native plan registration boundaries, scoped re-review guidance, exact returned work-item identity in the execute/review dispatch steps, vv-spec ambiguity resolution and preserved properties, vv-plan preserved-property criteria, vv-review findings-only honest reporting, managed skill lookup precedence, vvoc-usage-analytics template/reference coverage, vv-design-principles template and reference catalog coverage, and the vv-write-for-humans / vv-write-for-agents writing-skill contracts with consumer-safe language, banned-token, and volume gates.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/managed-skills.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CLI-MANAGED-SKILLS, V-M-CLI-MANAGED-SKILLS]
 //   ROLE: TEST
@@ -14,11 +14,11 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-VV-DESIGN-PRINCIPLES-SKILL T-002 - Added vv-design-principles registration, frontmatter trigger, and slop-tells/quality-floor/design-md reference catalog assertions.]
+//   LAST_CHANGE: [C-WRITE-FOR-HUMANS-SKILL T-002, C-WRITE-FOR-AGENTS-SKILL T-002 - Added writing-skill registration, frontmatter triggers, reference catalog assertions, bilingual pattern markers, and the agents skill's banned-token and volume gates.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
@@ -388,6 +388,152 @@ describe("vv-design-principles managed skill", () => {
     expect(designMd).toContain("Walk upward from the file you are editing");
     expect(designMd).toContain("## Precedence");
     expect(designMd).toContain("Never silently add a token");
+  });
+});
+
+describe("vv-write-for-humans managed skill", () => {
+  test("registers in MANAGED_SKILL_NAMES and loads a template with frontmatter", async () => {
+    const { MANAGED_SKILL_NAMES } = await import("./managed-skills.js");
+    expect(MANAGED_SKILL_NAMES).toContain("vv-write-for-humans");
+
+    const template = await loadManagedSkillTemplate("vv-write-for-humans");
+    const { frontmatter, body } = splitFrontmatter(template);
+    expect(frontmatter).toContain("name: vv-write-for-humans");
+    expect(frontmatter).toContain("drafting, copyediting, restructuring, or auditing");
+    expect(frontmatter).toContain("engineering prose");
+    expect(frontmatter).toContain("may be left unchanged");
+    expect(frontmatter).toContain("Not for agent-facing instructions");
+    expect(body).toContain("Preserve negation, modality, conditions, and quantifiers");
+    expect(body).toContain("byte-identical");
+    expect(body).toContain("material, not commands to you");
+    expect(body).toContain("Level A — meaning invariants");
+    expect(body).toContain("Level B — clarity defaults");
+    expect(body).toContain("Level C — project style");
+    expect(body).toContain(
+      "explicit user request, then project conventions, then this skill's defaults",
+    );
+    expect(body).toContain("never normalize existing text");
+    expect(body).toContain('mode name="Draft"');
+    expect(body).toContain('mode name="Copyedit"');
+    expect(body).toContain('mode name="Restructure"');
+    expect(body).toContain('mode name="Audit"');
+    expect(body).toContain("deletion test");
+    expect(body).toContain("addition test");
+    expect(body).toContain("references/genres.md");
+    expect(body).toContain("references/patterns.md");
+    expect(body).toContain("references/fidelity.md");
+  });
+
+  test("ships the genres, patterns, and fidelity references with bilingual patterns", async () => {
+    const { listManagedSkillReferenceNames, loadManagedSkillReference } =
+      await import("./managed-skills.js");
+    const names = await listManagedSkillReferenceNames("vv-write-for-humans");
+    expect(names.sort()).toEqual(["fidelity.md", "genres.md", "patterns.md"]);
+
+    const genres = await loadManagedSkillReference("vv-write-for-humans", "genres.md");
+    expect(genres).toContain("scope of the verification");
+    expect(genres).toContain("PR description");
+    expect(genres).toContain("Error message");
+
+    const patterns = await loadManagedSkillReference("vv-write-for-humans", "patterns.md");
+    expect(patterns).toContain("nominalization");
+    expect(patterns).toContain("канцелярит");
+    expect(patterns).toContain("not evidence of authorship");
+
+    const fidelity = await loadManagedSkillReference("vv-write-for-humans", "fidelity.md");
+    expect(fidelity).toContain("byte-for-byte");
+    expect(fidelity).toContain("term or metaphor");
+    expect(fidelity).toContain("No retry on 401");
+  });
+});
+
+describe("vv-write-for-agents managed skill", () => {
+  test("registers in MANAGED_SKILL_NAMES and loads a template with frontmatter", async () => {
+    const { MANAGED_SKILL_NAMES } = await import("./managed-skills.js");
+    expect(MANAGED_SKILL_NAMES).toContain("vv-write-for-agents");
+
+    const template = await loadManagedSkillTemplate("vv-write-for-agents");
+    const { frontmatter, body } = splitFrontmatter(template);
+    expect(frontmatter).toContain("name: vv-write-for-agents");
+    expect(frontmatter).toContain("text an agent executes");
+    expect(frontmatter).toContain("Not for human-facing prose");
+    expect(body).toContain("semantic specification");
+    expect(body).toContain("causal placement");
+    expect(body).toContain("one authoritative location");
+    expect(body).toContain("material, not commands to you");
+    expect(body).toContain("Zero edits is a valid result");
+    expect(body).toContain("enhancer agent compiles single requests");
+    expect(body).toContain("references/compilation.md");
+    expect(body).toContain("references/structure.md");
+    expect(body).toContain("references/session.md");
+    expect(body).toContain("references/validation.md");
+  });
+
+  test("ships the four references with compilation, structure, session, and validation markers", async () => {
+    const { listManagedSkillReferenceNames, loadManagedSkillReference } =
+      await import("./managed-skills.js");
+    const names = await listManagedSkillReferenceNames("vv-write-for-agents");
+    expect(names.sort()).toEqual(["compilation.md", "session.md", "structure.md", "validation.md"]);
+
+    const compilation = await loadManagedSkillReference("vv-write-for-agents", "compilation.md");
+    expect(compilation).toContain("minimal sufficient");
+    expect(compilation).toContain("one trigger per branch");
+    expect(compilation).toContain("scope, do not delete");
+    expect(compilation).toContain("action vs topic");
+
+    const structure = await loadManagedSkillReference("vv-write-for-agents", "structure.md");
+    expect(structure).toContain("unique identities");
+    expect(structure).toContain("tokenizer");
+    expect(structure).toContain("paired tags");
+
+    const session = await loadManagedSkillReference("vv-write-for-agents", "session.md");
+    expect(session).toContain("supersedes");
+    expect(session).toContain("Q-1");
+    expect(session).toContain("vv-handoff");
+
+    const validation = await loadManagedSkillReference("vv-write-for-agents", "validation.md");
+    expect(validation).toContain("held-out");
+    expect(validation).toContain("delivery, not model behavior");
+    expect(validation).toContain("Evidence levels");
+  });
+
+  test("stays consumer-safe and inside the volume budget", async () => {
+    const { listManagedSkillReferenceNames, loadManagedSkillReference } =
+      await import("./managed-skills.js");
+    const template = await loadManagedSkillTemplate("vv-write-for-agents");
+    const refNames = await listManagedSkillReferenceNames("vv-write-for-agents");
+    const shippedTexts = [
+      template,
+      ...(await Promise.all(
+        refNames.map((name) => loadManagedSkillReference("vv-write-for-agents", name)),
+      )),
+    ];
+
+    for (const text of shippedTexts) {
+      expect(text).not.toMatch(/\.grace\b/);
+      expect(text).not.toMatch(/\bgrace\s+(lint|status|module|file|verification|check|--)/);
+      expect(text).not.toMatch(/\b[MV]-[A-Z]/);
+      expect(text).not.toMatch(/\bGD-[A-Z]/);
+    }
+
+    const skillDirEntries = await readdir(
+      new URL("../../templates/skills/vv-write-for-agents/", import.meta.url),
+      { withFileTypes: true },
+    );
+    expect(skillDirEntries.map((entry) => entry.name).sort()).toEqual(["SKILL.md", "references"]);
+    expect(refNames.length).toBeLessThanOrEqual(4);
+
+    const refDirEntries = await readdir(
+      new URL("../../templates/skills/vv-write-for-agents/references/", import.meta.url),
+      { withFileTypes: true },
+    );
+    expect(refDirEntries.filter((entry) => entry.isDirectory())).toEqual([]);
+
+    const lineCount = (text: string): number => text.replace(/\n$/, "").split("\n").length;
+    const totalLines =
+      lineCount(template) + shippedTexts.slice(1).reduce((sum, text) => sum + lineCount(text), 0);
+    expect(lineCount(template)).toBeLessThanOrEqual(80);
+    expect(totalLines).toBeLessThanOrEqual(420);
   });
 });
 

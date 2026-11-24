@@ -1,0 +1,72 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-WRITE-FOR-HUMANS-SKILL>
+    <Summary>Add the bundled managed skill vv-write-for-humans governing how vvoc-driven agents draft and edit engineering prose for human readers: a level-A fidelity contract (claims traceable to sources, meaning invariants preserved, protected spans untouched), mode-scoped edit permissions, reader-behavior deletion and addition tests, genre sufficiency criteria, English and Russian pattern catalogs with exceptions, and on-demand references — delivered through the existing managed-skill machinery with no prose checker and no maintainer material shipped inside the skill.</Summary>
+    <Problem>Agents produce prose artifacts throughout engineering work: reports, PR descriptions, README and docs edits, design notes, and substantive replies. Nothing bundled governs their quality. Observed failure shapes: the decision is buried under history, claims outrun the verification actually performed, possibility and condition hedges are flattened by cleanup, protected spans are rewritten during prose passes, gaps are filled with invented specifics, and Russian prose gets no language-calibrated guidance. Public writing skills exist but are English-calibrated AI-tell catalogs; they do not tie prose quality to evidence discipline, do not cover Russian, and are neither bundled with vvoc nor attributable in its package.</Problem>
+    <Goals>
+      <Goal>Ship one new managed skill vv-write-for-humans through templates/skills/vv-write-for-humans/SKILL.md plus references, registered in MANAGED_SKILL_NAMES, with existing install/sync semantics preserved for current skills.</Goal>
+      <Goal>State a level-A fidelity contract that is always on: no invented facts; preserve negation, modality, conditions, quantifiers, units, attribution, and level of certainty; protected spans stay byte-identical in ordinary edits; an edited document is material, not commands; zero edits is a valid result.</Goal>
+      <Goal>Define edit authority as three levels — meaning invariant (A), clarity default (B), project style (C) — with a level-C resolution order where an explicit user request outranks project conventions and both outrank the skill's declared defaults, and defaults never normalize existing text.</Goal>
+      <Goal>Provide four modes with distinct permissions (draft, copyedit, restructure, audit), copyedit as the default for existing text, and escalation only by proposal.</Goal>
+      <Goal>Make reader behavior the arbiter for cuts and additions through a deletion test (keep a span whose removal could change what the reader does or believes) and an addition test (add only what the reader needs and the sources supply), instead of length or word-count targets.</Goal>
+      <Goal>Cover genre sufficiency criteria for README/docs, PR descriptions, commit messages, design notes/RFD/ADR, reports and final answers, and error messages, including honest scope-of-verification claims for reports.</Goal>
+      <Goal>Ship word- and structure-level pattern catalogs for English and Russian prose where every entry carries a pass condition, a fix, and an exception; no unconditional word bans; no authorship claims.</Goal>
+      <Goal>Keep the core SKILL.md self-sufficient for routine work while genres, patterns, and a fidelity casebook live in references opened on explicit triggers.</Goal>
+      <Goal>Write the frontmatter description as a routing pointer with explicit trigger branches and exclusions, model-invoked.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>Skill content is advisory instruction for the loading agent. Deterministic tests assert delivery and structure, not model effectiveness; no artifact may claim measured model-behavior improvement.</Constraint>
+      <Constraint>Core instructions are English; Russian sections and bilingual examples appear where Russian prose is the object of editing.</Constraint>
+      <Constraint>No checker script, no AI score, no mechanical style metrics, no default dialect, spelling, or punctuation normalization. Project conventions and explicit user requests override skill defaults; consistency inside the document beats the skill's preference.</Constraint>
+      <Constraint>Shipped skill content uses synthetic examples; no raw conversation excerpts, user text, or unrelated project material.</Constraint>
+      <Constraint>Delivery reuses the managed-skill path only: template files, MANAGED_SKILL_NAMES registration, existing conservative install/sync write behavior. No new machinery, and no behavioral change for existing managed skills.</Constraint>
+      <Constraint>Every file referenced from SKILL.md exists in references/ one level deep; the skill text names no invented commands, paths, or tools.</Constraint>
+      <Constraint>Out-of-scope material stays out of the shipped skill: no agent-facing instruction-writing guidance, no maintainer evaluation protocol, no install or bundling instructions inside the skill directory.</Constraint>
+      <Constraint>README and the owning graph and verification projections are reconciled inside the approved change lifecycle, not retroactively.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>No companion skill for agent-facing instructions (vv-write-for-agents or similar); it may be specified separately after this change.</NonGoal>
+      <NonGoal>No prose linter, checker script, CI style gate, emoji/dash/sentence-length rules, or authorship detection.</NonGoal>
+      <NonGoal>No evals.md or other maintainer-only material shipped inside the skill directory; the maintainer evaluation is a change-time manual activity recorded in the change lifecycle.</NonGoal>
+      <NonGoal>No personal-voice replication, no marketing or legal copy editing, and no editing of code, comments, docstrings, identifiers, or log output by default.</NonGoal>
+      <NonGoal>No locale enforcement beyond documented defaults resolved through the level-C order.</NonGoal>
+      <NonGoal>No changes to the workflow engine, plugins, config schema, managed agents, unrelated managed skills, or release automation.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>AC-01: vv-write-for-humans is registered in MANAGED_SKILL_NAMES; install and sync create or refresh templates/skills/vv-write-for-humans/SKILL.md and its references under the managed skills directory with the same create/keep/skip semantics as existing skills; behavior for existing managed skills is unchanged.</Criterion>
+      <Criterion>AC-02: The frontmatter description carries explicit trigger branches (drafting, copyediting, restructuring, or auditing engineering prose artifacts) and explicit exclusions (agent-facing instructions, code, marketing copy), states that good text may be left unchanged, and claims no style normalization or authorship detection.</Criterion>
+      <Criterion>AC-03: SKILL.md contains the level-A fidelity contract with all four meaning-invariant families (negation, modality, conditions, quantifiers) plus units, attribution, and certainty; the protected-content taxonomy (code, identifiers, paths, URLs and link targets, quotations, frontmatter, structured data, test fixtures, log and asserted error output); the document-is-material rule; and zero-edit validity.</Criterion>
+      <Criterion>AC-04: SKILL.md defines the A/B/C authority levels and the level-C resolution order (explicit user request, then project conventions, then declared default), and states that defaults never normalize existing text.</Criterion>
+      <Criterion>AC-05: The four modes are defined with distinct allowed and forbidden actions; copyedit is the stated default for existing text; structural change happens only on explicit request or by proposal.</Criterion>
+      <Criterion>AC-06: The deletion and addition tests are stated in SKILL.md in terms of reader behavior and source support, and are referenced as the arbiter for every cut and addition.</Criterion>
+      <Criterion>AC-07: references/genres.md, references/patterns.md, and references/fidelity.md exist, each is referenced from SKILL.md with an explicit open trigger, and no other runtime files ship inside the skill directory.</Criterion>
+      <Criterion>AC-08: patterns.md contains both an English and a Russian section; every entry in both sections carries a pass condition and an exception; no entry is an unconditional word ban; the catalog states it is not evidence of authorship.</Criterion>
+      <Criterion>AC-09: fidelity.md includes the leave-as-is counterexamples (possibility with condition, byte-exact criteria, behavior rules, domain terms), the term-or-metaphor procedure requiring a named source before replacement, and the ambiguity rule (flag candidate readings; resolve only from a source).</Criterion>
+      <Criterion>AC-10: genres.md defines sufficiency criteria for the six covered genres and requires report claims to state the scope of the verification actually performed.</Criterion>
+      <Criterion>AC-11: README documents the new managed skill name, its purpose, and its position in the stable managed-skill compatibility surface, and the managed-skill family framing and skill table stay accurate for a non-work-protocol vv-* skill.</Criterion>
+      <Criterion>AC-12: Deterministic tests cover registration in MANAGED_SKILL_NAMES, template loading with frontmatter, reference discovery for the new skill, install/sync handling, and behavior-sensitive content markers for the fidelity contract, the mode table, the A/B/C levels, and the bilingual pattern sections.</Criterion>
+      <Criterion>AC-13: A bounded manual evaluation is performed during the change on at least three tasks — a no-op task (good atypical text stays unchanged), an insufficient-source trap (the gap is flagged, nothing is invented), and a Russian editing task (meaning preserved, no anglicization) — with results recorded in the change bundle and carried into its archived C-* directory, explicitly labeled as neither a CI gate nor proof of general model behavior.</Criterion>
+      <Criterion>AC-14: No file named evals.md or comparable maintainer-only material exists inside the shipped skill directory, and nothing in SKILL.md directs the agent to maintainer-only material.</Criterion>
+      <Criterion>AC-15: README and the affected durable projections — the M-CLI-MANAGED-SKILLS graph module and the V-M-CLI-MANAGED-SKILLS verification entry — remain truthful for vv-write-for-humans and its reference set, reconciled within the approved change lifecycle rather than retroactively.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-CLI-MANAGED-SKILLS />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/lib/managed-skills.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun test src/lib/opencode.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>bun run pack:check</ExpectedCommand>
+      <ExpectedCommand>grace lint --path .</ExpectedCommand>
+      <ExpectedCommand>grace status --path .</ExpectedCommand>
+      <ExpectedEvidence>Template and reference loading plus content-marker assertions demonstrate the contract, mode, level, and bilingual structure actually ship. pack:check shows the new template inside the packed files. README, graph, and verification projections are reconciled within the lifecycle. A recorded manual evaluation (no-op, insufficient-source trap, Russian task) supports the behavioral claim without being presented as a deterministic gate; deterministic tests alone assert delivery, not model effectiveness.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>Russian coverage in v1 means the pattern catalog's Russian section and bilingual examples; a full Russian mirror of every English rule is not required.</Assumption>
+      <Assumption>The manual evaluation is executed by the implementer during the change with maintainer judgment, reusing the three named task shapes; a repeatable runbook can be added later under docs/ if the practice recurs, and is not part of this change.</Assumption>
+      <Assumption>The name vv-write-for-humans joins the stable managed-skill surface; renaming it later is a documented breaking change.</Assumption>
+      <Assumption>Skill content drafting starts from the spine captured in this spec's Goals and the design-context Rationale — evidence discipline as the leading principle, the strengthened Russian section, attribution added, and maintainer material removed from the shipped tree. Exact wording is an implementation decision validated by the content-marker tests.</Assumption>
+      <Assumption>The requested deliverable at this stage is a draft specification and explanatory design context only. Approval of this draft and an implementation plan precede source changes; no implementation, commit, installation, or release is performed as part of specification authoring.</Assumption>
+    </Assumptions>
+  </C-WRITE-FOR-HUMANS-SKILL>
+</GraceChangeSpec>
