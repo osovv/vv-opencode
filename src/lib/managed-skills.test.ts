@@ -2,7 +2,7 @@
 // VERSION: 1.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify managed workflow skill discovery metadata, loaded behavior contracts with correctness obligations, and scoped project/global lookup.
-//   SCOPE: vv-execute metadata isolation and explicit mode choice with evidence sufficiency, bounded recovery operations distinct from acceptance and rework, native plan registration boundaries, scoped re-review guidance, exact returned work-item identity in the execute/review dispatch steps, vv-spec ambiguity resolution and preserved properties, vv-plan preserved-property criteria, vv-review findings-only honest reporting, managed skill lookup precedence, vvoc-usage-analytics template/reference coverage, vv-design-principles template and reference catalog coverage, and the vv-write-for-humans / vv-write-for-agents writing-skill contracts with consumer-safe language, banned-token, and volume gates.
+//   SCOPE: vv-execute metadata isolation and explicit mode choice with evidence sufficiency, bounded recovery operations distinct from acceptance and rework, native plan registration boundaries, scoped re-review guidance, exact returned work-item identity in the execute/review dispatch steps, vv-spec ambiguity resolution and preserved properties, vv-plan preserved-property criteria, vv-review findings-only honest reporting, managed skill lookup precedence, vvoc-usage-analytics template/reference coverage, vv-design-principles template and reference catalog coverage, the vv-write-for-humans / vv-write-for-agents writing-skill contracts with consumer-safe language, banned-token, and volume gates, and vv-verification registration, decision workflow, six-reference anchors, and vv-spec/vv-plan verification-intent delivery.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/managed-skills.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CLI-MANAGED-SKILLS, V-M-CLI-MANAGED-SKILLS]
 //   ROLE: TEST
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WRITE-FOR-HUMANS-SKILL T-002, C-WRITE-FOR-AGENTS-SKILL T-002 - Added writing-skill registration, frontmatter triggers, reference catalog assertions, bilingual pattern markers, and the agents skill's banned-token and volume gates.]
+//   LAST_CHANGE: [C-WRITE-FOR-HUMANS-SKILL T-002, C-WRITE-FOR-AGENTS-SKILL T-002, C-VV-VERIFICATION-SKILL T-003 - Added writing-skill and vv-verification registration, frontmatter triggers, reference catalog and anchor assertions, bilingual pattern markers, the agents skill's banned-token and volume gates, and vv-spec/vv-plan verification-intent delivery.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -534,6 +534,83 @@ describe("vv-write-for-agents managed skill", () => {
       lineCount(template) + shippedTexts.slice(1).reduce((sum, text) => sum + lineCount(text), 0);
     expect(lineCount(template)).toBeLessThanOrEqual(80);
     expect(totalLines).toBeLessThanOrEqual(420);
+  });
+});
+
+describe("vv-verification managed skill", () => {
+  test("registers in MANAGED_SKILL_NAMES and loads the decision workflow", async () => {
+    const { MANAGED_SKILL_NAMES } = await import("./managed-skills.js");
+    expect(MANAGED_SKILL_NAMES).toContain("vv-verification");
+
+    const template = await loadManagedSkillTemplate("vv-verification");
+    const { frontmatter, body } = splitFrontmatter(template);
+    expect(frontmatter).toContain("name: vv-verification");
+    expect(frontmatter).toContain("oracles");
+    expect(frontmatter).toContain("formal verification");
+    expect(body).toContain("evidence ledger");
+    expect(body).toContain("VERIFICATION.md");
+    expect(body).toContain("maintain-verification");
+    expect(body).toContain("residual risk");
+    expect(body).toContain("references/oracles.md");
+  });
+
+  test("ships exactly the six references with their stable anchors", async () => {
+    const { listManagedSkillReferenceNames, loadManagedSkillReference } =
+      await import("./managed-skills.js");
+    const names = await listManagedSkillReferenceNames("vv-verification");
+    expect(names.sort()).toEqual([
+      "create-your-verification-stack.md",
+      "evidence.md",
+      "formal.md",
+      "maintenance.md",
+      "oracles.md",
+      "strategy.md",
+    ]);
+
+    const anchors: Record<string, string[]> = {
+      "strategy.md": ["## Test levels", "## CI split"],
+      "oracles.md": ["## Oracle catalog", "## Selection matrix"],
+      "evidence.md": ["## Evidence ledger", "## Confidence tiers"],
+      "formal.md": ["## Tooling notes", "## Limits"],
+      "maintenance.md": ["## Stale tests", "## Mutation testing and kill matrix"],
+      "create-your-verification-stack.md": [
+        "## Write VERIFICATION.md",
+        "## Create the verification CLI",
+        "## Generate the project skills",
+        "## Register the skills",
+        "## Never impose a framework",
+      ],
+    };
+    for (const [file, expected] of Object.entries(anchors)) {
+      const reference = await loadManagedSkillReference("vv-verification", file);
+      for (const anchor of expected) expect(reference).toContain(anchor);
+    }
+
+    const bootstrap = await loadManagedSkillReference(
+      "vv-verification",
+      "create-your-verification-stack.md",
+    );
+    expect(bootstrap).toContain("only after the user approves");
+    expect(bootstrap).toContain("Never edit user-owned configuration silently");
+  });
+
+  test("vv-spec and vv-plan deliver verification intent without new template elements", async () => {
+    const { loadManagedSkillReference } = await import("./managed-skills.js");
+    const spec = await loadManagedSkillTemplate("vv-spec");
+    const plan = await loadManagedSkillTemplate("vv-plan");
+    expect(spec).toContain("verification intent");
+    expect(spec).toContain("residual risk");
+    expect(plan).toContain("oracle");
+    expect(plan).toContain("inspectable evidence");
+
+    const specTemplate = await loadManagedSkillReference("vv-spec", "spec-template.xml");
+    const planTemplate = await loadManagedSkillReference("vv-plan", "plan-template.xml");
+    expect(specTemplate).toContain("<strategy>");
+    expect(specTemplate).toContain("<coverage>");
+    expect(specTemplate).not.toContain("verification_intent");
+    expect(planTemplate).toContain("<acceptance>");
+    expect(planTemplate).toContain("<verification>");
+    expect(planTemplate).not.toContain("verification_intent");
   });
 });
 

@@ -20,7 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WRITE-FOR-HUMANS-SKILL T-002, C-WRITE-FOR-AGENTS-SKILL T-002 - Register the vv-write-for-humans and vv-write-for-agents writing skills alongside the workflow and guidance family; reference loading is unchanged.]
+//   LAST_CHANGE: [C-WRITE-FOR-HUMANS-SKILL T-002, C-WRITE-FOR-AGENTS-SKILL T-002, C-VV-VERIFICATION-SKILL T-003 - Register the vv-write-for-humans, vv-write-for-agents, and vv-verification skills alongside the workflow and guidance family; reference loading is unchanged.]
 // END_CHANGE_SUMMARY
 
 import { readdir, readFile } from "node:fs/promises";
@@ -32,6 +32,7 @@ export const MANAGED_SKILL_NAMES = [
   "vv-plan",
   "vv-review",
   "vv-execute",
+  "vv-verification",
   "vv-reflect",
   "vv-handoff",
   "vv-write-for-humans",

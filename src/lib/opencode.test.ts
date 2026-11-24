@@ -888,6 +888,10 @@ describe("managed skill files", () => {
       const results = await installManagedSkillFiles(paths, { force: true });
       expect(results).toHaveLength(await expectedManagedSkillResultCount()); // one SKILL.md plus its references per managed skill
       expect(results.every((r) => r.action === "created")).toBe(true);
+      expect(results.some((r) => r.path.endsWith(join("vv-verification", "SKILL.md")))).toBe(true);
+      expect(
+        results.some((r) => r.path.endsWith(join("vv-verification", "references", "strategy.md"))),
+      ).toBe(true);
       for (const r of results) {
         const isSkill = r.path.endsWith("SKILL.md");
         const isReference = r.path.includes(join("references", ""));
@@ -961,6 +965,10 @@ describe("managed skill files", () => {
       const results = await syncManagedSkillFiles(paths, { force: false });
       expect(results).toHaveLength(await expectedManagedSkillResultCount()); // one SKILL.md plus its references per managed skill
       expect(results.every((r) => r.action === "created")).toBe(true);
+      expect(results.some((r) => r.path.endsWith(join("vv-verification", "SKILL.md")))).toBe(true);
+      expect(
+        results.some((r) => r.path.endsWith(join("vv-verification", "references", "formal.md"))),
+      ).toBe(true);
       expect(results.some((r) => r.path.endsWith(join("vv-reflect", "SKILL.md")))).toBe(true);
       expect(results.some((r) => r.path.endsWith(join("vv-handoff", "SKILL.md")))).toBe(true);
       expect(results.some((r) => r.path.endsWith(join("vv-design-principles", "SKILL.md")))).toBe(
