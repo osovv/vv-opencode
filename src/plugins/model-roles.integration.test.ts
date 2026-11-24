@@ -666,16 +666,16 @@ describe("session-owned family settings", () => {
           ...(typeof currentSettings === "object" && currentSettings !== null
             ? currentSettings
             : {}),
-          profile: "single-session",
+          roles: { smart: "prov/m-changed" },
         },
       },
     });
 
     const a = await runtime.settings.configFor("ses_a");
     const b = await runtime.settings.configFor("ses_b");
-    expect(a?.settings.profile).toBe("single-session");
-    // Family B keeps the profile it was born with (the project default).
-    expect(b?.settings.profile).toBe("balanced");
+    expect(a?.settings.roles.smart).toBe("prov/m-changed");
+    // Family B keeps the settings it was born with (the project default).
+    expect(b?.settings.roles.smart).toBe("prov/m-x");
     await runtime.release();
   });
 
@@ -1000,6 +1000,10 @@ describe("legacy binding migration", () => {
     expect(stored && "settings" in stored ? stored.settings.roles : undefined).toEqual({
       smart: "prov/m-legacy",
     });
+    // The migrated family keeps the profile it was previously bound to.
+    expect(stored && "settings" in stored ? stored.settings.profile : undefined).toBe(
+      "orchestrated",
+    );
     // The runtime itself resolves the converted record after a restart too.
     const view = await runtime.settings.configFor("ses_root");
     expect(view?.settings.roles.smart).toBe("prov/m-legacy");

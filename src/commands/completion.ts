@@ -2,9 +2,9 @@
 // VERSION: 0.5.15
 // START_MODULE_CONTRACT
 //   PURPOSE: Auto-detect shell and install vvoc completions idempotently.
-//   SCOPE: Shell detection, completion file writing, nested orchestration/config/plugin/patch-provider/preset and role flow generation, and rc file patching.
-//   DEPENDS: [citty, node:fs/promises, node:path, node:os, src/lib/model-roles.ts, src/lib/orchestration.ts, src/lib/vvoc-preset-registry.ts]
-//   LINKS: M-CLI-COMPLETION, M-CLI-COMMANDS, M-CLI-ORCHESTRATION, M-ORCHESTRATION-PROFILES
+//   SCOPE: Shell detection, completion file writing, nested config/plugin/patch-provider/preset and role flow generation, and rc file patching.
+//   DEPENDS: [citty, node:fs/promises, node:path, node:os, src/lib/model-roles.ts, src/lib/vvoc-preset-registry.ts]
+//   LINKS: M-CLI-COMPLETION, M-CLI-COMMANDS, M-ORCHESTRATION-PROFILES
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -18,7 +18,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-DELEGATED-WORKFLOW-ASTRA-PRESETS - Added the zai patch preset to patch-provider completions.]
+//   LAST_CHANGE: [C-REMOVE-SESSION-ORCHESTRATION-PROFILES T-002 - Completions no longer expose the removed orchestration command or its profile values.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -26,7 +26,6 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { SEEDED_ROLE_NAMES } from "../lib/model-roles.js";
-import { ORCHESTRATION_PROFILE_NAMES } from "../lib/orchestration.js";
 import { BUILTIN_VVOC_PRESET_NAMES } from "../lib/vvoc-preset-registry.js";
 
 const VVOC_TOP_LEVEL_COMMANDS = [
@@ -37,7 +36,6 @@ const VVOC_TOP_LEVEL_COMMANDS = [
   "init",
   "install",
   "launch",
-  "orchestration",
   "patch-provider",
   "preset",
   "plugin",
@@ -49,8 +47,6 @@ const VVOC_TOP_LEVEL_COMMANDS = [
 ];
 
 const VVOC_CONFIG_COMMANDS = ["validate"];
-const VVOC_ORCHESTRATION_COMMANDS = ["show", "set"] as const;
-const VVOC_ORCHESTRATION_PROFILES = [...ORCHESTRATION_PROFILE_NAMES];
 const VVOC_PATCH_PROVIDER_PRESETS = [
   "stepfun-ai",
   "codex",
@@ -175,8 +171,6 @@ async function installFishCompletion(): Promise<void> {
 export function generateBashCompletion(): string {
   const topLevelCommands = VVOC_TOP_LEVEL_COMMANDS.join(" ");
   const configCommands = VVOC_CONFIG_COMMANDS.join(" ");
-  const orchestrationCommands = VVOC_ORCHESTRATION_COMMANDS.join(" ");
-  const orchestrationProfiles = VVOC_ORCHESTRATION_PROFILES.join(" ");
   const patchProviderPresets = VVOC_PATCH_PROVIDER_PRESETS.join(" ");
   const presetCommands = [...VVOC_PRESET_COMMANDS, ...BUILTIN_VVOC_PRESET_NAMES].join(" ");
   const presetNames = BUILTIN_VVOC_PRESET_NAMES.join(" ");
@@ -202,9 +196,6 @@ export function generateBashCompletion(): string {
     "        config)\n" +
     "          _vvoc_config_commands\n" +
     "          ;;\n" +
-    "        orchestration)\n" +
-    "          _vvoc_orchestration_commands\n" +
-    "          ;;\n" +
     "        patch-provider)\n" +
     "          _vvoc_patch_provider_presets\n" +
     "          ;;\n" +
@@ -220,9 +211,6 @@ export function generateBashCompletion(): string {
     '      case "${words[1]}:${words[2]}" in\n' +
     "        role:set)\n" +
     "          _vvoc_role_ids\n" +
-    "          ;;\n" +
-    "        orchestration:set)\n" +
-    "          _vvoc_orchestration_profiles\n" +
     "          ;;\n" +
     "        preset:show)\n" +
     "          _vvoc_preset_names\n" +
@@ -242,20 +230,6 @@ export function generateBashCompletion(): string {
     "_vvoc_config_commands() {\n" +
     '  local commands="' +
     configCommands +
-    '"\n' +
-    '  COMPREPLY=($(compgen -W "$commands" -- "$cur"))\n' +
-    "}\n" +
-    "\n" +
-    "_vvoc_orchestration_commands() {\n" +
-    '  local commands="' +
-    orchestrationCommands +
-    '"\n' +
-    '  COMPREPLY=($(compgen -W "$commands" -- "$cur"))\n' +
-    "}\n" +
-    "\n" +
-    "_vvoc_orchestration_profiles() {\n" +
-    '  local commands="' +
-    orchestrationProfiles +
     '"\n' +
     '  COMPREPLY=($(compgen -W "$commands" -- "$cur"))\n' +
     "}\n" +
@@ -332,9 +306,6 @@ export function generateZshCompletion(): string {
     "    config)",
     "      _vvoc_config_cmds",
     "      ;;",
-    "    orchestration)",
-    "      _vvoc_orchestration_cmds",
-    "      ;;",
     "    patch-provider)",
     "      _vvoc_patch_provider_cmds",
     "      ;;",
@@ -351,17 +322,6 @@ export function generateZshCompletion(): string {
     "  local -a config_commands",
     "  config_commands=(" + VVOC_CONFIG_COMMANDS.join(" ") + ")",
     '  _arguments "1: :(' + VVOC_CONFIG_COMMANDS.join(" ") + ')"',
-    "}",
-    "",
-    "_vvoc_orchestration_cmds() {",
-    "  case $words[2] in",
-    "    set)",
-    '      _arguments "1: :(' + VVOC_ORCHESTRATION_PROFILES.join(" ") + ')"',
-    "      ;;",
-    "    *)",
-    '      _arguments "1: :(' + VVOC_ORCHESTRATION_COMMANDS.join(" ") + ')"',
-    "      ;;",
-    "  esac",
     "}",
     "",
     "_vvoc_patch_provider_cmds() {",
@@ -422,14 +382,6 @@ export function generateFishCompletion(): string {
     "  echo " + VVOC_CONFIG_COMMANDS.join(" "),
     "end",
     "",
-    "function __vvoc_orchestration_cmds",
-    "  echo " + VVOC_ORCHESTRATION_COMMANDS.join(" "),
-    "end",
-    "",
-    "function __vvoc_orchestration_profiles",
-    "  echo " + VVOC_ORCHESTRATION_PROFILES.join(" "),
-    "end",
-    "",
     "function __vvoc_patch_provider_cmds",
     "  echo " + VVOC_PATCH_PROVIDER_PRESETS.join(" "),
     "end",
@@ -458,8 +410,6 @@ export function generateFishCompletion(): string {
     'complete -c vvoc -n "__fish_seen_subcommand_from role; and not __fish_seen_subcommand_from set unset list" -f -a "(__vvoc_role_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from role; and __fish_seen_subcommand_from set" -f -a "(__vvoc_role_ids)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from config" -f -a "(__vvoc_config_cmds)"',
-    'complete -c vvoc -n "__fish_seen_subcommand_from orchestration; and not __fish_seen_subcommand_from show set" -f -a "(__vvoc_orchestration_cmds)"',
-    'complete -c vvoc -n "__fish_seen_subcommand_from orchestration; and __fish_seen_subcommand_from set" -f -a "(__vvoc_orchestration_profiles)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from patch-provider" -f -a "(__vvoc_patch_provider_cmds)"',
     'complete -c vvoc -n "__fish_seen_subcommand_from preset; and not __fish_seen_subcommand_from ' +
       presetCommands +

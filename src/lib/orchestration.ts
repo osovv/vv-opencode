@@ -1,8 +1,8 @@
 // FILE: src/lib/orchestration.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Define orchestration profile names, strict parsing, backward-compatible defaults, and concrete vv-controller work policies.
-//   SCOPE: Profile types, normalized config construction, explicit-value validation, and pure startup policy resolution.
+//   PURPOSE: Define the legacy orchestration profile vocabulary, strict recorded-value parsing, and the frozen vv-controller work policies used only by families that already recorded a profile.
+//   SCOPE: Legacy profile names and types, strict recorded-value validation, and pure recorded-profile policy resolution. No CLI, config, preset, or absent-section default remains.
 //   DEPENDS: [none]
 //   LINKS: [M-ORCHESTRATION-PROFILES, V-M-ORCHESTRATION-PROFILES]
 //   ROLE: RUNTIME
@@ -10,18 +10,15 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   ORCHESTRATION_PROFILE_NAMES - Supported profile names in stable CLI and schema order.
-//   OrchestrationProfile - Union of supported profile names.
-//   OrchestrationConfig - Canonical orchestration configuration section.
-//   ResolvedOrchestrationPolicy - Concrete controller and workflow guidance selected at startup.
-//   DEFAULT_ORCHESTRATION_PROFILE - Backward-compatible profile for an absent root section.
-//   createOrchestrationConfig - Builds a normalized section and defaults only when the section is absent.
-//   parseOrchestrationProfile - Strictly validates a profile value with operation context.
-//   resolveOrchestrationPolicy - Resolves one immutable concrete policy from compatible config input.
+//   ORCHESTRATION_PROFILE_NAMES - Legacy recorded profile names in stable order.
+//   OrchestrationProfile - Union of legacy recorded profile names.
+//   ResolvedOrchestrationPolicy - Concrete legacy controller and workflow guidance for one recorded profile.
+//   parseOrchestrationProfile - Strictly validates a recorded profile value with operation context.
+//   policyForRecordedProfile - Resolves the frozen legacy policy for one recorded family profile, or none.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Calibrated the delegated policy: worker stops are bounded diagnosis and recovery targets rather than session ends, recovery is distinct from acceptance, and checkpoint registration states its native plan boundary.]
+//   LAST_CHANGE: [C-REMOVE-SESSION-ORCHESTRATION-PROFILES T-002 - Removed config construction, absent-section defaults, and config-driven policy resolution; only recorded-profile decoding and frozen legacy policies remain.]
 // END_CHANGE_SUMMARY
 
 // START_BLOCK_PROFILE_TYPES
@@ -33,13 +30,8 @@ export const ORCHESTRATION_PROFILE_NAMES = [
   "delegated",
 ] as const;
 
-/** One supported preset-controlled orchestration profile. */
+/** One supported legacy-recorded orchestration profile. */
 export type OrchestrationProfile = (typeof ORCHESTRATION_PROFILE_NAMES)[number];
-
-/** Optional canonical vvoc configuration section. */
-export type OrchestrationConfig = {
-  profile: OrchestrationProfile;
-};
 
 /** Capabilities consumed by prompt-producing plugins without model inference. */
 export type ResolvedOrchestrationPolicy = Readonly<{
@@ -47,9 +39,6 @@ export type ResolvedOrchestrationPolicy = Readonly<{
   controllerSystemContext: string;
   workflowGuidance: "review-only" | "selective" | "tracked" | "delegated";
 }>;
-
-/** Backward-compatible profile used when an old valid v3 document omits orchestration. */
-export const DEFAULT_ORCHESTRATION_PROFILE: OrchestrationProfile = "balanced";
 // END_BLOCK_PROFILE_TYPES
 
 // START_BLOCK_CONCRETE_POLICIES
@@ -133,8 +122,8 @@ const RESOLVED_POLICIES: Readonly<Record<OrchestrationProfile, ResolvedOrchestra
 // END_BLOCK_CONCRETE_POLICIES
 
 // START_CONTRACT: parseOrchestrationProfile
-//   PURPOSE: Validate a CLI or config profile string without silently falling back from explicit invalid input.
-//   INPUTS: { value: unknown - candidate profile value; operation: string - caller context for diagnostics }
+//   PURPOSE: Validate one recorded legacy profile value without silently falling back from invalid input.
+//   INPUTS: { value: unknown - candidate recorded profile value; operation: string - caller context for diagnostics }
 //   OUTPUTS: { OrchestrationProfile - normalized supported profile }
 //   SIDE_EFFECTS: Throws Error for blank, non-string, or unknown values.
 //   LINKS: [ORCHESTRATION_PROFILE_NAMES]
@@ -153,39 +142,17 @@ export function parseOrchestrationProfile(value: unknown, operation: string): Or
 }
 // END_BLOCK_PARSE_PROFILE
 
-// START_CONTRACT: createOrchestrationConfig
-//   PURPOSE: Build a normalized orchestration section, defaulting only when the entire section is absent.
-//   INPUTS: { value: Partial&lt;OrchestrationConfig&gt; | undefined - optional explicit section }
-//   OUTPUTS: { OrchestrationConfig - normalized canonical section }
-//   SIDE_EFFECTS: Throws when an explicit section lacks a valid profile.
-//   LINKS: [parseOrchestrationProfile]
-// END_CONTRACT: createOrchestrationConfig
-// START_BLOCK_PROFILE_PARSING
-export function createOrchestrationConfig(
-  value?: Partial<OrchestrationConfig>,
-): OrchestrationConfig {
-  if (value === undefined) {
-    return { profile: DEFAULT_ORCHESTRATION_PROFILE };
-  }
-
-  return {
-    profile: parseOrchestrationProfile(value.profile, "create orchestration config"),
-  };
+// START_CONTRACT: policyForRecordedProfile
+//   PURPOSE: Resolve the frozen legacy policy for one recorded family profile, or none for a record without one.
+//   INPUTS: { profile: OrchestrationProfile | undefined - profile recorded on the family root, when present }
+//   OUTPUTS: { ResolvedOrchestrationPolicy | undefined - frozen policy for a recorded profile; undefined without one }
+//   SIDE_EFFECTS: [none]
+//   LINKS: [RESOLVED_POLICIES]
+// END_CONTRACT: policyForRecordedProfile
+// START_BLOCK_RECORDED_POLICY
+export function policyForRecordedProfile(
+  profile: OrchestrationProfile | undefined,
+): ResolvedOrchestrationPolicy | undefined {
+  return profile === undefined ? undefined : RESOLVED_POLICIES[profile];
 }
-// END_BLOCK_PROFILE_PARSING
-
-// START_CONTRACT: resolveOrchestrationPolicy
-//   PURPOSE: Resolve one immutable concrete policy from structurally compatible startup config input.
-//   INPUTS: { config: object - loaded config with an optional orchestration section }
-//   OUTPUTS: { ResolvedOrchestrationPolicy - frozen selected policy }
-//   SIDE_EFFECTS: Throws when an explicit profile is invalid; never inspects provider or model data.
-//   LINKS: [createOrchestrationConfig, RESOLVED_POLICIES]
-// END_CONTRACT: resolveOrchestrationPolicy
-// START_BLOCK_POLICY_RESOLUTION
-export function resolveOrchestrationPolicy(config: {
-  orchestration?: Partial<OrchestrationConfig>;
-}): ResolvedOrchestrationPolicy {
-  const { profile } = createOrchestrationConfig(config.orchestration);
-  return RESOLVED_POLICIES[profile];
-}
-// END_BLOCK_POLICY_RESOLUTION
+// END_BLOCK_RECORDED_POLICY

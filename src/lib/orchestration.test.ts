@@ -1,7 +1,7 @@
 // FILE: src/lib/orchestration.test.ts
-// VERSION: 1.0.0
+// VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify stable orchestration names, strict parsing, backward-compatible resolution, prompt isolation, and workflow capabilities.
+//   PURPOSE: Verify the legacy recorded-profile vocabulary, strict parsing, recorded-profile policy resolution, prompt isolation, and workflow capabilities.
 //   SCOPE: Pure deterministic tests for src/lib/orchestration.ts.
 //   DEPENDS: [bun:test, src/lib/orchestration.js]
 //   LINKS: [M-ORCHESTRATION-PROFILES, V-M-ORCHESTRATION-PROFILES]
@@ -10,35 +10,36 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   [test scenarios] - Orchestration profile coverage is expressed through module-level tests.
+//   [test scenarios] - Recorded-profile coverage is expressed through module-level tests.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-BOUNDED-RECOVERY-R1 - Added delegated-policy coverage distinguishing bounded recovery from session end and acceptance plus the native plan registration boundary.]
+//   LAST_CHANGE: [C-REMOVE-SESSION-ORCHESTRATION-PROFILES T-002 - The domain covers legacy recorded profiles only: no config construction, no absent-section default, and no policy for an absent profile.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
 
 import {
-  DEFAULT_ORCHESTRATION_PROFILE,
   ORCHESTRATION_PROFILE_NAMES,
-  createOrchestrationConfig,
   parseOrchestrationProfile,
-  resolveOrchestrationPolicy,
+  policyForRecordedProfile,
 } from "./orchestration.js";
 
 // START_BLOCK_PROFILE_DOMAIN_TESTS
-describe("orchestration profile domain", () => {
-  test("uses stable profile names and balanced backward-compatible default", () => {
+describe("recorded orchestration profile domain", () => {
+  test("uses stable legacy names and resolves none for an absent profile", () => {
     expect(ORCHESTRATION_PROFILE_NAMES).toEqual([
       "single-session",
       "balanced",
       "orchestrated",
       "delegated",
     ]);
-    expect(DEFAULT_ORCHESTRATION_PROFILE).toBe("balanced");
-    expect(createOrchestrationConfig()).toEqual({ profile: "balanced" });
-    expect(resolveOrchestrationPolicy({}).profile).toBe("balanced");
+    expect(policyForRecordedProfile(undefined)).toBeUndefined();
+    for (const profile of ORCHESTRATION_PROFILE_NAMES) {
+      const policy = policyForRecordedProfile(profile);
+      expect(policy).toBeDefined();
+      expect(policy?.profile).toBe(profile);
+    }
   });
 
   test("strictly parses supported values and rejects blank or unknown values", () => {
@@ -53,22 +54,16 @@ describe("orchestration profile domain", () => {
       expect(() => parseOrchestrationProfile(value, "test parse")).toThrow("delegated");
     }
   });
-
-  test("defaults only for an absent section and fails for an explicit incomplete section", () => {
-    expect(createOrchestrationConfig(undefined)).toEqual({ profile: "balanced" });
-    expect(() => createOrchestrationConfig({})).toThrow("invalid orchestration profile");
-    expect(() => resolveOrchestrationPolicy({ orchestration: {} })).toThrow(
-      "invalid orchestration profile",
-    );
-  });
 });
 // END_BLOCK_PROFILE_DOMAIN_TESTS
 
 // START_BLOCK_CONCRETE_POLICY_TESTS
-describe("resolved orchestration policies", () => {
+describe("resolved legacy orchestration policies", () => {
   test("contains only active-profile instructions", () => {
     for (const profile of ORCHESTRATION_PROFILE_NAMES) {
-      const policy = resolveOrchestrationPolicy({ orchestration: { profile } });
+      const policy = policyForRecordedProfile(profile);
+      expect(policy).toBeDefined();
+      if (policy === undefined) continue;
       expect(Object.isFrozen(policy)).toBe(true);
 
       for (const otherProfile of ORCHESTRATION_PROFILE_NAMES) {
@@ -80,9 +75,7 @@ describe("resolved orchestration policies", () => {
   });
 
   test("single-session keeps working context direct and preserves the reviewer exception", () => {
-    const context = resolveOrchestrationPolicy({
-      orchestration: { profile: "single-session" },
-    }).controllerSystemContext;
+    const context = policyForRecordedProfile("single-session")?.controllerSystemContext ?? "";
 
     for (const activity of [
       "exploration",
@@ -99,28 +92,15 @@ describe("resolved orchestration policies", () => {
     expect(context).toMatch(/report findings and do not\s+fix them/);
   });
 
-  test("maps profiles to workflow guidance without model inference", () => {
-    expect(
-      resolveOrchestrationPolicy({ orchestration: { profile: "single-session" } }).workflowGuidance,
-    ).toBe("review-only");
-    expect(
-      resolveOrchestrationPolicy({
-        orchestration: { profile: "balanced" },
-        model: "ignored/provider-model",
-      } as Parameters<typeof resolveOrchestrationPolicy>[0]).workflowGuidance,
-    ).toBe("selective");
-    expect(
-      resolveOrchestrationPolicy({ orchestration: { profile: "orchestrated" } }).workflowGuidance,
-    ).toBe("tracked");
-    expect(
-      resolveOrchestrationPolicy({ orchestration: { profile: "delegated" } }).workflowGuidance,
-    ).toBe("delegated");
+  test("maps recorded profiles to workflow guidance without model inference", () => {
+    expect(policyForRecordedProfile("single-session")?.workflowGuidance).toBe("review-only");
+    expect(policyForRecordedProfile("balanced")?.workflowGuidance).toBe("selective");
+    expect(policyForRecordedProfile("orchestrated")?.workflowGuidance).toBe("tracked");
+    expect(policyForRecordedProfile("delegated")?.workflowGuidance).toBe("delegated");
   });
 
   test("delegated keeps architecture, acceptance, and verification in the primary session", () => {
-    const context = resolveOrchestrationPolicy({
-      orchestration: { profile: "delegated" },
-    }).controllerSystemContext;
+    const context = policyForRecordedProfile("delegated")?.controllerSystemContext ?? "";
 
     expect(context).toContain("Keep architecture, important code reading, task contracts");
     expect(context).toContain("Delegate source implementation, tests, runtime configuration");
@@ -134,9 +114,7 @@ describe("resolved orchestration policies", () => {
   });
 
   test("delegated distinguishes bounded recovery from session end and acceptance", () => {
-    const context = resolveOrchestrationPolicy({
-      orchestration: { profile: "delegated" },
-    }).controllerSystemContext;
+    const context = policyForRecordedProfile("delegated")?.controllerSystemContext ?? "";
     const normalized = context.replace(/\s+/g, " ");
 
     expect(context).toContain("workers, including small mechanical fixes");

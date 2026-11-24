@@ -2,7 +2,7 @@
 // VERSION: 0.8.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify vvoc-managed agent prompt template loading, scoped runtime lookup, and correctness-obligation instruction contracts.
-//   SCOPE: Bundled template reads, the complete canonical seven-section controller with preserved memory, verification, delegation, authority, recovery and handoff obligations; absence of superseded prompt sections and duplicated skill/artifact manuals; existing worker/reviewer/investigator contracts, metadata, protocol examples, scoped lookup and missing-prompt errors.
+//   SCOPE: Bundled template reads, the complete canonical controller including the stable work-policy-default section with preserved memory, verification, delegation, authority, recovery and handoff obligations; absence of superseded prompt sections and duplicated skill/artifact manuals; existing worker/reviewer/investigator contracts, metadata, protocol examples, scoped lookup and missing-prompt errors.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/managed-agents.ts, src/lib/vvoc-paths.ts, src/plugins/workflow/protocol.ts]
 //   LINKS: [M-CLI-MANAGED-AGENTS, M-WORKFLOW-PROTOCOL, V-M-CLI-MANAGED-AGENTS]
 //   ROLE: TEST
@@ -117,6 +117,7 @@ describe("managed agent prompts", () => {
     expect(MANAGED_PRIMARY_AGENT_NAMES.filter((name) => name === "vv-controller")).toHaveLength(1);
     expect([...template.matchAll(/^<([a-z_]+)>$/gm)].map((match) => match[1])).toEqual([
       "task_and_scope",
+      "work_policy_default",
       "project_context",
       "repository_memory",
       "evidence_discipline",
@@ -129,7 +130,12 @@ describe("managed agent prompts", () => {
     expect(normalized).toContain(
       "Keep system-level prompts and workflow artifacts in English unless their owning format requires otherwise",
     );
-    expect(normalized).toContain("Follow the concrete work policy supplied for this session");
+    expect(normalized).toContain(
+      "Follow the work policy in this prompt or supplied for this session",
+    );
+    expect(normalized).toContain(
+      "Perform repository exploration, investigation, planning, implementation, and verification in the current session",
+    );
     expect(normalized).toContain(
       "For questions, reviews, investigations, and planning requests, present the requested findings or plan",
     );

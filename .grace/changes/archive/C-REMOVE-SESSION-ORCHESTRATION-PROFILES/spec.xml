@@ -1,0 +1,50 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-REMOVE-SESSION-ORCHESTRATION-PROFILES>
+    <Summary>Remove session-wide orchestration profiles and select execution behavior per request or plan.</Summary>
+    <Problem>Session-wide policies inject delegation and review instructions into ordinary requests and tie model presets to unrelated work decisions. Switching a profile can also change the cached request prefix.</Problem>
+    <Goals>
+      <Goal>Remove the four profiles as a public CLI and configuration choice, without removing subagents or tracked workflows.</Goal>
+      <Goal>Keep one short controller default in the stable managed controller system prompt and deliver detailed execution and review guidance on demand through existing skills and references.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>Ordinary implementation stays in the current session unless the user requests delegation or a selected plan calls for it. Bounded search assistance does not select an execution mode.</Constraint>
+      <Constraint>Use an explicit, conservative migration for legacy config. Preserve roles, presets, plugin toggles, unrelated configuration and persisted workflow obligations.</Constraint>
+      <Constraint>Do not automatically rewrite the prompt prefix of previously bound families. Define a documented transition boundary to the new behavior.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>No replacement profile command, new skills mirroring former profiles, or changes to agent capabilities, acceptance gates, mandatory review or bounded recovery.</NonGoal>
+      <NonGoal>No guarantee of provider cache hits independent of provider behavior or unrelated changes to the model request.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>No profile choice remains reachable: the vvoc orchestration command is removed, CLI help, completion, status, config and presets do not offer orchestration profiles, vvoc session set has no profile action, the TUI /vv-settings command offers no profile action, and README no longer documents profiles. Model assignment and other session settings still work.</Criterion>
+      <Criterion>New session families never receive profile-derived orchestration text appended to user messages or injected outside the stable system prompt, and no profile-specific workflow protocol is injected. The single short controller default is part of the stable managed controller system prompt shared by all families without a recorded profile. Selecting a plan execution mode does not rewrite the existing prefix or change the tool definitions solely because of that selection.</Criterion>
+      <Criterion>Existing vv-execute supports inline, classic and delegated execution per plan without consulting a session-wide profile; vv-review still supports review-only work. Ordinary requests contain no workflow protocol, and no work item or checkpoint is opened unless the user explicitly requests execution or review or a selected approved plan calls for it.</Criterion>
+      <Criterion>Legacy vvoc config documents containing root or per-preset orchestration sections migrate through one explicit conservative host-gated vvoc sync step that runs before strict vvoc.json validation, covers project and global documents, removes only those sections, preserves roles, presets, plugin toggles and unrelated configuration verbatim, writes a timestamped backup, and reports what changed. Strict parsing outside that path fails loudly on documents that still contain orchestration sections, the canonical schema stays strict v3, and README documents the migration step.</Criterion>
+      <Criterion>A family whose recorded settings already contain a profile keeps its previously resolved request-shaping behavior: the profile-derived tail text and workflow-protocol variant remain its only execution-behavior guidance, and the new short controller default is not additionally projected for that family. This holds until the user explicitly rewrites that family's recorded settings through any vvoc session set change or /vv-settings action, including pull-defaults, or until the family root is no longer resolvable through lineage. New families and explicitly rewritten records record no profile and never receive profile-derived text. The recorded profile field of the session-owned family settings is the documented boundary marker, and README documents the transition.</Criterion>
+      <Criterion>The context-inspection policy projection accepts family settings records without a profile and projects roles and plugins without a profile field, so the /context policy view keeps working for new families.</Criterion>
+      <Criterion>Registered acceptance, review, blocker and recovery obligations remain mechanically enforced, including when resuming existing work.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-CLI-ORCHESTRATION />
+      <M-CLI-COMMANDS />
+      <M-ORCHESTRATION-PROFILES />
+      <M-CLI-CONFIG />
+      <M-CLI-PRESET />
+      <M-VVOC-PRESET-REGISTRY />
+      <M-CLI-COMPLETION />
+      <M-CLI-MANAGED-SKILLS />
+      <M-CLI-MANAGED-AGENTS />
+      <M-PLUGIN-CONTEXT-TUI />
+      <M-NATIVE-RUNTIME />
+      <M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+      <M-PLUGIN-WORKFLOW />
+      <M-WORKFLOW-EXECUTION />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>bun run release:check</ExpectedCommand>
+      <ExpectedEvidence>Exercise the host-gated sync migration of legacy config (timestamped backup, change report, loud failure outside the migration path), retired profile surfaces (orchestration command, session set profile action, /vv-settings profile action, completions, README), preserved model selection, absence of tail injection across turns, unchanged request prefix and tool definitions at plan selection, existing-family compatibility keyed on the recorded profile marker including exemption from the new short default, the context-inspection policy view for records without a profile, and resumed work obligations. Report provider cache-read measurements if observed, separately from request-shape evidence.</ExpectedEvidence>
+    </VerificationIntent>
+  </C-REMOVE-SESSION-ORCHESTRATION-PROFILES>
+</GraceChangeSpec>

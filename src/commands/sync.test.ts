@@ -1,8 +1,8 @@
 // FILE: src/commands/sync.test.ts
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify sync command behavior for strict current-only vvoc config handling and managed TUI registration.
-//   SCOPE: Command-level invalid existing config rejection without rewrite, preservation of valid current plugin toggles, and conservative dedicated tui.json(c) sync.
+//   PURPOSE: Verify sync command behavior for strict current-only vvoc config handling, explicit legacy orchestration migration, and managed TUI registration.
+//   SCOPE: Command-level invalid existing config rejection without rewrite, legacy orchestration migration with backup, preservation of valid current plugin toggles, and conservative dedicated tui.json(c) sync.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/commands/sync.ts, src/lib/vvoc-config.ts]
 //   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG, V-M-CLI-COMMANDS, V-M-CLI-CONFIG]
 //   ROLE: TEST
@@ -216,6 +216,38 @@ test("sync command leaves a V1 config untouched when the host is out of window",
       ),
     ).rejects.toThrow();
     expect(await readFile(opencodePath, "utf8")).toBe(original);
+  } finally {
+    await rm(configHome, { recursive: true, force: true });
+  }
+});
+
+test("sync migrates legacy orchestration sections with a backup and completes", async () => {
+  const configHome = await mkdtemp(join(tmpdir(), "vvoc-sync-orchestration-"));
+
+  try {
+    const vvocDir = join(configHome, "vvoc");
+    const vvocConfigPath = join(vvocDir, "vvoc.json");
+    await mkdir(vvocDir, { recursive: true });
+    const legacy = createDefaultVvocConfig() as ReturnType<typeof createDefaultVvocConfig> &
+      Record<string, unknown>;
+    legacy.orchestration = { profile: "balanced" };
+    const legacyPresets = legacy.presets as unknown as Record<string, Record<string, unknown>>;
+    legacyPresets["vv-codex"] = {
+      ...legacyPresets["vv-codex"],
+      orchestration: { profile: "single-session" },
+    };
+    const original = `${JSON.stringify(legacy, null, 2)}\n`;
+    await writeFile(vvocConfigPath, original, "utf8");
+
+    await captureConsoleLog(() => runSyncCommand({ scope: "global", "config-dir": configHome }));
+
+    const synced = JSON.parse(await readFile(vvocConfigPath, "utf8")) as Record<string, unknown>;
+    expect(synced).not.toHaveProperty("orchestration");
+    const syncedPresets = synced.presets as Record<string, Record<string, unknown>>;
+    expect(syncedPresets["vv-codex"]).not.toHaveProperty("orchestration");
+    const backups = (await readdir(vvocDir)).filter((name) => name.includes("vvoc-backup"));
+    expect(backups).toHaveLength(1);
+    expect(await readFile(join(vvocDir, backups[0]!), "utf8")).toBe(original);
   } finally {
     await rm(configHome, { recursive: true, force: true });
   }

@@ -24,7 +24,6 @@
 //   NativeWorkflowHarnessPlugin - Native fixture plugin surface that runs the real WorkflowPlugin.setup.
 //   NativeEventQueue - Queue delivering native plugin events to the async event stream.
 //   deriveSubagentChildId - Derive the child session id from tracked subagent output.
-//   writeWorkflowProfile - Writes an isolated workflow orchestration profile.
 //   NativeToolInfo - Registered native tool shape inspected by the fake editor.
 //   NativeFakeToolEditor - Minimal native tool editor double used by the harness.
 //   createWorkflowPluginHarness - Creates an isolated workflow plugin harness with optional scripted continuation responses.
@@ -70,7 +69,7 @@ interface PermissionRule {
   readonly effect: "allow" | "deny" | "ask";
 }
 import { z } from "zod";
-import { loadVvocConfig, resetVvocConfigForTests } from "../lib/config-layers.js";
+import { resetVvocConfigForTests } from "../lib/config-layers.js";
 import type { OrchestrationProfile } from "../lib/orchestration.js";
 import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
 import { createWorkflowPlugin } from "./workflow/index.js";
@@ -1539,16 +1538,6 @@ function deriveSubagentChildId(output: string): string | undefined {
   return undefined;
 }
 
-function writeWorkflowProfile(profile: OrchestrationProfile): void {
-  const configHome = process.env.XDG_CONFIG_HOME;
-  if (!configHome) throw new Error("XDG_CONFIG_HOME required for workflow test");
-  const config = createDefaultVvocConfig();
-  config.orchestration = { profile };
-  const configDir = join(configHome, "vvoc");
-  mkdirSync(configDir, { recursive: true });
-  writeFileSync(join(configDir, "vvoc.json"), renderVvocConfig(config), "utf8");
-}
-
 type NativeToolInfo = {
   name: string;
   execute: (input: unknown, context: unknown) => Promise<unknown>;
@@ -1568,10 +1557,21 @@ async function createWorkflowPluginHarness(
   options?: {
     promptResponses?: PromptScriptEntry[];
     sessions?: Record<string, Record<string, unknown>>;
-    captures?: Record<string, { vvoc: ReturnType<typeof createDefaultVvocConfig> }>;
+    captures?: Record<
+      string,
+      {
+        vvoc: ReturnType<typeof createDefaultVvocConfig>;
+        settings?: {
+          version: 1;
+          roles: Record<string, string>;
+          plugins: Record<string, boolean>;
+          profile?: OrchestrationProfile;
+        };
+      }
+    >;
   },
 ): Promise<WorkflowPluginHarness> {
-  if (profile) writeWorkflowProfile(profile);
+  resetVvocConfigForTests();
   const logs: string[] = workflowLogs;
   workflowLogs.length = 0;
   const promptCalls: Array<{ sessionID: string; text: string }> = [];
@@ -1678,17 +1678,27 @@ async function createWorkflowPluginHarness(
     },
   };
 
-  const loaded = await loadVvocConfig({ cwd: "/tmp/project" });
+  const baseConfig = createDefaultVvocConfig();
+  const defaultSettings = {
+    version: 1 as const,
+    roles: {} as Record<string, string>,
+    plugins: {} as Record<string, boolean>,
+    ...(profile === undefined ? {} : { profile }),
+  };
   const captures = options?.captures ?? {};
-  const defaultCapture = { vvoc: loaded.config };
+  const defaultCapture = { vvoc: baseConfig, settings: defaultSettings };
   const fakeRuntime = {
     settings: {
       // Tests explicitly bind a fixture policy per session; absence is only
       // used by the disabled/unbound regression and fails closed in production.
-      configFor: async (sessionID: string) => captures[sessionID] ?? defaultCapture,
+      configFor: async (sessionID: string) => {
+        const capture = captures[sessionID];
+        if (capture === undefined) return defaultCapture;
+        return { vvoc: capture.vvoc, settings: capture.settings ?? defaultSettings };
+      },
     },
     client: async () => fakeClient,
-    effectiveConfig: () => ({ vvoc: loaded.config }),
+    effectiveConfig: () => ({ vvoc: baseConfig }),
     release: async () => undefined,
   };
 
@@ -2368,7 +2378,7 @@ describe("workflow plugin integration", () => {
   });
 
   test("workflow tools and guidance are restricted to vv-controller", async () => {
-    const { plugin } = await createWorkflowPluginHarness();
+    const { plugin } = await createWorkflowPluginHarness("balanced");
     await expect(
       plugin.tool?.work_item_open?.execute(
         {
@@ -2441,10 +2451,13 @@ describe("workflow plugin integration", () => {
 
   test("a family with recorded settings keeps its profile while new work sees the changed policy", async () => {
     resetVvocConfigForTests();
-    const recorded = createDefaultVvocConfig();
-    recorded.orchestration = { profile: "orchestrated" };
     const { plugin } = await createWorkflowPluginHarness("single-session", {
-      captures: { "session-bound": { vvoc: recorded } },
+      captures: {
+        "session-bound": {
+          vvoc: createDefaultVvocConfig(),
+          settings: { version: 1, roles: {}, plugins: {}, profile: "orchestrated" },
+        },
+      },
     });
 
     const bound = {
@@ -3210,7 +3223,6 @@ workflowSmokeDescribe("real OpenCode 2.0.18 workflow smoke (actual built plugin)
         "utf8",
       );
       const vvocConfig = createDefaultVvocConfig();
-      vvocConfig.orchestration = { profile: "orchestrated" };
       writeFileSync(join(project, ".vvoc", "vvoc.json"), renderVvocConfig(vvocConfig), "utf8");
 
       procs.spawn(

@@ -2,7 +2,7 @@
 // VERSION: 0.4.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Describe vvoc-managed OpenCode agent prompts and load them from bundled templates or scoped vvoc config roots.
-//   SCOPE: Built-in primary/subagent metadata, managed prompt names, prompt file path resolution, bundled template loading (including the complete canonical seven-section controller prompt also projected by system-context-injection), and project/global prompt lookup.
+//   SCOPE: Built-in primary/subagent metadata, managed prompt names, prompt file path resolution, bundled template loading (including the complete canonical controller prompt with its stable work-policy-default section also projected by system-context-injection), and project/global prompt lookup.
 //   DEPENDS: [node:fs/promises, node:path, src/lib/vvoc-paths.ts]
 //   LINKS: M-CLI-MANAGED-AGENTS, M-CLI-CONFIG, M-PLUGIN-GUARDIAN
 //   ROLE: RUNTIME

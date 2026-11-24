@@ -373,7 +373,7 @@ export function isMeaningfulFamilySettingsView(value: unknown): value is Record<
   if (!isRecord(value.settings)) return false;
   if (value.settings.version !== 1) return false;
   if (!isRecord(value.settings.roles) || !isRecord(value.settings.plugins)) return false;
-  if (typeof value.settings.profile !== "string" || value.settings.profile.length === 0) {
+  if (value.settings.profile !== undefined && !nonEmptyString(value.settings.profile)) {
     return false;
   }
   if (!isRecord(value.vvoc) || !isRecord(value.vvoc.plugins)) return false;

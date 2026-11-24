@@ -1,7 +1,7 @@
 // FILE: src/plugins/system-context-injection.integration.test.ts
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Verify canonical seven-section controller assembly, shared primary guidance preservation, and concrete controller policy delivery at the request tail.
+//   PURPOSE: Verify canonical controller assembly including the stable work-policy-default fragment, shared primary guidance preservation, and legacy recorded-profile policy delivery at the request tail.
 //   SCOPE: Exact bundled-template assembly and repeated-hook idempotence across all profiles; preserved memory, evidence, assumptions, counterexample, drift thresholds and authority guidance; controller-only instruction isolation; explore and other subagent exclusions; registry recovery; disabled/unknown no-op.
 //   DEPENDS: [bun:test, src/lib/managed-agents.ts, src/lib/orchestration.ts, src/lib/vvoc-config.ts, src/plugins/system-context-injection/index.ts]
 //   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, M-ORCHESTRATION-PROFILES, V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION]
@@ -64,7 +64,6 @@ async function makeHarness(
   } = {},
 ) {
   const config: VvocConfig = createDefaultVvocConfig();
-  config.orchestration = { profile: options.profile ?? "balanced" };
   if (options.enabled === false) {
     config.plugins = { ...config.plugins, "system-context-injection": false };
   }
@@ -78,10 +77,16 @@ async function makeHarness(
   };
   const hooks = new Map<string, (event: NativeContextEvent) => Promise<void> | void>();
   let released = false;
+  const settings = {
+    version: 1,
+    roles: {},
+    plugins: {},
+    ...(options.profile === undefined ? {} : { profile: options.profile }),
+  };
   const fakeRuntime = {
     settings: {
       configFor: async () =>
-        policy === "unknown" ? undefined : { familyId: "fam-1", vvoc: config },
+        policy === "unknown" ? undefined : { familyId: "fam-1", settings, vvoc: config },
     },
     release: async () => {
       released = true;
@@ -378,11 +383,35 @@ describe("SystemContextInjectionPlugin", () => {
     expect(tail.match(/Keep architecture, critical code reading/g)).toHaveLength(1);
   });
 
-  test("assembled controller preserves the approved seven sections once for every profile", async () => {
+  test("a family without a recorded profile receives the stable default and no tail policy", async () => {
+    const harness = await makeHarness();
+    const event = await harness.inject("vv-controller");
+    const system = systemText(event);
+    const tail = tailText(event);
+
+    expect(system).toContain("<work_policy_default>");
+    expect(system.replace(/\s+/g, " ")).toContain(
+      "Perform repository exploration, investigation, planning, implementation, and verification in the current session",
+    );
+    expect(tail).toBe("");
+  });
+
+  test("a legacy recorded profile keeps its tail policy and receives no stable default", async () => {
+    const harness = await makeHarness({ profile: "delegated" });
+    const event = await harness.inject("vv-controller");
+    const system = systemText(event);
+    const tail = tailText(event);
+
+    expect(system).not.toContain("<work_policy_default>");
+    expect(tail).toContain("Keep architecture, important code reading, task contracts");
+  });
+
+  test("assembled controller preserves the approved sections once for every profile", async () => {
     const template = await loadManagedAgentPromptTemplate("vv-controller");
     const prompt = template.replace(/^---\n[\s\S]*?\n---\n/, "").trim();
     const tags = [
       "task_and_scope",
+      "work_policy_default",
       "project_context",
       "repository_memory",
       "evidence_discipline",

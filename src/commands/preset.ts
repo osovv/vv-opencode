@@ -1,9 +1,9 @@
 // FILE: src/commands/preset.ts
 // VERSION: 0.5.0
 // START_MODULE_CONTRACT
-//   PURPOSE: List, show, and atomically apply declarative role and orchestration presets from scoped vvoc.json layers.
-//   SCOPE: Effective/global/project preset lookup, preset rendering, and conservative role plus optional orchestration writes.
-//   DEPENDS: [citty, node:fs/promises, src/lib/config-layers.ts, src/lib/model-roles.ts, src/lib/opencode.ts, src/lib/orchestration.ts, src/lib/vvoc-config.ts]
+//   PURPOSE: List, show, and atomically apply declarative role presets from scoped vvoc.json layers.
+//   SCOPE: Effective/global/project preset lookup, preset rendering, and conservative role writes.
+//   DEPENDS: [citty, node:fs/promises, src/lib/config-layers.ts, src/lib/model-roles.ts, src/lib/opencode.ts, src/lib/vvoc-config.ts]
 //   LINKS: [M-CLI-PRESET, M-CLI-CONFIG, M-ORCHESTRATION-PROFILES, M-CLI-COMMANDS]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -14,13 +14,12 @@
 //   listConfiguredPresets - Returns configured presets in deterministic name order.
 //   resolvePreset - Validates a preset name and returns the matching preset.
 //   formatPreset - Renders a preset object as JSON for CLI output.
-//   AppliedPresetOrchestrationChange - Reports whether a preset changed, kept, or omitted orchestration.
-//   AppliedPresetChange - Summarizes role and orchestration changes made by one preset application.
-//   applyPreset - Validates and atomically applies listed roles plus an optional orchestration profile.
+//   AppliedPresetChange - Summarizes role changes made by one preset application.
+//   applyPreset - Validates and atomically applies listed roles.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SESSION-OWNED-SETTINGS T-004 - Removed the --force/--session rebind flags; running families keep their birth settings and only explicit session-settings commands change them.]
+//   LAST_CHANGE: [C-REMOVE-SESSION-ORCHESTRATION-PROFILES T-002 - Preset application and reporting cover roles only; presets no longer select or report an orchestration profile.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -33,11 +32,6 @@ import {
 } from "../lib/config-layers.js";
 import { parseModelSelection } from "../lib/model-roles.js";
 import { resolvePaths } from "../lib/opencode.js";
-import {
-  createOrchestrationConfig,
-  parseOrchestrationProfile,
-  type OrchestrationProfile,
-} from "../lib/orchestration.js";
 import {
   createDefaultVvocConfig,
   validateVvocConfigDocument,
@@ -55,12 +49,6 @@ export type AppliedPresetChange = {
   roleId: string;
   model: string;
   action: "updated" | "kept";
-};
-
-/** Result of applying the optional orchestration part of a preset. */
-export type AppliedPresetOrchestrationChange = {
-  profile: OrchestrationProfile;
-  action: "updated" | "kept" | "unchanged";
 };
 
 const commandArg = {
@@ -140,7 +128,6 @@ export async function applyPreset(
   name: string;
   preset: VvocPreset;
   changes: AppliedPresetChange[];
-  orchestration: AppliedPresetOrchestrationChange;
   path: string;
 }> {
   const { config, paths, currentText } = await loadScopedVvocConfigForWrite(options);
@@ -154,14 +141,6 @@ export async function applyPreset(
       return { roleId, model };
     },
   );
-  const currentProfile = createOrchestrationConfig(config.orchestration).profile;
-  const declaredProfile =
-    resolved.preset.orchestration === undefined
-      ? undefined
-      : parseOrchestrationProfile(
-          resolved.preset.orchestration.profile,
-          `preset ${resolved.name} orchestration`,
-        );
   const nextRoles: Record<string, string> = { ...config.roles };
   const changes: AppliedPresetChange[] = [];
 
@@ -171,22 +150,13 @@ export async function applyPreset(
     changes.push({ roleId, model, action });
   }
 
-  const orchestration: AppliedPresetOrchestrationChange = declaredProfile
-    ? {
-        profile: declaredProfile,
-        action: declaredProfile === currentProfile ? "kept" : "updated",
-      }
-    : { profile: currentProfile, action: "unchanged" };
   const changed =
-    currentText === undefined ||
-    changes.some((change) => change.action === "updated") ||
-    orchestration.action === "updated";
+    currentText === undefined || changes.some((change) => change.action === "updated");
 
   if (changed) {
     const nextConfig: VvocConfig = {
       ...config,
       roles: nextRoles,
-      ...(declaredProfile ? { orchestration: { profile: declaredProfile } } : {}),
     };
     await mkdir(dirname(paths.vvocConfigPath), { recursive: true });
     await writeFile(paths.vvocConfigPath, `${JSON.stringify(nextConfig, null, 2)}\n`, "utf8");
@@ -196,7 +166,6 @@ export async function applyPreset(
     name: resolved.name,
     preset: resolved.preset,
     changes,
-    orchestration,
     path: paths.vvocConfigPath,
   };
 }
@@ -229,10 +198,7 @@ async function runPresetCommand(args: Record<string, unknown>): Promise<void> {
     for (const { name, preset } of presets) {
       const description = preset.description ? ` - ${preset.description}` : "";
       const roleCount = Object.keys(preset.agents).length;
-      const profile = preset.orchestration?.profile ?? "unchanged";
-      console.log(
-        `  ${name}${description} (${roleCount} role${roleCount === 1 ? "" : "s"}, profile ${profile})`,
-      );
+      console.log(`  ${name}${description} (${roleCount} role${roleCount === 1 ? "" : "s"})`);
     }
     return;
   }
@@ -266,16 +232,10 @@ async function runPresetCommand(args: Record<string, unknown>): Promise<void> {
   for (const change of applied.changes) {
     console.log(`  ${change.roleId}: ${change.action} (${change.model})`);
   }
-  console.log(
-    `  orchestration: ${applied.orchestration.action} (${applied.orchestration.profile})`,
-  );
   console.log(`Target: ${applied.path}`);
-  if (
-    applied.changes.some((change) => change.action === "updated") ||
-    applied.orchestration.action === "updated"
-  ) {
+  if (applied.changes.some((change) => change.action === "updated")) {
     console.log(
-      "The config watcher applies changed roles or the orchestration profile to new sessions; running session families keep the settings they were born with until an explicit `vvoc session set` or `/vv-settings` change.",
+      "The config watcher applies changed roles to new sessions; running session families keep the settings they were born with until an explicit `vvoc session set` or `/vv-settings` change.",
     );
   }
 }

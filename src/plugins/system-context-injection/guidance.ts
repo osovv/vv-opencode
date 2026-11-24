@@ -2,7 +2,7 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Project controller and shared-primary instruction sets from the canonical bundled controller template.
-//   SCOPE: LF/CRLF-tolerant extraction of the seven approved sections; shared project/memory/evidence/working-cycle sections; source/review/autonomy/reporting bullets and delivery sentence without controller role, dispatch or recovery instructions. Missing, duplicate or incomplete canonical fragments fail explicitly.
+//   SCOPE: LF/CRLF-tolerant extraction of the approved controller sections plus the stable work-policy-default fragment; shared project/memory/evidence/working-cycle sections; source/review/autonomy/reporting bullets and delivery sentence without controller role, dispatch or recovery instructions. Missing, duplicate or incomplete canonical fragments fail explicitly.
 //   DEPENDS: [templates/agents/vv-controller.md]
 //   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, M-CLI-MANAGED-AGENTS, V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION]
 //   ROLE: RUNTIME
@@ -10,17 +10,18 @@
 // END_MODULE_CONTRACT
 //
 // START_MODULE_MAP
-//   PrimarySystemContexts - Controller sections and shared-primary projection.
-//   createPrimarySystemContexts - Derives both sets from one supplied canonical template.
+//   PrimarySystemContexts - Controller sections, the work-policy default, and shared-primary projection.
+//   createPrimarySystemContexts - Derives all sets from one supplied canonical template.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Single-source the approved wording while keeping controller-only instructions out of other primary agents.]
+//   LAST_CHANGE: [C-REMOVE-SESSION-ORCHESTRATION-PROFILES T-003 - Added the stable work-policy-default fragment, projected separately so families without a recorded profile receive it and legacy families keep their tail policy instead.]
 // END_CHANGE_SUMMARY
 
 export interface PrimarySystemContexts {
   controller: readonly string[];
   universal: readonly string[];
+  workPolicyDefault: string;
 }
 
 // START_BLOCK_CANONICAL_PROJECTION
@@ -42,6 +43,7 @@ export function createPrimarySystemContexts(template: string): PrimarySystemCont
   const cycle = section("working_cycle");
   const delegation = section("delegation_and_workflow");
   const communication = section("communication");
+  const workPolicyDefault = section("work_policy_default");
   const paragraphs = delegation.split("\n").slice(1, -1).join("\n").split("\n\n");
   const sharedAuthority = [
     "Keep requirement source,",
@@ -68,6 +70,7 @@ export function createPrimarySystemContexts(template: string): PrimarySystemCont
       delegation,
       communication,
     ],
+    workPolicyDefault,
     universal: [
       project,
       memory,

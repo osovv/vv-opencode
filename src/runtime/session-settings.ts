@@ -2,7 +2,7 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Own the session-owned family settings record stored in native session metadata: the narrow resolved record format, strict decode, birth from the effective configuration, family-root lineage resolution, read-modify-write metadata merging, the projected consumer view with live credentials, and the one-shot legacy-binding migration.
-//   SCOPE: Pure record/projection/lineage helpers plus the file-backed legacy bindings reader and migration converter. Family settings are resolved values only (roles, orchestration profile, plugin toggle booleans, optional preset name) and never carry credential values. No host session access of its own: callers supply session reads and metadata writes, so this module never talks to the host client and never persists anything except through injected write callbacks.
+//   SCOPE: Pure record/projection/lineage helpers plus the file-backed legacy bindings reader and migration converter. Family settings are resolved values only (roles, optional legacy orchestration profile, plugin toggle booleans, optional preset name) and never carry credential values. A profile is decoded only when a legacy record still carries one and is never written by new or rewritten records. No host session access of its own: callers supply session reads and metadata writes, so this module never talks to the host client and never persists anything except through injected write callbacks.
 //   DEPENDS: [node:crypto, node:fs/promises, node:path, src/lib/orchestration.ts, src/lib/plugin-toggle-config.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts, src/runtime/types.ts]
 //   LINKS: [M-NATIVE-RUNTIME, V-M-NATIVE-RUNTIME]
 //   ROLE: RUNTIME
@@ -44,11 +44,7 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  createOrchestrationConfig,
-  parseOrchestrationProfile,
-  type OrchestrationProfile,
-} from "../lib/orchestration.js";
+import { parseOrchestrationProfile, type OrchestrationProfile } from "../lib/orchestration.js";
 import { isPluginEnabled, PLUGIN_TOGGLE_NAMES } from "../lib/plugin-toggle-config.js";
 import type { VvocConfig } from "../lib/vvoc-config.js";
 import { getGlobalVvocDataDir } from "../lib/vvoc-paths.js";
@@ -81,8 +77,8 @@ export interface FamilySettings {
   readonly preset?: string | undefined;
   /** Resolved role-id to canonical model-selection strings. */
   readonly roles: Readonly<Record<string, string>>;
-  /** Resolved orchestration profile name. */
-  readonly profile: OrchestrationProfile;
+  /** Legacy recorded orchestration profile; new and rewritten records never carry one. */
+  readonly profile?: OrchestrationProfile | undefined;
   /** Resolved plugin toggle booleans for the vvoc-managed plugin names. */
   readonly plugins: Readonly<Record<string, boolean>>;
 }
@@ -159,11 +155,13 @@ export function decodeFamilySettings(value: unknown):
   }
   if (!isRoleMap(value.roles)) return { error: "roles are not a nonempty-string map" };
   if (!isToggleMap(value.plugins)) return { error: "plugins are not a boolean map" };
-  let profile: OrchestrationProfile;
-  try {
-    profile = parseOrchestrationProfile(value.profile, "decode family settings");
-  } catch {
-    return { error: `unknown orchestration profile ${String(value.profile)}` };
+  let profile: OrchestrationProfile | undefined;
+  if (value.profile !== undefined) {
+    try {
+      profile = parseOrchestrationProfile(value.profile, "decode family settings");
+    } catch {
+      return { error: `unknown orchestration profile ${String(value.profile)}` };
+    }
   }
   const preset = value.preset;
   if (preset !== undefined && (typeof preset !== "string" || preset.trim().length === 0)) {
@@ -173,7 +171,7 @@ export function decodeFamilySettings(value: unknown):
     settings: {
       version: FAMILY_SETTINGS_VERSION,
       roles: { ...value.roles },
-      profile,
+      ...(profile === undefined ? {} : { profile }),
       plugins: { ...value.plugins },
       ...(preset === undefined ? {} : { preset: preset.trim() }),
     },
@@ -185,7 +183,6 @@ export function settingsFromConfig(config: VvocConfig): FamilySettings {
   return {
     version: FAMILY_SETTINGS_VERSION,
     roles: { ...config.roles },
-    profile: createOrchestrationConfig(config.orchestration).profile,
     plugins: Object.fromEntries(
       PLUGIN_TOGGLE_NAMES.map((name) => [name, isPluginEnabled(config, name)]),
     ),
@@ -244,14 +241,14 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 /**
  * Project family settings over the live effective configuration for plugin
  * consumers. The live document is deep-cloned and only the family-governed
- * fields are overridden: roles, orchestration profile, and plugin toggle
- * booleans. Detail inside object-valued plugin entries (schedules, modes,
- * budgets) and every credential keep coming from the live configuration.
+ * fields are overridden: roles and plugin toggle booleans. Detail inside
+ * object-valued plugin entries (schedules, modes, budgets) and every credential
+ * keep coming from the live configuration. A recorded legacy profile is read
+ * from the settings record itself, never projected into the config document.
  */
 export function projectFamilyConfig(settings: FamilySettings, live: VvocConfig): VvocConfig {
   const projected = structuredClone(live);
   projected.roles = { ...settings.roles };
-  projected.orchestration = { profile: settings.profile };
   const livePlugins = isPlainRecord(projected.plugins) ? { ...projected.plugins } : {};
   for (const [name, enabled] of Object.entries(settings.plugins)) {
     const liveEntry = livePlugins[name];
@@ -474,6 +471,21 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Read the orchestration profile declared by a legacy binding snapshot. A
+ * migrated family was previously bound to that profile, so the converted record
+ * keeps it as the documented boundary marker unless it is unreadable.
+ */
+function legacyRecordedProfile(policy: Record<string, unknown>): OrchestrationProfile | undefined {
+  const orchestration = policy.orchestration;
+  if (!isPlainObject(orchestration)) return undefined;
+  try {
+    return parseOrchestrationProfile(orchestration.profile, "legacy bindings snapshot");
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Convert legacy family bindings into root metadata and prune the legacy
  * directories only after every convertible family was written. Dead roots and
  * unreadable legacy snapshots are skipped (there is nothing to convert), while
@@ -517,9 +529,14 @@ export async function migrateFamilyBindings(deps: {
         skipped.push(family.familyId);
         continue;
       }
+      const legacyPolicy = snapshot.policy;
+      const resolvedSettings = settingsFromConfig(legacyPolicy as unknown as VvocConfig);
+      const recordedProfile = legacyRecordedProfile(legacyPolicy);
       await deps.writeSettings(
         family.familyId,
-        settingsFromConfig(snapshot.policy as unknown as VvocConfig),
+        recordedProfile === undefined
+          ? resolvedSettings
+          : { ...resolvedSettings, profile: recordedProfile },
       );
       converted.push(family.familyId);
     } catch {

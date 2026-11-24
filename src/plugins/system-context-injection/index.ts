@@ -1,8 +1,8 @@
 // FILE: src/plugins/system-context-injection/index.ts
 // VERSION: 2.1.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Deliver canonical controller guidance and its shared primary projection once, plus the session-settings-resolved controller policy at the request tail, through the native session context hook.
-//   SCOPE: Startup-local bundled guidance loading; line-ending-tolerant exact-text deduplication against the complete seven-section controller template without rewriting host content; shared project, memory, evidence, working-cycle, authority and delivery guidance for other primary agents; controller-only task/delegation/communication isolation; explore guidance exception; all other subagent and internal-agent exclusions; fresh registry reads; session settings and plugin toggle resolution; transient user-tail policy; lifecycle cleanup. Native skill discovery and workflow protocol injection retain their existing owners.
+//   PURPOSE: Deliver canonical controller guidance, its shared primary projection, and the stable work-policy default once, plus the legacy recorded-profile controller policy at the request tail, through the native session context hook.
+//   SCOPE: Startup-local bundled guidance loading; line-ending-tolerant exact-text deduplication against the complete controller template without rewriting host content; shared project, memory, evidence, working-cycle, authority and delivery guidance for other primary agents; controller-only task/delegation/communication isolation; stable work-policy default for families without a recorded profile; explore guidance exception; all other subagent and internal-agent exclusions; fresh registry reads; session settings and plugin toggle resolution; transient user-tail policy for families with a recorded profile only; lifecycle cleanup. Native skill discovery and workflow protocol injection retain their existing owners.
 //   DEPENDS: [@opencode/plugin, src/lib/managed-agents.ts, src/lib/orchestration.ts, src/runtime/context.ts, src/runtime/session-settings.ts, ./guidance.ts]
 //   LINKS: [M-PLUGIN-SYSTEM-CONTEXT-INJECTION, M-ORCHESTRATION-PROFILES, M-CLI-MANAGED-AGENTS, M-NATIVE-RUNTIME, V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION]
 //   ROLE: RUNTIME
@@ -17,7 +17,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Use the approved controller template as the single wording source, project shared instructions to other primaries, and avoid reinjecting sections already supplied by the host.]
+//   LAST_CHANGE: [C-REMOVE-SESSION-ORCHESTRATION-PROFILES T-001 - The tail policy resolves only from a profile recorded on the family root; a record without one receives no tail policy.]
 // END_CHANGE_SUMMARY
 
 import { SystemPart } from "@opencode/ai";
@@ -27,7 +27,7 @@ import {
   MANAGED_SUBAGENT_NAMES,
 } from "../../lib/managed-agents.js";
 import {
-  resolveOrchestrationPolicy,
+  policyForRecordedProfile,
   type ResolvedOrchestrationPolicy,
 } from "../../lib/orchestration.js";
 import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
@@ -107,23 +107,29 @@ async function shouldInjectForAgent(
 function getSystemContextsForAgent(
   agentName: string | undefined,
   guidance: PrimarySystemContexts,
+  includeWorkPolicyDefault: boolean,
 ): readonly string[] {
   if (agentName === EXPLORE_SUBAGENT) {
     return EXPLORE_SYSTEM_CONTEXTS;
   }
-  return agentName === VV_CONTROLLER_AGENT ? guidance.controller : guidance.universal;
+  if (agentName !== VV_CONTROLLER_AGENT) return guidance.universal;
+  if (!includeWorkPolicyDefault) return guidance.controller;
+  // The stable default follows the task/scope section, inside the cached prefix.
+  return [guidance.controller[0]!, guidance.workPolicyDefault, ...guidance.controller.slice(1)];
 }
 
 /**
- * Returns the variable orchestration policy for one agent, or undefined when the
- * agent gets none. It is injected at the request tail, never into the system
- * prefix, so changing the profile does not invalidate the cached prefix.
+ * Returns the variable legacy orchestration policy for one agent, or undefined
+ * when the agent gets none or the family records no profile. It is injected at
+ * the request tail, never into the system prefix, so changing the profile does
+ * not invalidate the cached prefix; families without a recorded profile receive
+ * no tail policy at all.
  */
 function getTailPolicyForAgent(
   agentName: string | undefined,
-  policy: ResolvedOrchestrationPolicy,
+  policy: ResolvedOrchestrationPolicy | undefined,
 ): string | undefined {
-  if (agentName !== VV_CONTROLLER_AGENT) return undefined;
+  if (agentName !== VV_CONTROLLER_AGENT || policy === undefined) return undefined;
   return policy.controllerSystemContext;
 }
 // END_BLOCK_AGENT_FILTERS
@@ -180,10 +186,10 @@ function appendTailContext(
 // END_BLOCK_SYSTEM_CONTEXT_FORMATTING
 
 // START_BLOCK_POLICY
-async function resolveCapturedConfig(
+async function resolveCapturedFamily(
   runtime: NativeSnapshotRuntime,
   sessionID: string,
-): Promise<FamilySettingsView["vvoc"] | undefined> {
+): Promise<{ readonly profile: FamilySettingsView["settings"]["profile"] } | undefined> {
   let view: FamilySettingsView | undefined;
   try {
     view = await runtime.settings.configFor(sessionID);
@@ -192,7 +198,7 @@ async function resolveCapturedConfig(
   }
   if (view === undefined) return undefined;
   if (!isVvocPluginEnabled(view.vvoc, "system-context-injection")) return undefined;
-  return view.vvoc;
+  return { profile: view.settings.profile };
 }
 // END_BLOCK_POLICY
 
@@ -247,13 +253,13 @@ export function createSystemContextInjectionPlugin(
         try {
           const agentName = event.agent === undefined ? undefined : String(event.agent);
           if (!(await shouldInjectForAgent(agentName, knownSubagents, agentMode))) return;
-          const config = await resolveCapturedConfig(runtime, String(event.sessionID));
-          if (config === undefined) return;
-          const policy = resolveOrchestrationPolicy(config);
+          const family = await resolveCapturedFamily(runtime, String(event.sessionID));
+          if (family === undefined) return;
+          const policy = policyForRecordedProfile(family.profile);
           if (Array.isArray(event.system)) {
             appendSystemContexts(
               event.system as Array<{ type: "text"; text: string }>,
-              getSystemContextsForAgent(agentName, guidance),
+              getSystemContextsForAgent(agentName, guidance, family.profile === undefined),
             );
           }
           const tail = getTailPolicyForAgent(agentName, policy);

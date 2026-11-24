@@ -110,7 +110,7 @@ import {
   type NativeSnapshotContext,
 } from "../../runtime/context.js";
 import type { EffectiveRuntimeConfig } from "../../runtime/types.js";
-import type { FamilySettingsService } from "../../runtime/session-settings.js";
+import type { FamilySettingsService, FamilySettingsView } from "../../runtime/session-settings.js";
 import {
   createConsoleDiagnosticSink,
   decodeNativeSubagentResult,
@@ -129,7 +129,7 @@ import {
 } from "./cancellation.js";
 import workflowSystemInstructionTemplate from "./system-instruction.md?raw";
 import {
-  resolveOrchestrationPolicy,
+  policyForRecordedProfile,
   type ResolvedOrchestrationPolicy,
 } from "../../lib/orchestration.js";
 import { isVvocPluginEnabled } from "../../lib/plugin-toggle-config.js";
@@ -504,8 +504,8 @@ async function setupWorkflow(
   const WORKFLOW_TOOL_NAMES = workflowToolContracts.map((contract) => contract.toolId);
   async function resolveFamilyPolicy(
     sessionId: string,
-  ): Promise<{ policy: ResolvedOrchestrationPolicy; enabled: boolean } | undefined> {
-    let view: { vvoc: EffectiveRuntimeConfig["vvoc"] } | undefined;
+  ): Promise<{ policy: ResolvedOrchestrationPolicy | undefined; enabled: boolean } | undefined> {
+    let view: FamilySettingsView | undefined;
     try {
       view = await runtime.settings.configFor(sessionId);
     } catch {
@@ -513,11 +513,13 @@ async function setupWorkflow(
     }
     if (view === undefined) return undefined;
     return {
-      policy: resolveOrchestrationPolicy(view.vvoc),
+      policy: policyForRecordedProfile(view.settings.profile),
       enabled: isVvocPluginEnabled(view.vvoc, "workflow"),
     };
   }
-  async function requireFamilyEnabled(sessionId: string): Promise<ResolvedOrchestrationPolicy> {
+  async function requireFamilyEnabled(
+    sessionId: string,
+  ): Promise<ResolvedOrchestrationPolicy | undefined> {
     const family = await resolveFamilyPolicy(sessionId);
     if (family === undefined) {
       throw new WorkflowDiagnosticError(
@@ -2286,6 +2288,7 @@ async function setupWorkflow(
       return;
     }
     if (!shouldInjectForAgent(event.agent)) return;
+    if (family.policy === undefined) return;
     const instruction = getWorkflowSystemInstruction(family.policy);
     event.system.push({ type: "text", text: appendSystemInstruction(undefined, instruction) });
   });

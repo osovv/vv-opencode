@@ -75,7 +75,6 @@
         <V-M-TELEGRAM-DELIVERY />
         <V-M-TELEGRAM-BOT-API />
         <V-M-TELEGRAM-CONFIG />
-        <V-M-CLI-ORCHESTRATION />
       </Owns>
     </VD-MAIN>
   </VerificationDocuments>

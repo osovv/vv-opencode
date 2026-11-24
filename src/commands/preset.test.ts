@@ -2,7 +2,7 @@
 // VERSION: 0.6.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-PRESET - declarative named preset workflows.
-//   SCOPE: Built-in profile mappings, preset rendering, atomic role/profile application, no-opencode rewrite guarantees, section preservation, invalid-write safety, and CLI output paths.
+//   SCOPE: Built-in role matrices, preset rendering, atomic role application, no-opencode rewrite guarantees, section preservation, invalid-write safety, and CLI output paths.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/commands/preset.ts, src/commands/registered-cli.test-helpers.ts, src/lib/opencode.ts, src/lib/vvoc-config.ts]
 //   LINKS: [M-CLI-PRESET, M-ORCHESTRATION-PROFILES, V-M-CLI-PRESET]
 //   ROLE: TEST
@@ -60,7 +60,6 @@ describe("preset helpers", () => {
             fast: preset.agents.fast,
             smart: preset.agents.smart,
             reviewer: preset.agents.reviewer,
-            profile: preset.orchestration?.profile,
           },
         ]),
       ),
@@ -70,70 +69,60 @@ describe("preset helpers", () => {
         fast: "openai/gpt-6-luna#low",
         smart: "openai/gpt-5.6-sol#xhigh",
         reviewer: "openai/gpt-5.6-sol#xhigh",
-        profile: "single-session",
       },
       "vv-zai": {
         default: "zai-coding-plan/glm-5.3-flash#max",
         fast: "zai-coding-plan/glm-5.3-flash#max",
         smart: "zai-coding-plan/glm-5.3#max",
         reviewer: "zai-coding-plan/glm-5.3#max",
-        profile: "balanced",
       },
       "vv-deepseek": {
         default: "deepseek/deepseek-flash#max",
         fast: "deepseek/deepseek-flash#max",
         smart: "deepseek/deepseek-flash#max",
         reviewer: "deepseek/deepseek-flash#max",
-        profile: "balanced",
       },
       "vv-alibaba": {
         default: "alibaba-token-plan/qwen3.8-max",
         fast: "alibaba-token-plan/deepseek-v4-flash",
         smart: "alibaba-token-plan/qwen3.8-max#xhigh",
         reviewer: "alibaba-token-plan/glm-5.2",
-        profile: "single-session",
       },
       "vv-osovv-ds": {
         default: "deepseek/deepseek-flash#max",
         fast: "openai/gpt-6-luna#low",
         smart: "deepseek/deepseek-flash#max",
         reviewer: "zai-coding-plan/glm-5.3#max",
-        profile: "single-session",
       },
       "vv-osovv-mimo": {
         default: "xiaomi/mimo-v2.6-flash#thinking",
         fast: "openai/gpt-6-luna#low",
         smart: "xiaomi/mimo-v2.6-flash#thinking",
         reviewer: "zai-coding-plan/glm-5.3#max",
-        profile: "single-session",
       },
       "vv-osovv-zai": {
         default: "xiaomi/mimo-v2.6-flash#thinking",
         fast: "openai/gpt-6-luna#low",
         smart: "zai-coding-plan/glm-5.3#max",
         reviewer: "zai-coding-plan/glm-5.3#max",
-        profile: "single-session",
       },
       "vv-osovv-qwen": {
         default: "xiaomi/mimo-v2.6-flash#thinking",
         fast: "openai/gpt-6-luna#low",
         smart: "alibaba-token-plan/qwen3.8-max#xhigh",
         reviewer: "zai-coding-plan/glm-5.3#max",
-        profile: "delegated",
       },
       "vv-astra-solo": {
         default: "xiaomi/mimo-v2.6-flash#thinking",
         fast: "openai/gpt-6-luna#low",
         smart: "openai/gpt-6-astra#max",
         reviewer: "zai-coding-plan/glm-5.3#high",
-        profile: "single-session",
       },
       "vv-astra-workers": {
         default: "xiaomi/mimo-v2.6-flash#thinking",
         fast: "openai/gpt-6-luna#low",
         smart: "openai/gpt-6-astra#max",
         reviewer: "zai-coding-plan/glm-5.3#high",
-        profile: "delegated",
       },
     });
   });
@@ -152,24 +141,11 @@ describe("preset helpers", () => {
     expect(sparkAssignments).toEqual([]);
   });
 
-  test("built-in presets expose the approved orchestration mapping", () => {
+  test("built-in presets never declare orchestration", () => {
     const presets = createDefaultVvocConfig().presets;
-    expect(
-      Object.fromEntries(
-        Object.entries(presets).map(([name, preset]) => [name, preset.orchestration?.profile]),
-      ),
-    ).toEqual({
-      "vv-codex": "single-session",
-      "vv-zai": "balanced",
-      "vv-deepseek": "balanced",
-      "vv-alibaba": "single-session",
-      "vv-osovv-ds": "single-session",
-      "vv-osovv-mimo": "single-session",
-      "vv-osovv-zai": "single-session",
-      "vv-osovv-qwen": "delegated",
-      "vv-astra-solo": "single-session",
-      "vv-astra-workers": "delegated",
-    });
+    for (const [name, preset] of Object.entries(presets)) {
+      expect({ name, preset }).not.toHaveProperty("preset.orchestration");
+    }
   });
 
   test("listConfiguredPresets shows the seeded built-in presets", () => {
@@ -219,7 +195,6 @@ describe("preset helpers", () => {
     expect(output).toContain('"fast": "openai/gpt-6-luna#low"');
     expect(output).toContain('"smart": "xiaomi/mimo-v2.6-flash#thinking"');
     expect(output).toContain('"reviewer": "zai-coding-plan/glm-5.3#max"');
-    expect(output).toContain("single-session");
   });
 
   test("formatPreset renders all four vv-osovv-zai role assignments", () => {
@@ -238,7 +213,6 @@ describe("preset helpers", () => {
     expect(output).toContain('"fast": "openai/gpt-6-luna#low"');
     expect(output).toContain('"smart": "alibaba-token-plan/qwen3.8-max#xhigh"');
     expect(output).toContain('"reviewer": "zai-coding-plan/glm-5.3#max"');
-    expect(output).toContain("delegated");
   });
 
   test("formatPreset renders the vv-astra-solo explicit-reasoning assignments", () => {
@@ -248,7 +222,6 @@ describe("preset helpers", () => {
     expect(output).toContain('"smart": "openai/gpt-6-astra#max"');
     expect(output).toContain('"fast": "openai/gpt-6-luna#low"');
     expect(output).toContain('"reviewer": "zai-coding-plan/glm-5.3#high"');
-    expect(output).toContain("single-session");
   });
 
   test("formatPreset renders the vv-astra-workers delegated assignments", () => {
@@ -258,7 +231,6 @@ describe("preset helpers", () => {
     expect(output).toContain('"smart": "openai/gpt-6-astra#max"');
     expect(output).toContain('"fast": "openai/gpt-6-luna#low"');
     expect(output).toContain('"reviewer": "zai-coding-plan/glm-5.3#high"');
-    expect(output).toContain("delegated");
   });
 });
 
@@ -306,14 +278,12 @@ describe("applyPreset", () => {
       });
 
       expect(applied.changes.map((change) => change.roleId)).toEqual(["default", "smart"]);
-      expect(applied.orchestration).toEqual({ profile: "balanced", action: "unchanged" });
 
       const vvocConfig = await readVvocConfig(paths);
       expect(vvocConfig?.roles.default).toBe("openai/gpt-5.4");
       expect(vvocConfig?.roles.smart).toBe("openai/gpt-5.4:xhigh");
       expect(vvocConfig?.roles.fast).toBe(defaultConfig.roles.fast);
       expect(vvocConfig?.roles["team-review"]).toBe("anthropic/claude-sonnet-4-5:high");
-      expect(vvocConfig?.orchestration).toEqual({ profile: "balanced" });
 
       await expect(access(paths.opencodeConfigPath)).rejects.toBeDefined();
     } finally {
@@ -423,7 +393,7 @@ describe("applyPreset", () => {
       await writeFile(paths.vvocConfigPath, `${JSON.stringify(seededConfig, null, 2)}\n`, "utf8");
 
       const before = JSON.parse(await readFile(paths.vvocConfigPath, "utf8"));
-      const applied = await applyPreset("custom", {
+      await applyPreset("custom", {
         cwd: projectDir,
         configDir: configHome,
         scope: "project",
@@ -433,8 +403,6 @@ describe("applyPreset", () => {
       expect(before.guardian).toEqual(after.guardian);
       expect(before.secretsRedaction).toEqual(after.secretsRedaction);
       expect(before.presets).toEqual(after.presets);
-      expect(before.orchestration).toEqual(after.orchestration);
-      expect(applied.orchestration).toEqual({ profile: "balanced", action: "unchanged" });
       expect(after.presets["vv-codex"].description).toBe(
         "user-overridden managed preset description",
       );
@@ -456,7 +424,7 @@ describe("applyPreset", () => {
       });
 
       await rm(join(configHome, "vvoc"), { recursive: true, force: true });
-      const applied = await applyPreset("vv-codex", {
+      await applyPreset("vv-codex", {
         cwd: projectDir,
         configDir: configHome,
       });
@@ -465,8 +433,6 @@ describe("applyPreset", () => {
       expect(bootstrapped.version).toBe(3);
       expect(bootstrapped.roles.default).toBe("openai/gpt-5.6-terra#high");
       expect(bootstrapped.roles.smart).toBe("openai/gpt-5.6-sol#xhigh");
-      expect(bootstrapped.orchestration).toEqual({ profile: "single-session" });
-      expect(applied.orchestration).toEqual({ profile: "single-session", action: "updated" });
       expect(bootstrapped.presets["vv-codex"]?.agents.default).toBe("openai/gpt-5.6-terra#high");
       expect(bootstrapped.presets["vv-codex"]?.agents.smart).toBe("openai/gpt-5.6-sol#xhigh");
     } finally {
@@ -519,7 +485,7 @@ describe("applyPreset", () => {
     }
   });
 
-  test("profile-only preset changes write orchestration when all roles are kept", async () => {
+  test("a preset that keeps every role writes nothing", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-preset-profile-only-"));
 
     try {
@@ -531,25 +497,23 @@ describe("applyPreset", () => {
       const config = createDefaultVvocConfig();
       config.presets.custom = {
         agents: { default: config.roles.default },
-        orchestration: { profile: "orchestrated" },
       };
       await mkdir(dirname(paths.vvocConfigPath), { recursive: true });
       await writeFile(paths.vvocConfigPath, renderVvocConfig(config), "utf8");
+      const originalText = await readFile(paths.vvocConfigPath, "utf8");
 
       const applied = await applyPreset("custom", { configDir: configHome });
-      const updated = await readVvocConfig(paths);
 
       expect(applied.changes).toEqual([
         { roleId: "default", model: config.roles.default, action: "kept" },
       ]);
-      expect(applied.orchestration).toEqual({ profile: "orchestrated", action: "updated" });
-      expect(updated?.orchestration).toEqual({ profile: "orchestrated" });
+      expect(await readFile(paths.vvocConfigPath, "utf8")).toBe(originalText);
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
   });
 
-  test("invalid preset orchestration leaves the original vvoc bytes unchanged", async () => {
+  test("a preset that declares a legacy orchestration section is rejected loudly", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-preset-invalid-profile-"));
 
     try {
@@ -562,7 +526,7 @@ describe("applyPreset", () => {
       invalidConfig.presets = {
         invalid: {
           agents: { default: "openai/gpt-5.4" },
-          orchestration: { profile: "automatic" },
+          orchestration: { profile: "delegated" },
         },
       };
       const originalText = `${JSON.stringify(invalidConfig, null, 2)}\n`;
@@ -570,7 +534,7 @@ describe("applyPreset", () => {
       await writeFile(paths.vvocConfigPath, originalText, "utf8");
 
       await expect(applyPreset("invalid", { configDir: configHome })).rejects.toThrow(
-        "/presets/invalid/orchestration/profile",
+        /orchestration/,
       );
       expect(await readFile(paths.vvocConfigPath, "utf8")).toBe(originalText);
     } finally {
@@ -602,16 +566,14 @@ describe("applyPreset", () => {
         expect(result.exitCode).toBe(0);
         expect(result.stderr).toBe("");
         expect(result.stdout).toContain("Applied preset vv-zai:");
-        expect(result.stdout).toContain("orchestration: kept (balanced)");
         expect(result.stdout).toContain(`Target: ${paths.vvocConfigPath}`);
         expect(result.stdout).toContain(
-          "The config watcher applies changed roles or the orchestration profile to new sessions; running session families keep the settings they were born with until an explicit `vvoc session set` or `/vv-settings` change.",
+          "The config watcher applies changed roles to new sessions; running session families keep the settings they were born with until an explicit `vvoc session set` or `/vv-settings` change.",
         );
         const vvocConfig = await readVvocConfig(paths);
         expect(vvocConfig?.roles.default).toBe("zai-coding-plan/glm-5.3-flash#max");
         expect(vvocConfig?.roles.smart).toBe("zai-coding-plan/glm-5.3#max");
         expect(vvocConfig?.roles.fast).toBe("zai-coding-plan/glm-5.3-flash#max");
-        expect(vvocConfig?.orchestration).toEqual({ profile: "balanced" });
       } finally {
         await rm(configHome, { recursive: true, force: true });
         await rm(projectDir, { recursive: true, force: true });

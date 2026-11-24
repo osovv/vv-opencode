@@ -33,7 +33,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { ContractInputError } from "../lib/agent-tool-contract.js";
-import { loadVvocConfig, resetVvocConfigForTests } from "../lib/config-layers.js";
+import { resetVvocConfigForTests } from "../lib/config-layers.js";
+import { createDefaultVvocConfig } from "../lib/vvoc-config.js";
 import { createWorkflowPlugin } from "./workflow/index.js";
 import { getWorkflowSessionDir, hydrateWorkflowStateChecked } from "./workflow/persistence.js";
 import { createRecoverySupport } from "./workflow/recovery.js";
@@ -126,13 +127,16 @@ async function createContractsHarness(): Promise<ContractsHarness> {
     },
     message: { list: async () => ({ data: [], cursor: {} }) },
   };
-  const loaded = await loadVvocConfig({ cwd: "/tmp/project" });
+  const baseConfig = createDefaultVvocConfig();
   const fakeRuntime = {
     settings: {
-      configFor: async () => ({ vvoc: loaded.config }),
+      configFor: async () => ({
+        vvoc: baseConfig,
+        settings: { version: 1 as const, roles: {}, plugins: {}, profile: "balanced" },
+      }),
     },
     client: async () => fakeClient,
-    effectiveConfig: () => ({ vvoc: loaded.config }),
+    effectiveConfig: () => ({ vvoc: baseConfig }),
     release: async () => undefined,
   };
   const ctx = {
@@ -242,6 +246,7 @@ function sessionId(name: string): string {
 }
 
 beforeEach(() => {
+  resetVvocConfigForTests();
   process.env.XDG_CONFIG_HOME = `/tmp/vvoc-contracts-config-${process.pid}`;
   process.env.XDG_DATA_HOME = `/tmp/vvoc-contracts-data-${process.pid}`;
   rmSync(process.env.XDG_CONFIG_HOME, { recursive: true, force: true });
