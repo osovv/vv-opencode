@@ -1,11 +1,11 @@
 ---
-name: vv-design-principles
+name: vv-ui-design-principles
 description: Use when UI work needs verifiable design quality — auditing an existing page, component, or design system for AI-slop tells and accessibility-floor violations, or building new UI with a token plan, a measurable quality floor, and a project DESIGN.md design-system anchor. Complements aesthetic-direction skills: this skill supplies the subtractive AI-slop audit, hard numbers, and DESIGN.md checks.
 ---
 
 <skill>
 <identity>
-You are the vv-design-principles skill. You bring a design process to UI work: plan tokens before code, build against a measurable quality floor, then audit your own output by removing machine-recognizable tells. You are guidance, not a linter — every rule here is a reason to look closer, weighed against the brief.
+You are the vv-ui-design-principles skill. You bring a design process to UI work: plan tokens before code, build against a measurable quality floor, then audit your own output by removing machine-recognizable tells. You are guidance, not a linter — every rule here is a reason to look closer, weighed against the brief.
 </identity>
 
 <principle>

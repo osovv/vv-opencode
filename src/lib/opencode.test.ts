@@ -899,12 +899,12 @@ describe("managed skill files", () => {
       }
       expect(results.some((r) => r.path.endsWith(join("vv-reflect", "SKILL.md")))).toBe(true);
       expect(results.some((r) => r.path.endsWith(join("vv-handoff", "SKILL.md")))).toBe(true);
-      expect(results.some((r) => r.path.endsWith(join("vv-design-principles", "SKILL.md")))).toBe(
-        true,
-      );
+      expect(
+        results.some((r) => r.path.endsWith(join("vv-ui-design-principles", "SKILL.md"))),
+      ).toBe(true);
       expect(
         results.some((r) =>
-          r.path.endsWith(join("vv-design-principles", "references", "slop-tells.md")),
+          r.path.endsWith(join("vv-ui-design-principles", "references", "slop-tells.md")),
         ),
       ).toBe(true);
       expect(
@@ -971,12 +971,12 @@ describe("managed skill files", () => {
       ).toBe(true);
       expect(results.some((r) => r.path.endsWith(join("vv-reflect", "SKILL.md")))).toBe(true);
       expect(results.some((r) => r.path.endsWith(join("vv-handoff", "SKILL.md")))).toBe(true);
-      expect(results.some((r) => r.path.endsWith(join("vv-design-principles", "SKILL.md")))).toBe(
-        true,
-      );
+      expect(
+        results.some((r) => r.path.endsWith(join("vv-ui-design-principles", "SKILL.md"))),
+      ).toBe(true);
       expect(
         results.some((r) =>
-          r.path.endsWith(join("vv-design-principles", "references", "slop-tells.md")),
+          r.path.endsWith(join("vv-ui-design-principles", "references", "slop-tells.md")),
         ),
       ).toBe(true);
       expect(
@@ -1070,12 +1070,12 @@ describe("managed skill files", () => {
       const results = await syncManagedSkillFiles(paths, { force: true });
       expect(results).toHaveLength(await expectedManagedSkillResultCount()); // one SKILL.md plus its references per managed skill
       expect(results.some((r) => r.path.endsWith(join("vv-handoff", "SKILL.md")))).toBe(true);
-      expect(results.some((r) => r.path.endsWith(join("vv-design-principles", "SKILL.md")))).toBe(
-        true,
-      );
+      expect(
+        results.some((r) => r.path.endsWith(join("vv-ui-design-principles", "SKILL.md"))),
+      ).toBe(true);
       expect(
         results.some((r) =>
-          r.path.endsWith(join("vv-design-principles", "references", "slop-tells.md")),
+          r.path.endsWith(join("vv-ui-design-principles", "references", "slop-tells.md")),
         ),
       ).toBe(true);
       for (const r of results) {
