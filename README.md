@@ -206,7 +206,7 @@ The complete controller prompt has seven sections: `task_and_scope`, `project_co
 
 ### Managed skills
 
-Two families: `vv-*` skills guide the work protocol and design guidance, while `vvoc-*` skills operate and observe the vvoc/OpenCode tooling itself.
+Two families: `vv-*` skills guide the work protocol and its craft companions — design and writing guidance — while `vvoc-*` skills operate and observe the vvoc/OpenCode tooling itself.
 
 | Skill | When to use it | What it gives you |
 |---|---|---|
@@ -218,6 +218,8 @@ Two families: `vv-*` skills guide the work protocol and design guidance, while `
 | `vv-handoff` | You are ending a session and want the visible context preserved | A redacted XML note at `.vvoc/handoff/YYYY-MM-DD-<session-slug>/handoff.xml`, written from already-visible context only |
 | `vv-design-principles` | You are building, redesigning, or reviewing web or app UI and want craft, not generic output | A token-plan-first process, a measurable quality floor, a subtractive AI-slop audit, and a project `DESIGN.md` design-system anchor — with catalogs loaded on demand from three references. Additive: it coexists with any personal design skill |
 | `vvoc-usage-analytics` | You ask about token usage, cache hit rate, costs, or caching regressions | Read-only analysis across `vvoc analytics`, the analytics JSONL, and historical `opencode.db` data |
+| `vv-write-for-humans` | You are writing or editing prose a person will read — README/docs, PR descriptions, design notes, commit messages, reports, error messages — or a draft reads vague, inflated, or hedged beyond the evidence | A fidelity-first editorial contract: meaning invariants and protected content, four edit modes with copyedit as the default, genre sufficiency criteria, reader-behavior deletion/addition tests, and bilingual EN/RU pattern catalogs. Good text may be left unchanged |
+| `vv-write-for-agents` | You are writing or revising text an agent executes — delegation prompts, AGENTS.md, skill bodies, spec and plan prose, runtime prompts | Compilation of raw intent into minimal sufficient task specifications, structure and addressability, session update semantics, pointer craft, and a lint-and-eval validation reference, bounded in volume and free of internal jargon |
 
 Skills are discovered by OpenCode through the native `skills` string array in `opencode.json(c)` — `vvoc install`/`sync` write the path reference and maintain the OpenCode skills-directory symlink. OpenCode supplies the available descriptions and loading instructions; the full skill is loaded when selected or explicitly invoked. The controller prompt does not repeat that catalog or its loading protocol.
 
@@ -363,7 +365,7 @@ An explicit `--channel latest|rc` argument may only confirm the derived channel;
 
 ### Stability and compatibility
 
-Since 1.0, vv-opencode treats the daily-driver surface as stable. The compatibility surfaces are: `vvoc install` / `vvoc sync` / `vvoc launch`, the supported host window (`>=2.0.18 <3.0.0`), the managed skill names (`vv-spec`, `vv-plan`, `vv-execute`, `vv-review`, `vv-reflect`, `vv-handoff`; `vv-design-principles` and `vvoc-usage-analytics` are additive), the published package exports, canonical vvoc schema v3, and the date-prefixed `.vvoc/specs/YYYY-MM-DD-<slug>/` artifact layout. Breaking workflow or config changes are documented in release notes. The project still prefers conservative, explicit changes over hidden migration magic: user-owned config is never silently clobbered, and invalid current config fails loudly.
+Since 1.0, vv-opencode treats the daily-driver surface as stable. The compatibility surfaces are: `vvoc install` / `vvoc sync` / `vvoc launch`, the supported host window (`>=2.0.18 <3.0.0`), the managed skill names (`vv-spec`, `vv-plan`, `vv-execute`, `vv-review`, `vv-reflect`, `vv-handoff`; `vv-write-for-humans`, `vv-write-for-agents`, `vv-design-principles`, and `vvoc-usage-analytics` are additive), the published package exports, canonical vvoc schema v3, and the date-prefixed `.vvoc/specs/YYYY-MM-DD-<slug>/` artifact layout. Breaking workflow or config changes are documented in release notes. The project still prefers conservative, explicit changes over hidden migration magic: user-owned config is never silently clobbered, and invalid current config fails loudly.
 
 ### Deterministic local launch
 

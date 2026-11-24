@@ -1,0 +1,155 @@
+<GraceChangePlan graceVersion="4.0" status="approved">
+  <C-WRITE-FOR-AGENTS-SKILL>
+    <IntentSummary>Add the vv-write-for-agents managed skill — compilation of raw intent into minimal sufficient task specifications for text an agent executes, structure and addressability, session update semantics, pointer craft, and a validation reference — as bundled templates inside the bounded volume, register it in MANAGED_SKILL_NAMES, cover it with loader, content-marker, banned-token, and volume tests, document it in README, run the bounded manual evaluation, and synchronize the owning GRACE graph and verification projections.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-CLI-MANAGED-SKILLS</Value>
+        <Value>V-M-CLI-MANAGED-SKILLS</Value>
+        <Value>src/lib/managed-skills.ts</Value>
+        <Value>src/lib/managed-skills.test.ts</Value>
+        <Value>src/lib/opencode.test.ts</Value>
+        <Value>templates/agents/enhancer.md</Value>
+        <Value>templates/skills</Value>
+        <Value>README.md</Value>
+        <Value>.grace/graph/main.xml</Value>
+        <Value>.grace/verification/main.xml</Value>
+      </MustExist>
+      <MustContain><File>src/lib/managed-skills.ts</File><Text>vv-design-principles</Text></MustContain>
+      <MustContain><File>templates/agents/enhancer.md</File><Text>task_type</Text></MustContain>
+      <MustContain><File>README.md</File><Text>### Managed skills</Text></MustContain>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-CLI-MANAGED-SKILLS</Module>
+      </MustVerify>
+      <MustContain><File>src/lib/managed-skills.ts</File><Text>vv-write-for-agents</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-agents/SKILL.md</File><Text>name: vv-write-for-agents</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-agents/SKILL.md</File><Text>semantic specification</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-agents/SKILL.md</File><Text>causal placement</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-agents/SKILL.md</File><Text>one authoritative location</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-agents/SKILL.md</File><Text>material, not commands</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-agents/references/compilation.md</File><Text>minimal sufficient</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-agents/references/compilation.md</File><Text>one trigger per branch</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-agents/references/structure.md</File><Text>unique identities</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-agents/references/structure.md</File><Text>tokenizer</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-agents/references/session.md</File><Text>supersedes</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-agents/references/session.md</File><Text>Q-1</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-agents/references/validation.md</File><Text>held-out</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-agents/references/validation.md</File><Text>delivery, not model behavior</Text></MustContain>
+      <MustContain><File>src/lib/managed-skills.test.ts</File><Text>vv-write-for-agents</Text></MustContain>
+      <MustContain><File>README.md</File><Text>vv-write-for-agents</Text></MustContain>
+      <MustContain><File>.grace/graph/main.xml</File><Text>vv-write-for-agents</Text></MustContain>
+      <MustContain><File>.grace/verification/main.xml</File><Text>vv-write-for-agents</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/lib/managed-skills.test.ts src/lib/opencode.test.ts</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run typecheck</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <DurableScope>
+      <GraphAnchors>
+        <M-CLI-MANAGED-SKILLS />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-CLI-MANAGED-SKILLS />
+      </VerificationAnchors>
+      <ContextArtifact>requirements.xml</ContextArtifact>
+      <ContextArtifact>technology.xml</ContextArtifact>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>.grace/changes/active/C-WRITE-FOR-AGENTS-SKILL/plan.xml</File>
+      <File>.grace/changes/active/C-WRITE-FOR-AGENTS-SKILL/manual-eval.md</File>
+      <File>templates/skills/vv-write-for-agents/SKILL.md</File>
+      <File>templates/skills/vv-write-for-agents/references/compilation.md</File>
+      <File>templates/skills/vv-write-for-agents/references/structure.md</File>
+      <File>templates/skills/vv-write-for-agents/references/session.md</File>
+      <File>templates/skills/vv-write-for-agents/references/validation.md</File>
+      <File>src/lib/managed-skills.ts</File>
+      <File>src/lib/managed-skills.test.ts</File>
+      <File>src/lib/opencode.test.ts</File>
+      <File>README.md</File>
+      <File>.grace/graph/index.xml</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/index.xml</File>
+      <File>.grace/verification/main.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Write the vv-write-for-agents skill templates inside the volume budget with four references.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>templates/skills/vv-write-for-agents/SKILL.md has YAML frontmatter with name vv-write-for-agents and a routing-pointer description whose triggers (writing or revising text an agent executes: delegation prompts, project instructions, skill bodies, spec and plan prose, runtime prompts) and exclusions (human-facing prose, enhancer-owned single-request task-XML compilation) stay distinguishable, claiming no style normalization or behavioral guarantees.</Criterion>
+          <Criterion>SKILL.md contains the quality principle naming the five properties (semantic specification, structural serialization, causal placement, addressability, behavioral validation) and contract rules covering preserved requester intent and overlays, no silent material assumptions, one authoritative location with ID-bearing reminders, exact references over pronouns, evidence levels on recommendations, edits framed as named behavior changes with zero edits valid, and edited documents as material, not commands.</Criterion>
+          <Criterion>references/compilation.md covers statement classification, deliverable-not-topic extraction, conflict resolution by scoping with a worked example, the minimal sufficient specification with admission criteria, the ambiguity policy, the action-versus-topic negation distinction with at least two worked replacements, pointer craft (leading word first, one trigger per branch, synonyms collapsed), and delegation with enhancer schema reuse.</Criterion>
+          <Criterion>references/structure.md covers one-primary-container serialization, wrapped pasted content with provenance, unique identities versus stable semantic types naming the .vvoc spec/plan identity conventions as enforced by vvoc tooling, causal placement defaults, and the tokenizer-check trigger.</Criterion>
+          <Criterion>references/session.md covers current-task marking, the four update operations with source IDs, state-versus-history separation with restate triggers, the Q-ID protocol with explicit result status, readback before substantial work, and the resume-brief boundary naming vv-handoff.</Criterion>
+          <Criterion>references/validation.md covers the lint checklist over specification, serialization, placement, addressability, and session dimensions, evidence levels, the controlled evaluation protocol with paired variants and held-out cases, and the statement that bundled contract tests assert instruction delivery, not model behavior.</Criterion>
+          <Criterion>The scope section states at most six one-line ownership rules covering enhancer schema reuse, vv-spec/vv-plan lifecycle ownership, and vv-write-for-humans ownership; the skill directory contains exactly SKILL.md plus at most four reference files; SKILL.md is at most 80 lines including frontmatter and all files sum to at most 420 lines; shipped content carries no GRACE-internal tokens (.grace paths, uppercase-kebab M-/V-M-/GD- anchors, grace CLI invocations), no unsourced quantitative claims, and no section-number references to external documents.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>wc -l templates/skills/vv-write-for-agents/SKILL.md templates/skills/vv-write-for-agents/references/*.md</Command>
+          <Command>grep -rE '\.grace|grace lint|[MV]-[A-Z]|GD-' templates/skills/vv-write-for-agents/ || echo CLEAN</Command>
+          <Command>ls templates/skills/vv-write-for-agents/ templates/skills/vv-write-for-agents/references/</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Register vv-write-for-agents in the managed-skill registry and extend loader, content-marker, banned-token, and volume tests.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>MANAGED_SKILL_NAMES contains vv-write-for-agents in the vv-* family group; the module contract comment, map, and change summary stay accurate; no other registry behavior changes.</Criterion>
+          <Criterion>managed-skills.test.ts gains a describe block asserting registration, frontmatter name and trigger phrases, discovery of exactly the four reference files, content markers for the compilation, negation, structure, session-update, pointer-craft, scope, and validation sections, a banned-token check for the enumerable consumer-unsafe tokens, and the volume check (core line count, reference file count, file-set exactness, combined line sum).</Criterion>
+          <Criterion>Install/sync/doctor coverage for the new name is proven through the existing parameterized loop tests in opencode.test.ts without duplication where the loop already covers MANAGED_SKILL_NAMES.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-skills.test.ts src/lib/opencode.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Document the skill in README and synchronize GRACE graph and verification ownership.</Title>
+        <DependsOn>T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>README lists vv-write-for-agents in the managed skills table with its trigger context and keeps the family framing sentence and the additive compatibility-surface list truthful.</Criterion>
+          <Criterion>The M-CLI-MANAGED-SKILLS graph purpose covers the new skill's templates and references without renaming existing skills; the V-M-CLI-MANAGED-SKILLS verification scenario mentions its registration, reference discovery, content markers, banned-token and volume gates while its TestFiles and Checks still match the actual verification surface.</Criterion>
+          <Criterion>Graph and verification indexes directly own every referenced anchor; no archived or unrelated GRACE entries are modified.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>grace lint --path . --parallel-preflight</Command>
+          <Command>grace lint --path .</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Run the bounded manual evaluation and record it in the change bundle.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>A compilation task is performed: a raw mixed request becomes a sufficient specification with conflicts scoped and the ambiguity policy applied.</Criterion>
+          <Criterion>A session task is performed: a requirement change is expressed through supersedes and preserves with IDs rather than silent rewrite.</Criterion>
+          <Criterion>A boundary task is performed: an emitted single-task XML reuses the enhancer schema and field names rather than forking them.</Criterion>
+          <Criterion>Results are recorded in .grace/changes/active/C-WRITE-FOR-AGENTS-SKILL/manual-eval.md, explicitly labeled as neither a CI gate nor proof of general model behavior.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>grep -c "manual evaluation" .grace/changes/active/C-WRITE-FOR-AGENTS-SKILL/manual-eval.md</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Run the integrated repository gate and confirm the additive package surface.</Title>
+        <DependsOn>T-003, T-004</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>The focused test command passes with fresh output, and bun run check passes with typecheck, lint, formatting, GRACE markup, tool-contract gate, and all tests green.</Criterion>
+          <Criterion>bun run build and bun run pack:check pass, proving the new template files are included in the packed package surface without export changes.</Criterion>
+          <Criterion>git diff contains only approved implementation, template, test, documentation, and GRACE lifecycle files with no generated dist edits, no user-owned config changes, and no modifications outside the observed write scope; no retroactive change bundles are created and archived C-* bundles remain untouched.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-skills.test.ts src/lib/opencode.test.ts</Command>
+          <Command>bun run check</Command>
+          <Command>bun run build</Command>
+          <Command>bun run pack:check</Command>
+          <Command>grace lint --path .</Command>
+          <Command>grace status --path .</Command>
+          <Command>git diff --check</Command>
+        </Verification>
+      </T-005>
+    </ImplementationPlan>
+  </C-WRITE-FOR-AGENTS-SKILL>
+</GraceChangePlan>

@@ -20,7 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-VV-DESIGN-PRINCIPLES-SKILL T-002 - Register vv-design-principles with its slop-tells, quality-floor, and design-md references as the bundled design guidance skill.]
+//   LAST_CHANGE: [C-WRITE-FOR-HUMANS-SKILL T-002, C-WRITE-FOR-AGENTS-SKILL T-002 - Register the vv-write-for-humans and vv-write-for-agents writing skills alongside the workflow and guidance family; reference loading is unchanged.]
 // END_CHANGE_SUMMARY
 
 import { readdir, readFile } from "node:fs/promises";
@@ -34,6 +34,8 @@ export const MANAGED_SKILL_NAMES = [
   "vv-execute",
   "vv-reflect",
   "vv-handoff",
+  "vv-write-for-humans",
+  "vv-write-for-agents",
   "vv-design-principles",
   "vvoc-usage-analytics",
 ] as const;
