@@ -24,6 +24,7 @@ UX cues (roadmap, progress markers, depth estimates, checkpoints) are TRANSPAREN
 <principle>Resolve dependencies in order. Start with the highest-impact decision (purpose, scope, data model) and work outward (API shape, error handling, testing). A decision about the data model must be settled before deciding the API surface.</principle>
 <principle>Understand the full landscape: purpose, constraints, success criteria, non-goals, edge cases, existing code patterns.</principle>
 <principle>While walking components and data flow, capture the material properties that must be preserved — existing behavior, contracts, and consumers the change must not break — so testing and error handling can demand their verification instead of covering only the new happy path.</principle>
+<principle>Capture verification intent while designing: for each material claim, decide the oracle, the evidence artifact, and the residual risk. Put this into testing.strategy and testing.coverage, and use the vv-verification references for oracle and evidence vocabulary rather than inventing a second taxonomy.</principle>
 <principle>When the decision tree reaches a fork (2-3 viable approaches), present all options with trade-offs. Lead with your recommendation and explain why. The user picks one — that closes the fork and the tree continues from that branch.</principle>
 <principle>When presenting design sections, do it one section at a time. After each section: "Does this look right?" If yes, move to the next. If no, resolve concerns before continuing.</principle>
 <principle>Cover every section of the spec template: goal, architecture, tech_stack, components, data_flow, error_handling, testing, non_goals. The roadmap shown at the start IS the coverage checklist. A section is "closed" only when its template element is fully decidable.</principle>
@@ -51,6 +52,7 @@ UX cues (roadmap, progress markers, depth estimates, checkpoints) are TRANSPAREN
 <rule>A component's identity is its element name in the COMPONENT-UPPER-SLUG pattern: &lt;COMPONENT-CACHE-STORE&gt;…&lt;/COMPONENT-CACHE-STORE&gt;. The identity repeats on both boundaries so components stay addressable. Slug rules: uppercase alphanumeric and hyphens only, no leading or trailing hyphen, unique within the document. Derive the slug from the component's display name. The child &lt;name&gt; element holds the human-readable display name. Do NOT add a child id element — the element name is the single authoritative identity.</rule>
 <rule>Component references use bare slugs: each &lt;depends_on&gt; element contains exactly one component slug declared elsewhere in the same components section. Never reference a component by prose name.</rule>
 <rule>The top-level &lt;status&gt; element is the document lifecycle status and MUST be one of: draft, approved, applied.</rule>
+<rule>testing.strategy must name each material claim, its oracle, the evidence artifact, and the residual risk. testing.coverage must state what is deliberately not covered and why. Use the existing testing fields; do not add a new XML element for verification intent. The vv-verification references supply the oracle and evidence vocabulary.</rule>
 <rule>When first saving the spec, set &lt;status&gt;draft&lt;/status&gt;. Only change it to approved after the user explicitly approves the final spec. Never set applied yourself; applied is reserved for vv-execute after the approved plan has been fully executed.</rule>
 <location>Canonical layout — all artifacts for one feature live in a single spec package directory:</location>
 <layout>
@@ -84,6 +86,7 @@ UX cues (roadmap, progress markers, depth estimates, checkpoints) are TRANSPAREN
 <check>Internal consistency: Do any sections contradict each other? Does the architecture match the component descriptions?</check>
 <check>Scope check: Is this focused enough for a single implementation plan, or does it need decomposition into sub-projects?</check>
 <check>Ambiguity check: Could any requirement be interpreted two different ways? Resolve repository-answerable engineering ambiguity from the established code and contracts; a genuine business-semantics fork goes to the user as an explicit question — never silently pick a business interpretation.</check>
+<check>Verification intent: does testing.strategy name each material claim, its oracle, the evidence artifact, and the residual risk? Does testing.coverage state what is deliberately not covered and why?</check>
 <rule>Fix issues inline. No need to re-review — just fix and move on.</rule>
 </self_review>
 

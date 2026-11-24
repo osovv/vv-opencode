@@ -21,6 +21,12 @@
   <data_flow></data_flow>
   <error_handling></error_handling>
   <testing>
+    <!--
+      testing.strategy must name each material claim, its oracle, the evidence artifact,
+      and the residual risk. testing.coverage must state what is deliberately not covered
+      and why. Use the vv-verification references for oracle and evidence vocabulary;
+      do not add a new element for verification intent.
+    -->
     <strategy></strategy>
     <coverage></coverage>
   </testing>
