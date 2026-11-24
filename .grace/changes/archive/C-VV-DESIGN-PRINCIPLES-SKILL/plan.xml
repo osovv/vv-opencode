@@ -1,4 +1,4 @@
-<GraceChangePlan graceVersion="4.0" status="approved">
+<GraceChangePlan graceVersion="4.0" status="applied">
   <C-VV-DESIGN-PRINCIPLES-SKILL>
     <IntentSummary>Add the vv-design-principles managed skill — a build-and-audit design process (token plan, quality floor, subtractive slop audit, DESIGN.md design-system anchor) — as bundled templates with three on-demand references, register it in MANAGED_SKILL_NAMES so install/sync/doctor cover it through the existing loop, cover it with loader tests, document it in README, and synchronize the owning GRACE graph and verification projections.</IntentSummary>
     <BaselineAssertions>

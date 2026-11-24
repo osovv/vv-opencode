@@ -1,4 +1,4 @@
-<GraceChangeSpec graceVersion="4.0" status="approved">
+<GraceChangeSpec graceVersion="4.0" status="applied">
   <C-VV-DESIGN-PRINCIPLES-SKILL>
     <Summary>Add the vv-design-principles managed skill: a build-and-audit design process anchored on a project DESIGN.md design-system file, shipped as bundled templates with on-demand references.</Summary>
     <Problem>vv-opencode ships managed skills for the work protocol and vvoc tooling, but nothing covers visual and interaction craft. Coding agents without craft guidance converge on machine-recognizable "AI slop" patterns; research shows generic written encouragement ("be distinctive") can score worse than no guidance, while a subtractive audit pass against a concrete tell catalog reverses it. The package also has no design-system anchor file, so project-specific design decisions have nowhere to live or be checked.</Problem>
