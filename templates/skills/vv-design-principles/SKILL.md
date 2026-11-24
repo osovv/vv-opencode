@@ -1,6 +1,6 @@
 ---
 name: vv-design-principles
-description: Use when building, redesigning, or reviewing web or app UI where visual craft and design quality matter — landing pages, dashboards, components, design systems. Guides a token-plan-first build, enforces a measurable quality floor, runs a subtractive AI-slop audit, and anchors choices in a project DESIGN.md design-system file.
+description: Use when UI work needs verifiable design quality — auditing an existing page, component, or design system for AI-slop tells and accessibility-floor violations, or building new UI with a token plan, a measurable quality floor, and a project DESIGN.md design-system anchor. Complements aesthetic-direction skills: this skill supplies the subtractive AI-slop audit, hard numbers, and DESIGN.md checks.
 ---
 
 <skill>
@@ -15,7 +15,7 @@ AI slop is density, not a banned list. Any single tell (an eyebrow label, a crea
 <workflow>
 <step>Identify the subject before styling: what the product is, who it is for, and the one job of this page or screen. Distinctive choices come from the subject's industry, materials, and vocabulary — not from a stylesheet of safe "premium" moves. If the brief does not name a subject, propose one and confirm.</step>
 <step>Look for a project DESIGN.md before choosing any token. Load references/design-md.md when you need the discovery procedure and file contract. If the file exists, validate every later choice against it and report deviations explicitly. If it is missing, plan tokens first and propose creating DESIGN.md from your plan — ask before writing it.</step>
-<step>Plan tokens before code: 4–6 named hex colors with roles, one or two clearly distinct typefaces with roles, a layout concept (alignment, density, one sentence per section), and one signature element the page will be remembered by. Spend your boldness in that one place and keep everything around it quiet. Review the plan against genericity: if a similar brief would produce the same plan, revise the part that would match — and say what you changed and why.</step>
+<step>Plan tokens before code: 4–8 named hex colors with roles, one or two brand typefaces with roles plus a mono or data face where the product needs one, a layout concept (alignment, density, one sentence per section), and one signature element the page will be remembered by. Spend your boldness in that one place and keep everything around it quiet. Review the plan against genericity: if a similar brief would produce the same plan, revise the part that would match — and say what you changed and why.</step>
 <step>Build against the quality floor. Load references/quality-floor.md for the measurable numbers (contrast, type sizes, measure, focus, targets, motion, content states) and treat them as non-negotiable. Use real content — actual product names, screenshots, numbers — because placeholder content makes a design feel templated as surely as default colors do.</step>
 <step>Run the subtractive audit before declaring the work done. Load references/slop-tells.md, walk the catalog by category, and count tells per section. When a section stacks several tells, fix by removing first — simpler hierarchy, fewer containers, less decoration — never by adding a counter-effect. Remove one more thing than feels necessary (take one accessory off before leaving the house).</step>
 <step>Report honestly: list the tells you removed, the tells you kept deliberately (with the brief-based reason), and the quality-floor violations you fixed with numbers. A deliberate keep is legitimate; an unexamined default is not.</step>
@@ -24,9 +24,10 @@ AI slop is density, not a banned list. Any single tell (an eyebrow label, a crea
 <audit_rules>
 <rule>A tell may remain only when the brief or subject genuinely calls for it and you can state that reason in one sentence. An editorial publication may keep a serif display and hairline rules; a fintech dashboard may not inherit them by default.</rule>
 <rule>Fix by removal before addition: merge containers, delete badges, drop entrances, shorten headlines. If a fix requires adding a new decoration, it is probably not a fix.</rule>
-<rule>Density thresholds for the audit: more than 2 tells in one section or more than 5 on one page is a redesign of those areas, not a tweak. One tell alone is acceptable and needs no action.</rule>
+<rule>Density ladder for the audit: one tell is a choice; more than 2 in one section is a pattern to break by removal; more than 5 on a page is a redesign of those areas.</rule>
 <rule>Do not fix slop by inverting it into the next default (cream to neon, serif to mono). Re-derive the choice from the subject.</rule>
-<rule>Motion is judgment, not compliance: keep one purposeful reveal and the feedback that answers user actions, gate all of it behind reduced-motion, and never strip motion entirely just to pass an audit.</rule>
+<rule>The quality floor is a requirement, not a style preference: it ranks above the brief, DESIGN.md, and this skill's other rules. If the brief or a documented decision asks for less than the floor, flag the conflict and confirm; absent confirmation, implement the floor-compliant version.</rule>
+<rule>Motion is judgment, not compliance: keep at most one purposeful reveal and the feedback that answers user actions, gate all of it behind reduced-motion, and never strip motion entirely just to pass an audit.</rule>
 </audit_rules>
 
 <report_format>

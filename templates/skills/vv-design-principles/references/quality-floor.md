@@ -1,6 +1,6 @@
 # Quality floor
 
-The non-negotiable base every build must clear before any audit of taste. These are measurable; if you cannot state the number, you have not checked it.
+The non-negotiable base every build must clear before any audit of taste. Each rule is checkable: compute it from the code when possible (contrast from the hex pair, sizes and measure from the stylesheet), measure it in the running page when tooling exists, and otherwise report the check as not verified instead of inventing a number.
 
 ## Typography
 
@@ -65,13 +65,13 @@ The non-negotiable base every build must clear before any audit of taste. These 
 
 ## Verification pass
 
-Run these checks explicitly and record the numbers you saw:
+Run these checks and record what you actually observed. Compute from source where possible; run in a browser only when tooling is available; label anything you could not execute as not verified.
 
-1. Contrast of body text and the main CTA against their actual backgrounds (list the ratios).
-2. Rendered body font size and line height at 375px and 1440px.
-3. Measure of the longest paragraph in characters.
-4. Tab through the whole page: order, visible focus, no traps.
-5. Toggle reduced motion: nothing essential disappears or becomes unusable.
-6. Disable JavaScript: content is still visible.
-7. Resize to 375px: no horizontal scroll, no clipped menus.
-8. Walk the empty, loading, and error state of every data surface.
+1. Contrast of body text and the main CTA against their actual backgrounds — compute the ratios from the hex values.
+2. Body font size and line height from the stylesheet, plus rendered values at 375px and 1440px when a browser is available.
+3. Measure of the longest paragraph in characters — compute from font size and container width.
+4. Keyboard order, visible focus, and traps — needs a running page. Without one, inspect the markup (semantic elements, tabindex values, focus styles) and state which part is unverified.
+5. Reduced-motion handling — inspect the media query and the animated declarations; runtime confirmation is optional.
+6. Content visibility without JavaScript — inspect whether content starts hidden; runtime confirmation is optional.
+7. Layout at 375px — inspect fixed widths, overflow, and min-width rules; confirm in a browser when available.
+8. Empty, loading, and error states — inspect the components; confirm in a browser when available.

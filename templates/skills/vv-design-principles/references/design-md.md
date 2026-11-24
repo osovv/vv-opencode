@@ -4,13 +4,13 @@ DESIGN.md is the project-owned record of its design decisions. The skill's audit
 
 ## Discovery
 
-Look for the file in this order and stop at the first hit:
+Walk upward from the file you are editing and stop at the first hit:
 
-1. `DESIGN.md` at the project root.
-2. `DESIGN.md` in the nearest directory above the code you are editing (monorepo packages often own their own file).
-3. `docs/DESIGN.md` or `.design/DESIGN.md` as fallbacks.
+1. `DESIGN.md` in the directory of the code being edited or its nearest ancestor — monorepo packages own their own file, and the closest file is the one that governs this work.
+2. `docs/DESIGN.md` or `.design/DESIGN.md` inside the same package, as fallbacks when the package has no root file.
+3. The repository-root `DESIGN.md`, which supplies project-wide defaults when the package has no nearer file.
 
-If several files exist at the same level with overlapping scope, ask the user which one governs instead of guessing. If none exists, follow the missing-file procedure below.
+If two candidate files sit at the same level with overlapping scope, ask the user which one governs instead of guessing. If none exists, follow the missing-file procedure below.
 
 ## What the file documents
 
@@ -35,7 +35,8 @@ During the plan and audit phases, compare every choice to DESIGN.md:
 - Report the deviation as `chosen value → documented value or proposed addition`, and either fix it or ask for the system to be extended.
 - Never silently add a token to the file to justify a choice. Additions are proposed, with a reason, and confirmed.
 - A documented decision wins over the skill's generic preferences. If DESIGN.md says "Inter everywhere", Inter is correct; the audit does not relitigate it.
-- If a documented decision contradicts the brief, surface the conflict in one sentence and let the user decide.
+- The quality floor is not a generic preference. If a documented decision asks for less than the floor — contrast below AA, body text smaller than 16px, hidden content, missing focus — report the conflict and confirm; absent confirmation, implement the floor-compliant version.
+- If a documented decision contradicts the brief, surface it in one sentence and let the user decide before applying either.
 
 ## When it is missing: propose creating it
 
@@ -50,11 +51,12 @@ A proposal that claims more than the project has decided is worse than no file: 
 
 ## Precedence
 
-1. The brief's explicit instructions (colors, fonts, or a named direction the user asked for).
+1. The quality floor — accessibility, visible content, hit targets, legibility. A requirement, not a style preference; conflicts are surfaced and confirmed.
 2. DESIGN.md, where it covers the decision.
-3. This skill's generic rules and defaults.
+3. The brief's explicit direction, where DESIGN.md is silent or explicitly defers.
+4. This skill's generic rules and defaults.
 
-The skill never overrides an explicit brief ask to satisfy a generic preference. Where DESIGN.md and the brief disagree, the brief decides for that piece of work, and the file is updated afterwards if the decision is meant to persist.
+The skill never overrides an explicit brief ask to satisfy a generic preference. Where DESIGN.md and the brief disagree, say so in one sentence and let the user decide; apply the brief for this piece of work only if the user confirms, and propose the DESIGN.md update separately instead of rewriting it during the task.
 
 ## Keeping it current
 

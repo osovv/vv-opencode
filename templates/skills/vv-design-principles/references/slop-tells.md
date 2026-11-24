@@ -5,7 +5,7 @@ A catalog for the subtractive audit. Read it as a set of familiar defaults to no
 **How to use it**
 
 1. Walk the categories and mark every tell present on the page, per section.
-2. Count per section. One tell is a choice; more than two in one section is a pattern; more than five on a page is a redesign.
+2. Count per section. One tell is a choice; more than two in one section is a pattern to break by removal; more than five on a page is a redesign of those areas.
 3. Fix by removing first — merge containers, drop labels, delete decoration. If the fix adds something, it is not a fix.
 4. A tell may stay when the brief or subject genuinely calls for it and you can say why in one sentence. Record it as a deliberate keep.
 5. Never fix a tell by fleeing to the opposite default. Banning purple gradients yields Instrument Serif and mono captions; the list must not make the decisions for you.
@@ -68,9 +68,9 @@ Sources: Charles Liu's "20 More AI Design Slop Indicators", Anthropic's frontend
 *Why it reads machine-made:* a radial glow behind the hero and a soft spotlight behind content point at everything, so they point at nothing.
 *Replace with:* spacing, contrast, and a clear heading to direct attention. Keep one glow only if it marks a real focus area.
 
-### Neon edges and decorative grid lines
-*Why it reads machine-made:* glowing card borders and faint background grids are cyberpunk-by-default decoration; grids belong to canvases and maps.
-*Replace with:* a plain surface, or a texture that belongs to the subject.
+### Neon edges and glowing borders
+*Why it reads machine-made:* glowing card borders and neon outlines are cyberpunk-by-default decoration that competes with content and floods a dark surface with light.
+*Replace with:* a plain border or surface; keep a single neon accent only where it marks the one thing to look at.
 
 ### Colored left-border stripes on cards
 *Why it reads machine-made:* a thick colored stripe is borrowed from alerts and warnings, then applied to ordinary content so it looks designed. It burns the warning vocabulary.
@@ -115,7 +115,7 @@ Sources: Charles Liu's "20 More AI Design Slop Indicators", Anthropic's frontend
 *Replace with:* numbering only for genuine sequences (steps, timelines).
 
 ### Middle-dot meta strings
-*Why it reads machine-made:* "A · B · C" and "WORD — fragment" strings are template chrome that appears regardless of subject.
+*Why it reads machine-made:* "A · B · C" meta strings are template chrome that appears regardless of subject.
 *Replace with:* ordinary separators or plain sentences.
 
 ### Arrows on every button and link
@@ -194,9 +194,9 @@ Sources: Charles Liu's "20 More AI Design Slop Indicators", Anthropic's frontend
 *Why it reads machine-made:* generic logos, round customer counts, and testimonials from a first name and an initial are recognized as invented.
 *Replace with:* real names, roles, photos, and links; if there is no proof yet, omit the section.
 
-### Em-dash overuse
-*Why it reads machine-made:* a dash in every sentence is the textual twin of the visual fingerprint.
-*Replace with:* full stops between separate thoughts.
+### Em-dash overuse and "WORD — fragment" labels
+*Why it reads machine-made:* a dash in every sentence is the textual twin of the visual fingerprint, and spaced-em-dash label formats ("Launch — today") are template chrome repeated across sections.
+*Replace with:* full stops between separate thoughts, and plain labels or sentences instead of the dash format.
 
 ### Forced contrast slogans
 *Why it reads machine-made:* "Not a feature. A platform." and two-word sentences make every line a slogan, which flattens meaning into cadence.

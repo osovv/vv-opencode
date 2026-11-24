@@ -375,11 +375,18 @@ describe("vv-design-principles managed skill", () => {
     expect(qualityFloor).toContain("4.5:1");
     expect(qualityFloor).toContain("44px");
     expect(qualityFloor).toContain("65–75");
+    expect(qualityFloor).toContain("16px");
+    expect(qualityFloor).toContain("near 1.5");
+    expect(qualityFloor).toContain("focus is always visible");
+    expect(qualityFloor).toContain("Real content");
+    expect(qualityFloor).toContain("lorem ipsum");
     expect(qualityFloor).toContain("prefers-reduced-motion");
 
     const designMd = await loadManagedSkillReference("vv-design-principles", "design-md.md");
     expect(designMd).toContain("DESIGN.md");
     expect(designMd).toContain("propose creating");
+    expect(designMd).toContain("Walk upward from the file you are editing");
+    expect(designMd).toContain("## Precedence");
     expect(designMd).toContain("Never silently add a token");
   });
 });
