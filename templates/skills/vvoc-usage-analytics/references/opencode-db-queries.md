@@ -1,8 +1,17 @@
 # opencode.db read-only queries
 
-Validated against OpenCode **1.18.x** on a real 5.7 GB database (2026-08). If a column
-errors out after an OpenCode upgrade, report the schema mismatch — do not improvise
-guesses about the new schema.
+## Contents
+- Connection — always read-only
+- Schema orientation
+- Hit-rate formula (must match the vvoc CLI)
+- (a) Cache hit rate by OpenCode version
+- (b) Cache hit rate by month
+- (c) Recent sessions: cost and token totals
+- (d) Step-finish counts by provider/model
+
+Validated against OpenCode **1.18.x** on a real 5.7 GB database (2026-08). The supported
+host window is **2.0.18 and newer, below 3.0.0**; if a column errors out there, report the
+schema mismatch — do not improvise guesses about the new schema.
 
 ## Connection — always read-only
 

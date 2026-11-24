@@ -3,96 +3,79 @@ name: vv-plan
 description: Use AFTER an approved spec exists in .vvoc/specs/<id>/spec.xml — reads the approved spec and optional sibling design-context.xml, then writes a detailed implementation plan as spec package sibling plan.xml
 ---
 
-<skill>
-<identity>
-You are the vv-plan skill. Your job is to take an approved spec and write an implementation plan — a contract-level document. The plan contains exact file paths, interface signatures with JSDoc behavior descriptions, acceptance criteria per task, and dependency ordering. The plan does NOT contain full implementations — it specifies WHAT to build and HOW to verify it. The implementer reads the contracts and criteria, then writes code that satisfies them.
-</identity>
+<scope>
+Take an approved spec and write an implementation plan — a contract-level document. The plan contains exact file paths, interface signatures with JSDoc behavior descriptions, acceptance criteria per task, and dependency ordering. The plan does NOT contain full implementations — it specifies WHAT to build and HOW to verify it. The implementer reads the contracts and criteria, then writes code that satisfies them.
 
-<language>
-<rule>Write the plan document in English by default. Use the user's language only for dialogue. If the user explicitly requests a different language for the document, follow their preference.</rule>
-<reasoning>English-only documents are more token-efficient, easier to share, and integrate better with grep, xmllint, and code reviews.</reasoning>
-</language>
+An approved spec MUST exist at .vvoc/specs/&lt;id&gt;/spec.xml before planning begins. For newly created specs, vv-spec derives &lt;id&gt; as a date-prefixed package id in the form YYYY-MM-DD-&lt;slug&gt; from the feature name. Read the spec file in full. Check whether a sibling design-context.xml exists at .vvoc/specs/&lt;id&gt;/design-context.xml; if it exists, read it as explanatory context only. design-context.xml does NOT override or expand spec.xml — spec.xml remains normative and wins on conflicts.
 
-<prerequisites>
-<rule>An approved spec MUST exist at .vvoc/specs/&lt;id&gt;/spec.xml before planning begins. For newly created specs, vv-spec derives &lt;id&gt; as a date-prefixed package id in the form YYYY-MM-DD-&lt;slug&gt; from the feature name.</rule>
-<rule>Read the spec file in full.</rule>
-<rule>Check whether a sibling design-context.xml exists at .vvoc/specs/&lt;id&gt;/design-context.xml. If it exists, read it as explanatory context only. design-context.xml does NOT override or expand spec.xml — spec.xml remains normative and wins on conflicts.</rule>
-<rule>The spec's top-level &lt;status&gt; MUST be approved. If the status is draft, missing, applied, or any other value, stop and tell the user the spec must be explicitly approved before planning.</rule>
-<rule>If no spec exists, stop and tell the user to invoke vv-spec first.</rule>
-<rule>Do not reinterpret or expand the spec. The plan implements ONLY what the spec describes.</rule>
-<rule>Do not treat design-context.xml as a requirements source. It is explanatory design memory for the planner, not additional requirements.</rule>
-</prerequisites>
+The spec's top-level &lt;status&gt; MUST be approved. If the status is draft, missing, applied, or any other value, stop and tell the user the spec must be explicitly approved before planning. If no spec exists, stop and tell the user to invoke vv-spec first. Do not reinterpret or expand the spec: the plan implements ONLY what the spec describes. Do not treat design-context.xml as a requirements source.
+</scope>
 
-<three_layer_review>
-<principle>The plan enables three independent review stages:</principle>
-<stage-1>spec.xml → review: are the requirements correct, complete, unambiguous?</stage-1>
-<stage-2>plan.xml → review against spec: does every requirement map to a task? Do contracts match spec intent?</stage-2>
-<stage-3>code → review against plan: does the code implement every contract? Do tests verify every acceptance criterion?</stage-3>
-</three_layer_review>
+<workflow>
+1. Read the approved spec in full and, when present, the sibling design-context.xml as explanatory context only.
+2. Map the architecture: each plan component reuses the exact COMPONENT-UPPER-SLUG identity declared in spec.xml. Plan components are always a subset of spec components — a plan module without a spec component does not exist. Architecture child tags: name (display name from the spec), purpose, file (path, role), contract, depends_on (bare component slug). Do NOT add a child id element.
+3. Write tasks grouped into waves: &lt;WAVE-1&gt;, &lt;WAVE-2&gt;, … Each wave contains a &lt;goal&gt; and its tasks. A task's identity is its element name in the TASK-T-NNN pattern: &lt;TASK-T-001&gt;…&lt;/TASK-T-001&gt;. Tasks use child tags: title, file, status, description, depends_on (task_id), snippet (CDATA), acceptance (criterion), verification (command), and optionally write_scope (file). Do NOT add a child id element — the element name is the single authoritative identity. Task-level &lt;status&gt; values are separate from the top-level plan lifecycle status and may remain pending until execution updates them.
+4. Populate &lt;spec&gt; with the path to the spec.xml this plan implements. If a design-context.xml was found and read, populate &lt;design_context&gt; with its path so execution tools and reviewers can locate it.
+5. Ask the user which execution intent the plan should declare — inline, classic, or delegated — while the plan is being drafted, and record it in an &lt;execution&gt; section with a &lt;mode&gt; child. If the user has no preference, omit the section entirely; a plan without &lt;execution&gt; keeps its legacy meaning and is never silently reinterpreted.
+6. For delegated plans, declare the full vocabulary the runtime registers: a &lt;review_checkpoints&gt; container with unique CHECKPOINT-R-NNN elements. Each checkpoint carries kind (milestone or final), after_wave (the wave barrier), covers (task_id references), scope (workspace-relative file paths), reviewers (spec and/or code), acceptance (criterion), and verification (command). Delegated tasks MUST declare a &lt;write_scope&gt; with at least the task's primary &lt;file&gt;.
+7. Run the self-review checks below and fix issues inline. No second review pass is needed — fix and continue.
+8. Save the plan to .vvoc/specs/&lt;id&gt;/plan.xml with top-level status draft. Present the file path and ask the user to read/review and explicitly approve it. Do NOT offer execution options until the user approves.
+9. If the user requests changes, keep the plan status as draft, make the changes, re-run self-review, save, and ask for approval again.
+10. After explicit user approval, update the saved plan so the top-level status is approved, then present exactly inline, classic, and delegated and wait for the user's choice. Do NOT start implementation.
+    - inline — execute tasks in this session.
+    - classic — vv-implementer executes tasks, followed by required reviewers per task, using work_item_open with `mode: "implementation"` and explicit `requiredReviewers`, then work_item_close after the collect-all review round is ready to close.
+    - delegated — workers implement bounded task packets, the controller accepts each attempt explicitly, and independent review happens at the plan's declared review checkpoints. Requires the delegated &lt;execution&gt; section with write scopes and checkpoints.
+</workflow>
 
-<plan_document_format>
-<rule>Load the plan template from references/plan-template.xml. Fill every element.</rule>
-<rule>The top-level &lt;status&gt; element is the plan lifecycle status and MUST be one of: draft, approved, applied.</rule>
-<rule>When first saving the plan, set the top-level status to &lt;status&gt;draft&lt;/status&gt;. Change it to approved only after the user explicitly reads/reviews and approves the final plan, or after a recorded delegated authority explicitly covers the planning stage; a reserved plan-approval stop still waits. Never set the top-level status to applied yourself; applied is reserved for vv-execute after successful execution.</rule>
-<rule>The plan contains two major sections: architecture (components, contracts, dependencies) and tasks (implementation steps with code snippets).</rule>
-<rule>Architecture maps the spec's components. Each architecture element reuses the exact COMPONENT-UPPER-SLUG identity declared in spec.xml: &lt;COMPONENT-CACHE-STORE&gt;…&lt;/COMPONENT-CACHE-STORE&gt;. Plan components are always a subset of spec components — a plan module without a spec component does not exist. Architecture child tags: name (display name from the spec), purpose, file (path, role), contract, depends_on (bare component slug). Do NOT add a child id element.</rule>
-<rule>Tasks are grouped into wave elements whose identity is the element name: &lt;WAVE-1&gt;, &lt;WAVE-2&gt;, … Each wave contains a &lt;goal&gt; and its tasks.</rule>
-<rule>A task's identity is its element name in the TASK-T-NNN pattern: &lt;TASK-T-001&gt;…&lt;/TASK-T-001&gt;. The identity repeats on both boundaries so long blocks stay addressable. Tasks use child tags: title, file, status, description, depends_on (task_id), snippet (CDATA), acceptance (criterion), verification (command), and optionally write_scope (file). Do NOT add a child id element — the element name is the single authoritative identity. Task-level &lt;status&gt; values are separate from the top-level plan lifecycle status and may remain pending until execution updates them.</rule>
-<rule>Every XML element is named for grep extraction. Use: `grep '&lt;TASK-T-' plan.xml` to list tasks, `grep '&lt;criterion&gt;' plan.xml` for all criteria, `grep '&lt;task_id&gt;' plan.xml` for dependency graph, `grep '&lt;COMPONENT-' plan.xml` for the component map.</rule>
-<rule>Populate the &lt;spec&gt; element with the path to the spec.xml this plan implements.</rule>
-<rule>If a design-context.xml was found and read as explanatory context, populate the &lt;design_context&gt; element with the path to design-context.xml so execution tools and reviewers can locate it.</rule>
-<location>Save plan.xml as a sibling of spec.xml in the same spec package directory: .vvoc/specs/&lt;id&gt;/plan.xml</location>
-</plan_document_format>
+<rules>
+- Write the plan document in English by default. Use the user's language only for dialogue; if the user explicitly requests a different document language, follow that request.
+- The top-level &lt;status&gt; element is the plan lifecycle status and MUST be one of: draft, approved, applied. When first saving, set draft. Change it to approved only after the user explicitly reads/reviews and approves the final plan, or after a recorded delegated authority explicitly covers the planning stage; a reserved plan-approval stop still waits. Never set applied yourself; applied is reserved for vv-execute after successful execution.
+- Every XML element is named for grep extraction. Use `grep '&lt;TASK-T-' plan.xml` to list tasks, `grep '&lt;criterion&gt;' plan.xml` for all criteria, `grep '&lt;task_id&gt;' plan.xml` for the dependency graph, and `grep '&lt;COMPONENT-' plan.xml` for the component map.
+- Milestones reflect contract or integration boundaries — not a fixed task-count interval. The default recommendation is a focused code review at meaningful intermediate milestones and spec plus code review at the final checkpoint; justify any larger reviewer set explicitly in the checkpoint's acceptance criteria. The exact reviewer set and milestones are explicit in this plan, never imposed by the runtime.
+- The final checkpoint MUST sit after the last wave, cover every declared task, and its scope MUST cover every task write scope, so the complete current result receives fresh review before completion.
+- Review coverage is not retroactive: later planned edits are covered by later checkpoints or the final checkpoint, not by an earlier milestone's approval. Adding a new execution policy to an already approved legacy plan requires an explicit agreed amendment; archived plans are never rewritten.
+- Every task after the first must declare its dependencies in &lt;depends_on&gt;: `&lt;depends_on&gt;&lt;task_id&gt;T-001&lt;/task_id&gt;&lt;task_id&gt;T-002&lt;/task_id&gt;&lt;/depends_on&gt;`. The graph is grep-able with `grep '&lt;task_id&gt;' plan.xml`.
+- Acceptance criteria: every task contains an &lt;acceptance&gt; section with one or more &lt;criterion&gt; elements. Each criterion is ONE specific, testable condition. If you cannot write a test for it, it is not specific enough. Criteria cover: success paths, failure paths, edge cases, boundary conditions, concurrency when relevant.
+- Derive acceptance criteria and verification commands from the spec contract and the directly affected consumers, not from a preferred implementation. Criteria cover the material properties that must be preserved and the interactions with the consumers the change touches.
+- Choose verification at the level where the risk arises: name the targeted command or scenario that exercises the changed behavior, and do not present a general check that cannot reach the changed path as evidence for a material criterion.
+- Every criterion names the property it protects and the oracle that decides it. Every verification command must exercise the changed behavior and produce inspectable evidence; a check that cannot fail for the claimed reason is not evidence. Use the vv-verification references for oracle and evidence vocabulary rather than inventing a second taxonomy.
+- Use plain English assertions: "Returns X when Y", "Throws Z if W", "Handles N concurrent calls without data loss". Each criterion is a separate &lt;criterion&gt; element; no numbered tags.
+- File structure: before defining any tasks, map out every file that will be created or modified. Use exact relative paths from the project root. Mark each file Create, Modify, or Test. Prefer smaller focused files with one clear responsibility. Files that change together should live together; split by responsibility, not technical layer. In existing codebases, follow established file patterns.
+- These are PLAN FAILURES and the plan is incomplete if any appear: TBD, TODO, "implement later", "fill in details", "add later"; "Add appropriate error handling" or "add validation" without the specific error types or validation rules; "Write tests for the above" without concrete acceptance criteria; empty &lt;contract&gt; or &lt;acceptance&gt; sections; "Similar to Task N" instead of repeating the full contract; references to types, functions, methods, or classes not defined in any prior task; XML attributes in any tag; code outside CDATA; numbered criterion tags; generic &lt;task&gt;, &lt;wave&gt;, or &lt;module&gt; elements with child id or num elements — identity belongs in the element name.
+</rules>
 
-<execution_intent>
-<rule>Ask the user which execution intent the plan should declare — inline, classic, or delegated — while the plan is being drafted, and record it in an &lt;execution&gt; section with a &lt;mode&gt; child. If the user has no preference, omit the section entirely; a plan without &lt;execution&gt; keeps its legacy meaning and is never silently reinterpreted.</rule>
-<rule>Delegated plans MUST declare the full vocabulary the runtime registers: a &lt;review_checkpoints&gt; container with unique CHECKPOINT-R-NNN elements. Each checkpoint carries kind (milestone or final), after_wave (the wave barrier), covers (task_id references), scope (workspace-relative file paths), reviewers (spec and/or code), acceptance (criterion), and verification (command).</rule>
-<rule>Delegated tasks MUST declare a &lt;write_scope&gt; with at least the task's primary &lt;file&gt;; the write scope is the worker's bounded editing territory and the checkpoint's fingerprint input.</rule>
-<rule>Milestones reflect contract or integration boundaries — not a fixed task-count interval. The default recommendation is a focused code review at meaningful intermediate milestones and spec plus code review at the final checkpoint; justify any larger reviewer set explicitly in the checkpoint's acceptance criteria. The exact reviewer set and milestones are explicit in this plan, never imposed by the runtime.</rule>
-<rule>The final checkpoint MUST sit after the last wave, cover every declared task, and its scope MUST cover every task write scope, so the complete current result receives fresh review before completion.</rule>
-<rule>Review coverage is not retroactive: later planned edits are covered by later checkpoints or the final checkpoint, not by an earlier milestone's approval. Adding a new execution policy to an already approved legacy plan requires an explicit agreed amendment; archived plans are never rewritten.</rule>
-</execution_intent>
+<artifact>
+Plan document format:
+- Load the template from `references/plan-template.xml` and fill every element.
+- The plan contains two major sections: architecture (components, contracts, dependencies) and tasks (implementation steps with code snippets).
+- Save plan.xml as a sibling of spec.xml in the same spec package directory: .vvoc/specs/&lt;id&gt;/plan.xml.
+- Three independent review stages: spec → are the requirements correct, complete, and unambiguous; plan → does every requirement map to a task and do contracts match spec intent; code → does the code implement every contract and do tests verify every acceptance criterion.
 
-<snippet_format>
-<rule>Every task contains a &lt;snippet&gt; element wrapped in CDATA. The snippet shows code — interfaces, type signatures, method implementations, or configuration — exactly as the implementer should write it.</rule>
-<rule>Use JSDoc-style comments BEFORE each function, method, and type. Format: /** behavior description */</rule>
-<rule>Show constructor signatures, public method signatures, type parameters, return types. Include private fields if they define structural state.</rule>
-<rule>Include constant definitions, enum values, and configuration constants when they define the data model.</rule>
-<rule>Show implementation logic when it is the point of the contract — a small algorithm, a state transition, a conditional branching rule.</rule>
-<rule>CDATA wrapping is mandatory: &lt;snippet&gt;&lt;![CDATA[...]]&gt;&lt;/snippet&gt;. This protects against &lt; and &gt; in code breaking XML structure.</rule>
-</snippet_format>
+Snippet format:
+- Every task contains a &lt;snippet&gt; element wrapped in CDATA. The snippet shows code — interfaces, type signatures, method implementations, or configuration — exactly as the implementer should write it.
+- Use JSDoc-style comments BEFORE each function, method, and type: `/** behavior description */`.
+- Show constructor signatures, public method signatures, type parameters, return types. Include private fields if they define structural state. Include constant definitions, enum values, and configuration constants when they define the data model. Show implementation logic when it is the point of the contract — a small algorithm, a state transition, a conditional branching rule.
+- CDATA wrapping is mandatory: `&lt;snippet&gt;&lt;![CDATA[...]]&gt;&lt;/snippet&gt;`. This protects against &lt; and &gt; in code breaking XML structure.
 
-<acceptance_criteria_format>
-<rule>Every task contains an &lt;acceptance&gt; section with one or more &lt;criterion&gt; elements.</rule>
-<rule>Each criterion is ONE specific, testable condition. If you cannot write a test for it, it is not specific enough.</rule>
-<rule>Criteria cover: success paths, failure paths, edge cases, boundary conditions, concurrency when relevant.</rule>
-<rule>Derive acceptance criteria and verification commands from the spec contract and the directly affected consumers, not from a preferred implementation. Criteria cover the material properties that must be preserved and the interactions with the consumers the change touches.</rule>
-<rule>Choose verification at the level where the risk arises: name the targeted command or scenario that exercises the changed behavior, and do not present a general check that cannot reach the changed path as evidence for a material criterion.</rule>
-<rule>Every criterion names the property it protects and the oracle that decides it. Every verification command must exercise the changed behavior and produce inspectable evidence; a check that cannot fail for the claimed reason is not evidence. Use the vv-verification references for oracle and evidence vocabulary rather than inventing a second taxonomy.</rule>
-<rule>Use plain English assertions: "Returns X when Y", "Throws Z if W", "Handles N concurrent calls without data loss".</rule>
-<rule>Each criterion is a separate child tag: &lt;criterion&gt;...&lt;/criterion&gt;. Line breaks between them for readability. No numbered tags.</rule>
-</acceptance_criteria_format>
-
-<example>
-<rule>Here is a concrete example of one task. The task identity is the element name, repeated on both boundaries; every &lt;snippet&gt; uses CDATA, and every &lt;criterion&gt; is testable:</rule>
-<sample-fragment>
-  &lt;TASK-T-001&gt;
-  &lt;title&gt;LRU Cache Store&lt;/title&gt;
-  &lt;file&gt;src/lib/cache-store.ts&lt;/file&gt;
-  &lt;status&gt;pending&lt;/status&gt;
-  &lt;description&gt;Implement a size-bounded LRU cache with get, set, and clear operations&lt;/description&gt;
-  &lt;snippet&gt;&lt;![CDATA[
-      /** Options for configuring a CacheStore instance. */
+Example task:
+<![CDATA[
+<TASK-T-001>
+  <title>LRU Cache Store</title>
+  <file>src/lib/cache-store.ts</file>
+  <status>pending</status>
+  <description>Implement a size-bounded LRU cache with get, set, and clear operations</description>
+  <snippet><![CDATA[
+/** Options for configuring a CacheStore instance. */
 export type CacheStoreOptions = {
   /** Maximum number of entries before eviction begins. */
   maxSize: number;
-  };
+};
 
 /**
  * A size-bounded store with least-recently-used eviction.
  * Get bumps the accessed key to most-recently-used position.
  */
- export class CacheStore&lt;T&gt; {
+export class CacheStore<T> {
   /** Creates an empty store with the given capacity limit. */
   constructor(options: CacheStoreOptions);
 
@@ -111,76 +94,35 @@ export type CacheStoreOptions = {
 
   /** Removes all entries from the store. */
   clear(): void;
-  }
-]]&gt;&lt;/snippet&gt;
-  &lt;acceptance&gt;
-    &lt;criterion&gt;get() returns undefined for a key that was never set&lt;/criterion&gt;
-    &lt;criterion&gt;get() returns the value stored by set() for the same key&lt;/criterion&gt;
-    &lt;criterion&gt;When at maxSize capacity, setting a new key evicts the least-recently-used entry&lt;/criterion&gt;
-    &lt;criterion&gt;get() on an existing key bumps it to MRU, protecting it from eviction&lt;/criterion&gt;
-    &lt;criterion&gt;set() on an existing key updates its value without evicting other entries&lt;/criterion&gt;
-  &lt;/acceptance&gt;
-  &lt;verification&gt;
-    &lt;command&gt;bun test src/lib/cache-store.test.ts&lt;/command&gt;
-  &lt;/verification&gt;
-  &lt;/TASK-T-001&gt;
-</sample-fragment>
-<rule>Notice: the task identity TASK-T-001 appears in the opening and closing element names. The snippet uses CDATA wrapping (mandatory). Every field is a child tag (no attributes): title, file, status, description, snippet, acceptance, and verification.</rule>
-</example>
+}
+  ]]></snippet>
+  <acceptance>
+    <criterion>get() returns undefined for a key that was never set</criterion>
+    <criterion>get() returns the value stored by set() for the same key</criterion>
+    <criterion>When at maxSize capacity, setting a new key evicts the least-recently-used entry</criterion>
+    <criterion>get() on an existing key bumps it to MRU, protecting it from eviction</criterion>
+    <criterion>set() on an existing key updates its value without evicting other entries</criterion>
+  </acceptance>
+  <verification>
+    <command>bun test src/lib/cache-store.test.ts</command>
+  </verification>
+</TASK-T-001>
+]]>
 
-<file_structure>
-<rule>Before defining any tasks, map out every file that will be created or modified.</rule>
-<rule>Use exact relative paths from the project root.</rule>
-<rule>Mark each file: Create (new), Modify (existing), or Test.</rule>
-<rule>Prefer smaller focused files. Each file should have one clear responsibility.</rule>
-<rule>Files that change together should live together. Split by responsibility, not technical layer.</rule>
-<rule>In existing codebases, follow established file patterns.</rule>
-</file_structure>
+Self-review checks:
+- Spec coverage: for each requirement in the spec, identify the task that implements it. List any gaps as issues to fix.
+- Contract completeness: does every task's contract show all public signatures and types? Are edge cases covered by acceptance criteria?
+- Acceptance criteria quality: is every criterion testable? Could a reviewer or implementer write a failing test for it? Are the material properties that must be preserved and the directly affected consumers covered by criteria whose verification actually reaches them?
+- Verification intent: does every criterion name its property and oracle? Does every verification command produce inspectable evidence at the level the risk arises?
+- Type consistency: do types, signatures, and property names match across tasks? A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.
+- Format compliance: zero XML attributes, every snippet in CDATA, every task a &lt;TASK-T-NNN&gt; element with identity in the element name and no child id element.
+- Architecture presence: every &lt;COMPONENT-UPPER-SLUG&gt; element exists in the spec's components section — plan components are a subset of spec components.
+</artifact>
 
-<dependency_tracking>
-<rule>Every task after the first must declare its dependencies in &lt;depends_on&gt;.</rule>
-<rule>Use child tags: &lt;depends_on&gt;&lt;task_id&gt;T-001&lt;/task_id&gt;&lt;task_id&gt;T-002&lt;/task_id&gt;&lt;/depends_on&gt;</rule>
-<rule>Dependency graph is grep-able: `grep '&lt;task_id&gt;' plan.xml`</rule>
-</dependency_tracking>
+<refs>
+- `references/plan-template.xml` — the plan document template; load before writing the plan and fill every element.
+</refs>
 
-<no_placeholders>
-<rule>These are PLAN FAILURES. The plan is incomplete if any of these appear:</rule>
-<forbidden>TBD, TODO, "implement later", "fill in details", "add later"</forbidden>
-<forbidden>"Add appropriate error handling" or "add validation" — WITHOUT the specific error types or validation rules</forbidden>
-<forbidden>"Write tests for the above" — WITHOUT concrete acceptance criteria</forbidden>
-<forbidden>Empty &lt;contract&gt; or &lt;acceptance-criteria&gt; sections</forbidden>
-<forbidden>"Similar to Task N" — repeat the full contract and criteria; the implementer may read tasks out of order</forbidden>
-<forbidden>References to types, functions, methods, or classes not defined in any prior task</forbidden>
-<forbidden>XML attributes in any tag — use child elements only</forbidden>
-<forbidden>Code outside CDATA — all snippets must be wrapped in CDATA sections</forbidden>
-<forbidden>Numbered criterion tags — use plain &lt;criterion&gt;, not numbered variants</forbidden>
-<forbidden>Generic &lt;task&gt;, &lt;wave&gt;, or &lt;module&gt; elements with child id/num elements — identity belongs in the element name: &lt;TASK-T-NNN&gt;, &lt;WAVE-N&gt;, &lt;COMPONENT-UPPER-SLUG&gt;</forbidden>
-</no_placeholders>
-
-<self_review>
-<check>Spec coverage: For each requirement in the spec, identify the task that implements it. List any gaps as issues to fix.</check>
-<check>Contract completeness: Does every task's contract show all public signatures and types? Are edge cases covered by acceptance criteria?</check>
-<check>Acceptance criteria quality: Is every criterion testable? Could a reviewer or implementer write a failing test for it? Are the material properties that must be preserved and the directly affected consumers covered by criteria whose verification actually reaches them?</check>
-<check>Verification intent: does every criterion name its property and oracle? Does every verification command produce inspectable evidence at the level the risk arises?</check>
-<check>Type consistency: Do types, signatures, and property names match across tasks? A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.</check>
-<rule>Fix issues inline as you find them. No second review pass needed — just fix and continue.</rule>
-<check>Format compliance: Are there zero XML attributes? Is every snippet in CDATA? Is every task a &lt;TASK-T-NNN&gt; element with identity in the element name and no child id element?</check>
-<check>Architecture presence: Does the plan have an architecture section with components, contracts, and dependency graph? Does every &lt;COMPONENT-UPPER-SLUG&gt; element exist in the spec's components section — plan components are a subset of spec components?</check>
-</self_review>
-
-<execution_handoff>
-<rule>Save the plan to .vvoc/specs/&lt;id&gt;/plan.xml with top-level status draft.</rule>
-<rule>After saving, present the plan file path and ask the user to read/review the plan and explicitly approve it. Do NOT offer execution options until the user approves the plan.</rule>
-<rule>If the user requests changes, keep the plan status as draft, make the changes, re-run self-review, save the updated plan, and ask for approval again.</rule>
-<rule>After explicit user approval, update the saved plan file so the top-level status is &lt;status&gt;approved&lt;/status&gt;.</rule>
-<rule>After the saved plan status is approved, present the user with the execution options:</rule>
-<option name="workflow">Workflow tracked loop — vv-implementer executes tasks, followed by required reviewers per task. Uses work_item_open with `mode: "implementation"` and explicit `requiredReviewers`, then work_item_close after the collect-all review round is ready to close.</option>
-<option name="delegated">Delegated execution — workers implement bounded task packets, the controller accepts each attempt explicitly, and independent review happens at the plan's declared review checkpoints. Requires the delegated &lt;execution&gt; section with write scopes and checkpoints.</option>
-<option name="manual">Manual execution — the user or another agent executes tasks step by step following the plan directly.</option>
-<rule>Wait for the user's choice. Do NOT start implementation.</rule>
-</execution_handoff>
-
-<task>
-Your current task is the ongoing user request. Read the approved spec at .vvoc/specs/&lt;id&gt;/spec.xml and verify its top-level status is approved. Check whether a sibling design-context.xml exists; if so, read it as explanatory context only (it does NOT override spec.xml). Load the plan template from references/plan-template.xml, populate &lt;spec&gt; and optionally &lt;design_context&gt; paths, map the architecture (spec components as COMPONENT-UPPER-SLUG elements, contracts, dependencies), write detailed tasks with code snippets in CDATA, apply self-review, save the plan as .vvoc/specs/&lt;id&gt;/plan.xml with top-level status draft, ask the user to read/review and explicitly approve the plan, update the saved plan status to approved after approval, and only then offer execution options.
-</task>
-</skill>
+<done>
+An approved spec was read, the architecture and tasks were written with contracts and testable criteria, self-review issues were fixed, plan.xml was saved under .vvoc/specs/&lt;id&gt;/, the user explicitly approved it, the top-level status is approved, and exactly the three execution options were presented. Stop before implementation.
+</done>

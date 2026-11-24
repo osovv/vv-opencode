@@ -1,5 +1,14 @@
 # AI slop tells
 
+## Contents
+- Typography
+- Color and contrast
+- Layout and space
+- Motion
+- Copy
+- Imagery
+- Template chrome (composites)
+
 A catalog for the subtractive audit. Read it as a set of familiar defaults to notice, not a ban list.
 
 **How to use it**

@@ -1,5 +1,21 @@
 # Create Your Verification Stack
 
+## Contents
+- When to use
+- Discover the repository
+- Write VERIFICATION.md
+  - Commands
+  - Claim map
+  - Environments and fixtures
+  - Known gaps
+  - Maintenance
+- Create the verification CLI
+- Generate the project skills
+- Register the skills
+- The smallest useful stack
+- Never impose a framework
+- Keep it current
+
 Most repositories have tests but no explicit map from claims to evidence. This reference builds that map from the repository's own tooling, then turns it into invocable behavior: a verification CLI and two project-local skills. It is language-agnostic by design: discover what the project already uses, then record and wrap it.
 
 What the stack consists of:

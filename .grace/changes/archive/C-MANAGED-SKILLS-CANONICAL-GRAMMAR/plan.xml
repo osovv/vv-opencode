@@ -1,0 +1,299 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-MANAGED-SKILLS-CANONICAL-GRAMMAR>
+    <IntentSummary>Reserialize all eleven managed skills onto one six-block grammar (scope, workflow, rules, artifact, refs, done), remove the universal skill root, identity, and task blocks, keep rule and step only for addressability, preserve every normative obligation, unify execution vocabulary between vv-plan and vv-execute, add reference tables of contents and the supported-host note, add a deterministic grammar gate, and reconcile the managed-skills graph and verification projections.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-CLI-MANAGED-SKILLS</Value>
+        <Value>V-M-CLI-MANAGED-SKILLS</Value>
+        <Value>src/lib/managed-skills.test.ts</Value>
+        <Value>templates/skills</Value>
+        <Value>README.md</Value>
+        <Value>.grace/graph/main.xml</Value>
+        <Value>.grace/verification/main.xml</Value>
+      </MustExist>
+      <MustContain><File>templates/skills/vv-review/SKILL.md</File><Text>&lt;identity&gt;</Text></MustContain>
+      <MustContain><File>templates/skills/vv-execute/SKILL.md</File><Text>Supported modes:</Text></MustContain>
+      <MustContain><File>templates/skills/vv-plan/SKILL.md</File><Text>Workflow tracked loop</Text></MustContain>
+      <MustContain><File>templates/skills/vvoc-usage-analytics/SKILL.md</File><Text>1.18.x</Text></MustContain>
+      <MustContain><File>src/lib/managed-skills.test.ts</File><Text>vv-execute hides mode names</Text></MustContain>
+      <MustNotContain><File>templates/skills/vv-verification/references/evidence.md</File><Text>## Contents</Text></MustNotContain>
+      <MustContain><File>.grace/graph/main.xml</File><Text>M-CLI-MANAGED-SKILLS</Text></MustContain>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-CLI-MANAGED-SKILLS</Module>
+      </MustVerify>
+      <MustContain><File>templates/skills/vv-review/SKILL.md</File><Text>&lt;scope&gt;</Text></MustContain>
+      <MustContain><File>templates/skills/vv-review/SKILL.md</File><Text>&lt;done&gt;</Text></MustContain>
+      <MustNotContain><File>templates/skills/vv-review/SKILL.md</File><Text>&lt;skill&gt;</Text></MustNotContain>
+      <MustNotContain><File>templates/skills/vv-review/SKILL.md</File><Text>&lt;identity&gt;</Text></MustNotContain>
+      <MustNotContain><File>templates/skills/vv-review/SKILL.md</File><Text>&lt;task&gt;</Text></MustNotContain>
+      <MustContain><File>templates/skills/vv-handoff/SKILL.md</File><Text>&lt;scope&gt;</Text></MustContain>
+      <MustContain><File>templates/skills/vv-handoff/SKILL.md</File><Text>&lt;done&gt;</Text></MustContain>
+      <MustNotContain><File>templates/skills/vv-handoff/SKILL.md</File><Text>&lt;skill&gt;</Text></MustNotContain>
+      <MustNotContain><File>templates/skills/vv-handoff/SKILL.md</File><Text>&lt;identity&gt;</Text></MustNotContain>
+      <MustNotContain><File>templates/skills/vv-handoff/SKILL.md</File><Text>&lt;task&gt;</Text></MustNotContain>
+      <MustContain><File>templates/skills/vv-reflect/SKILL.md</File><Text>&lt;scope&gt;</Text></MustContain>
+      <MustContain><File>templates/skills/vv-reflect/SKILL.md</File><Text>&lt;done&gt;</Text></MustContain>
+      <MustNotContain><File>templates/skills/vv-reflect/SKILL.md</File><Text>&lt;skill&gt;</Text></MustNotContain>
+      <MustNotContain><File>templates/skills/vv-reflect/SKILL.md</File><Text>&lt;identity&gt;</Text></MustNotContain>
+      <MustNotContain><File>templates/skills/vv-reflect/SKILL.md</File><Text>&lt;task&gt;</Text></MustNotContain>
+      <MustContain><File>templates/skills/vv-execute/SKILL.md</File><Text>&lt;scope&gt;</Text></MustContain>
+      <MustContain><File>templates/skills/vv-execute/SKILL.md</File><Text>&lt;done&gt;</Text></MustContain>
+      <MustNotContain><File>templates/skills/vv-execute/SKILL.md</File><Text>&lt;skill&gt;</Text></MustNotContain>
+      <MustNotContain><File>templates/skills/vv-execute/SKILL.md</File><Text>&lt;identity&gt;</Text></MustNotContain>
+      <MustNotContain><File>templates/skills/vv-execute/SKILL.md</File><Text>&lt;task&gt;</Text></MustNotContain>
+      <MustContain><File>templates/skills/vv-plan/SKILL.md</File><Text>&lt;scope&gt;</Text></MustContain>
+      <MustContain><File>templates/skills/vv-plan/SKILL.md</File><Text>&lt;done&gt;</Text></MustContain>
+      <MustNotContain><File>templates/skills/vv-plan/SKILL.md</File><Text>&lt;skill&gt;</Text></MustNotContain>
+      <MustNotContain><File>templates/skills/vv-plan/SKILL.md</File><Text>&lt;identity&gt;</Text></MustNotContain>
+      <MustNotContain><File>templates/skills/vv-plan/SKILL.md</File><Text>&lt;task&gt;</Text></MustNotContain>
+      <MustContain><File>templates/skills/vv-spec/SKILL.md</File><Text>&lt;scope&gt;</Text></MustContain>
+      <MustContain><File>templates/skills/vv-spec/SKILL.md</File><Text>&lt;done&gt;</Text></MustContain>
+      <MustNotContain><File>templates/skills/vv-spec/SKILL.md</File><Text>&lt;skill&gt;</Text></MustNotContain>
+      <MustNotContain><File>templates/skills/vv-spec/SKILL.md</File><Text>&lt;identity&gt;</Text></MustNotContain>
+      <MustNotContain><File>templates/skills/vv-spec/SKILL.md</File><Text>&lt;task&gt;</Text></MustNotContain>
+      <MustContain><File>templates/skills/vv-verification/SKILL.md</File><Text>&lt;scope&gt;</Text></MustContain>
+      <MustContain><File>templates/skills/vv-verification/SKILL.md</File><Text>&lt;done&gt;</Text></MustContain>
+      <MustNotContain><File>templates/skills/vv-verification/SKILL.md</File><Text>&lt;skill&gt;</Text></MustNotContain>
+      <MustNotContain><File>templates/skills/vv-verification/SKILL.md</File><Text>&lt;identity&gt;</Text></MustNotContain>
+      <MustNotContain><File>templates/skills/vv-verification/SKILL.md</File><Text>&lt;task&gt;</Text></MustNotContain>
+      <MustContain><File>templates/skills/vv-ui-design-principles/SKILL.md</File><Text>&lt;scope&gt;</Text></MustContain>
+      <MustContain><File>templates/skills/vv-ui-design-principles/SKILL.md</File><Text>&lt;done&gt;</Text></MustContain>
+      <MustNotContain><File>templates/skills/vv-ui-design-principles/SKILL.md</File><Text>&lt;skill&gt;</Text></MustNotContain>
+      <MustNotContain><File>templates/skills/vv-ui-design-principles/SKILL.md</File><Text>&lt;identity&gt;</Text></MustNotContain>
+      <MustNotContain><File>templates/skills/vv-ui-design-principles/SKILL.md</File><Text>&lt;task&gt;</Text></MustNotContain>
+      <MustContain><File>templates/skills/vv-write-for-humans/SKILL.md</File><Text>&lt;scope&gt;</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-humans/SKILL.md</File><Text>&lt;done&gt;</Text></MustContain>
+      <MustNotContain><File>templates/skills/vv-write-for-humans/SKILL.md</File><Text>&lt;skill&gt;</Text></MustNotContain>
+      <MustNotContain><File>templates/skills/vv-write-for-humans/SKILL.md</File><Text>&lt;identity&gt;</Text></MustNotContain>
+      <MustNotContain><File>templates/skills/vv-write-for-humans/SKILL.md</File><Text>&lt;task&gt;</Text></MustNotContain>
+      <MustContain><File>templates/skills/vv-write-for-agents/SKILL.md</File><Text>&lt;scope&gt;</Text></MustContain>
+      <MustContain><File>templates/skills/vv-write-for-agents/SKILL.md</File><Text>&lt;done&gt;</Text></MustContain>
+      <MustNotContain><File>templates/skills/vv-write-for-agents/SKILL.md</File><Text>&lt;skill&gt;</Text></MustNotContain>
+      <MustNotContain><File>templates/skills/vv-write-for-agents/SKILL.md</File><Text>&lt;identity&gt;</Text></MustNotContain>
+      <MustNotContain><File>templates/skills/vv-write-for-agents/SKILL.md</File><Text>&lt;task&gt;</Text></MustNotContain>
+      <MustContain><File>templates/skills/vvoc-usage-analytics/SKILL.md</File><Text>&lt;scope&gt;</Text></MustContain>
+      <MustContain><File>templates/skills/vvoc-usage-analytics/SKILL.md</File><Text>&lt;done&gt;</Text></MustContain>
+      <MustNotContain><File>templates/skills/vvoc-usage-analytics/SKILL.md</File><Text>&lt;skill&gt;</Text></MustNotContain>
+      <MustNotContain><File>templates/skills/vvoc-usage-analytics/SKILL.md</File><Text>&lt;identity&gt;</Text></MustNotContain>
+      <MustNotContain><File>templates/skills/vvoc-usage-analytics/SKILL.md</File><Text>&lt;task&gt;</Text></MustNotContain>
+      <MustContain><File>templates/skills/vv-execute/SKILL.md</File><Text>| Mode | Implementer | Reviews | Commit |</Text></MustContain>
+      <MustContain><File>templates/skills/vv-execute/SKILL.md</File><Text>references/tool-contracts.md</Text></MustContain>
+      <MustNotContain><File>templates/skills/vv-plan/SKILL.md</File><Text>Workflow tracked loop</Text></MustNotContain>
+      <MustNotContain><File>templates/skills/vv-plan/SKILL.md</File><Text>Manual execution</Text></MustNotContain>
+      <MustContain><File>templates/skills/vv-plan/SKILL.md</File><Text>inline, classic, and delegated</Text></MustContain>
+      <MustContain><File>templates/skills/vv-verification/references/evidence.md</File><Text>## Contents</Text></MustContain>
+      <MustContain><File>templates/skills/vv-verification/references/oracles.md</File><Text>## Contents</Text></MustContain>
+      <MustContain><File>templates/skills/vv-verification/references/strategy.md</File><Text>## Contents</Text></MustContain>
+      <MustContain><File>templates/skills/vv-verification/references/create-your-verification-stack.md</File><Text>## Contents</Text></MustContain>
+      <MustContain><File>templates/skills/vv-ui-design-principles/references/slop-tells.md</File><Text>## Contents</Text></MustContain>
+      <MustContain><File>templates/skills/vvoc-usage-analytics/references/opencode-db-queries.md</File><Text>## Contents</Text></MustContain>
+      <MustContain><File>templates/skills/vvoc-usage-analytics/SKILL.md</File><Text>2.0.18</Text></MustContain>
+      <MustContain><File>templates/skills/vvoc-usage-analytics/references/opencode-db-queries.md</File><Text>2.0.18</Text></MustContain>
+      <MustContain><File>src/lib/managed-skills.grammar.test.ts</File><Text>assertSkillGrammar</Text></MustContain>
+      <MustContain><File>.grace/graph/main.xml</File><Text>canonical six-block</Text></MustContain>
+      <MustContain><File>.grace/verification/main.xml</File><Text>canonical six-block</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/lib/managed-skills.test.ts src/lib/managed-skills.grammar.test.ts</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run typecheck</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run check</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run build</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run pack:check</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>git diff --check</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <PlanningNotes>
+      <Note>Canonical grammar: YAML frontmatter, then exactly these top-level blocks in this order — scope (required), workflow (required), rules (required), artifact (optional), refs (optional), done (required). Element names are snake_case. There is no skill root, identity, task, principle, language, completion, or per-skill decorative block. Prose, lists, and tables inside a block are markdown; markdown headings may separate named sub-procedures inside workflow or artifact without creating a new top-level block. XML is used for the six block boundaries, for addressable rule or step elements, and inside artifact CDATA when the artifact itself is XML.</Note>
+      <Note>Addressability policy: rule is the normative unit inside rules and is kept as an element; id is added only when another block references that rule. step is used only when a workflow step is addressed by name or referenced elsewhere; otherwise workflow uses a numbered markdown list. No other attributes are permitted, so mode name, option name, source precedence, and unreferenced step labels become table columns, element names, or list items.</Note>
+      <Note>Preservation map: identity contributes its unique stance to scope and is deleted; task contributes its completion condition and evidence to done and is deleted; principle, language, hard-stops, completion, finding_format, report_format, spec_document_format, plan_document_format, grep-helpers, data_sources, metric_definitions, three_layer_review, destination, redaction, and approval are folded into scope, rules, artifact, or refs according to function. No obligation is dropped; only duplicate wording is removed.</Note>
+      <Note>Known behavior defect fixed here: vv-plan currently offers workflow tracked loop, delegated, and manual while vv-execute and src/lib/spec-lint/plan-rules.ts accept only inline, classic, and delegated. The plan handoff and the executor must share one vocabulary; manual execution is not a mode this repository supports and is removed rather than invented.</Note>
+      <Note>Descriptions and triggers are frozen: frontmatter is not rewritten, so OpenCode routing and README rows stay accurate. Skill names, MANAGED_SKILL_NAMES, install and sync semantics, and the 33-file and 31-file installed counts do not change. No reference file is added or removed.</Note>
+      <Note>Testing boundary: the grammar test scans shipped text and synthetic fixtures; the content-marker tests pin obligations. Both assert delivery and structure, not model behavior. No adherence claim is made for XML or markdown, and no A/B evaluation is in scope.</Note>
+      <Note>Sequencing: T-001 establishes the grammar on the three smallest skills and updates both content-marker consumers, including the vv-reflect and vv-handoff pins in src/lib/opencode.test.ts, so the suite stays green. T-002 through T-005 reserialize the remaining skills in independent groups, each updating its own content-marker tests in the same task. T-006 is reference-only and independent after T-001. T-007 adds the all-template gate only after every template conforms. T-008 reconciles GRACE projections. T-009 runs the full gate. Dependencies express consumption, not a forced linear worker schedule.</Note>
+      <Note>Reference and GRACE boundary: hand-authored references remain markdown; spec, plan, and handoff templates remain XML; the generated tool-contracts reference and the Python extractor are exempt from markdown rewriting and from the contents rule. The generated tool-contracts reference is never hand-edited. GRACE lifecycle commands are executed externally, never inside MustPassCommand.</Note>
+      <Note>Best-practice traceability: the change satisfies the structural criteria the audit checked — name and description limits, bodies under five hundred lines, one-level references, contents sections for long hand-authored references, removal of the stale host-version implication, and one terminology for the block vocabulary and the execution modes. Behavioral evaluation of XML versus markdown is explicitly out of scope and is not claimed.</Note>
+      <Note>Draft boundary: the spec is approved by the user's explicit 2026-11-24 instruction to create the bundle; this plan remains draft for review. The requested review covers spec.xml and plan.xml only. Implementation, plan approval, commit, installation, and release follow only after explicit approval.</Note>
+    </PlanningNotes>
+    <DurableScope>
+      <GraphAnchors>
+        <M-CLI-MANAGED-SKILLS />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-CLI-MANAGED-SKILLS />
+      </VerificationAnchors>
+      <ContextArtifact>requirements.xml</ContextArtifact>
+      <ContextArtifact>principles.xml</ContextArtifact>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>.grace/changes/active/C-MANAGED-SKILLS-CANONICAL-GRAMMAR/plan.xml</File>
+      <File>templates/skills/vv-execute/SKILL.md</File>
+      <File>templates/skills/vv-handoff/SKILL.md</File>
+      <File>templates/skills/vv-plan/SKILL.md</File>
+      <File>templates/skills/vv-reflect/SKILL.md</File>
+      <File>templates/skills/vv-review/SKILL.md</File>
+      <File>templates/skills/vv-spec/SKILL.md</File>
+      <File>templates/skills/vv-ui-design-principles/SKILL.md</File>
+      <File>templates/skills/vv-verification/SKILL.md</File>
+      <File>templates/skills/vv-write-for-agents/SKILL.md</File>
+      <File>templates/skills/vv-write-for-humans/SKILL.md</File>
+      <File>templates/skills/vvoc-usage-analytics/SKILL.md</File>
+      <File>templates/skills/vv-verification/references/evidence.md</File>
+      <File>templates/skills/vv-verification/references/oracles.md</File>
+      <File>templates/skills/vv-verification/references/strategy.md</File>
+      <File>templates/skills/vv-verification/references/create-your-verification-stack.md</File>
+      <File>templates/skills/vv-ui-design-principles/references/slop-tells.md</File>
+      <File>templates/skills/vvoc-usage-analytics/references/opencode-db-queries.md</File>
+      <File>src/lib/managed-skills.test.ts</File>
+      <File>src/lib/opencode.test.ts</File>
+      <File>src/lib/managed-skills.grammar.test.ts</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/main.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Establish the canonical grammar on vv-review, vv-handoff, and vv-reflect and update their content-marker tests.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>templates/skills/vv-review/SKILL.md, templates/skills/vv-handoff/SKILL.md, and templates/skills/vv-reflect/SKILL.md use frontmatter followed by scope, workflow, rules, optional artifact, optional refs, and done; they contain no skill root, identity, or task block.</Criterion>
+          <Criterion>vv-review preserves review-only routing, the literal VVOC_WORK_ITEM_ID header protocol, the PASS/FAIL/NEEDS_CONTEXT reviewer contract, findings-as-final-output, the no-fix and no-implementer boundary, the close step, and the scoped re-review rule.</Criterion>
+          <Criterion>vv-handoff preserves visible-context-only evidence, the no-shell-and-no-fresh-collection rule, the exact destination path and collision suffixing, secret redaction, and the seven required handoff sections including the artifact template.</Criterion>
+          <Criterion>vv-reflect preserves read-only vv-reflector dispatch through the subagent tool, target-session selection, no inline transcript analysis, per-entry approval before writes, lesson/runbook/mixed classification, synthesis rules, destination routing, lazy fallback memory paths and index schemas, proposal format, write rules, and completion semantics; refs lists references/session-graph.py with its multi-session archive load condition.</Criterion>
+          <Criterion>src/lib/managed-skills.test.ts assertions for vv-review are updated to the new serialization, and the vv-reflect and vv-handoff content markers in src/lib/opencode.test.ts are updated in the same task while pinning the same obligations; bun test src/lib/managed-skills.test.ts src/lib/opencode.test.ts passes.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-skills.test.ts src/lib/opencode.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Reserialize vv-execute with one authoritative mode table, one commit discipline, and the tool-contracts refs entry.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>vv-execute uses the canonical grammar and preserves plan validation, lifecycle status checks, spec, plan and component validation, complexity assessment, explicit mode selection, the classic work-item and reviewer flow, the one-tracked-agent-per-state launch map with its rejection codes and wait-instead-of-relaunch guidance, the delegated checkpoint and acceptance flow, the inline flow and reroute conditions, bounded recovery, hard stops, model-role rules, and archival completion.</Criterion>
+          <Criterion>The three modes and their implementer, reviewer, and commit ownership appear once as an artifact table with the header | Mode | Implementer | Reviews | Commit |; rules resolve mode selection once; the classic, delegated, and inline workflows reference those definitions instead of restating them.</Criterion>
+          <Criterion>Commit discipline is stated once, preserves the classic derivation order and its omit-if-unavailable fallback, applies the same discipline to inline commits, preserves repository commit style, excludes internal T-NNN identifiers, and stops on failure.</Criterion>
+          <Criterion>refs lists references/tool-contracts.md with its on-demand load condition, and the grep helpers become a table in artifact rather than attribute-labelled helper elements.</Criterion>
+          <Criterion>src/lib/managed-skills.test.ts assertions for vv-execute are updated to the new serialization while pinning the same obligations; bun test src/lib/managed-skills.test.ts passes.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-skills.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Reserialize vv-plan and vv-spec and unify the execution vocabulary.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>vv-plan and vv-spec use the canonical grammar and preserve prerequisites, approval status gates, architecture and task document rules, CDATA snippets, acceptance criteria quality, dependency tracking, no-placeholder failures, self-review, the plan approval gate, the contracts-not-implementations stance, and the spec interview, approval gate, design-context rules, and artifact layout.</Criterion>
+          <Criterion>vv-plan offers exactly inline, classic, and delegated at execution-intent capture and at handoff, and the handoff enumeration uses the literal phrase inline, classic, and delegated; workflow tracked loop and manual execution are absent; the offered vocabulary matches vv-execute and src/lib/spec-lint/plan-rules.ts.</Criterion>
+          <Criterion>vv-spec condenses the former principle catalog into a compact ordered workflow plus rules without losing one-question-at-a-time interviewing, recommendation-first answers, codebase-first resolution, dependency order, fork trade-offs, section-by-section confirmation, the decision ledger, the depth and recap cues, YAGNI, no-subagent-delegation, and the explicit approval gate.</Criterion>
+          <Criterion>src/lib/managed-skills.test.ts assertions for vv-plan and vv-spec are updated to the new serialization while pinning the same obligations; bun test src/lib/managed-skills.test.ts passes.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-skills.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Reserialize vv-verification, vv-ui-design-principles, and vvoc-usage-analytics.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>vv-verification uses the canonical grammar and preserves claim statement, risk classification, oracle and level selection, reproduce-before-fixing, formal methods, the evidence ledger, independent verification, residual risk, maintenance, bootstrap, the reference catalog, the evidence-not-test-count stance, and the hard stops.</Criterion>
+          <Criterion>vv-ui-design-principles uses the canonical grammar and preserves subject-first planning, DESIGN.md discovery and precedence, token planning, the quality floor, the subtractive audit, the fix-by-removal rule, the density ladder, motion judgment, and the report format.</Criterion>
+          <Criterion>vvoc-usage-analytics uses the canonical grammar, gains a done block, keeps the three data sources and their precedence, the metric definitions, the output discipline, and the read-only boundaries, and states both the 1.18.x validation provenance and the 2.0.18-and-newer supported window.</Criterion>
+          <Criterion>src/lib/managed-skills.test.ts assertions for these three skills are updated to the new serialization while pinning the same obligations, including the vvoc-usage-analytics version assertion; bun test src/lib/managed-skills.test.ts passes.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-skills.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Reserialize vv-write-for-humans and vv-write-for-agents inside their volume budget.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>vv-write-for-humans uses the canonical grammar and preserves the level-A fidelity contract, protected spans, the A/B/C levels and resolution order, the four modes with their permissions, the deletion and addition tests, the reference triggers, and the no-authorship and no-normalization boundaries.</Criterion>
+          <Criterion>vv-write-for-agents uses the canonical grammar and preserves semantic specification, structural serialization, causal placement, addressability, behavioral validation, the single-authoritative-location rule, the evidence-level rule, the guidance-not-a-linter stance, the whole-effective-input framing, the audit-versus-revise-versus-compile task split, and the scope boundary against vv-spec, vv-plan, human prose, and the enhancer agent.</Criterion>
+          <Criterion>Mode names and similar labels move from attributes to table columns or list items; no decorative attribute remains.</Criterion>
+          <Criterion>vv-write-for-agents still ships at most 80 lines in SKILL.md and at most 420 lines total, and its shipped text still contains no .grace path and no M-, V-, or GD- anchor.</Criterion>
+          <Criterion>src/lib/managed-skills.test.ts assertions for both skills are updated to the new serialization while pinning the same obligations and the volume and banned-token budget; bun test src/lib/managed-skills.test.ts passes.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-skills.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-005>
+      <T-006>
+        <Title>Add contents sections to the six long references and keep the existing anchors.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>evidence.md, oracles.md, strategy.md, create-your-verification-stack.md, slop-tells.md, and opencode-db-queries.md each gain a contents section after the title that lists their existing sections.</Criterion>
+          <Criterion>opencode-db-queries.md states the 1.18.x validation provenance and the 2.0.18-and-newer supported window.</Criterion>
+          <Criterion>Every heading pinned by src/lib/managed-skills.test.ts still exists verbatim; no reference body content other than the contents section and the opencode-db-queries.md version-provenance sentence changes.</Criterion>
+          <Criterion>bun test src/lib/managed-skills.test.ts passes with the reference anchors intact.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-skills.test.ts</Command>
+        </Verification>
+      </T-006>
+      <T-007>
+        <Title>Add the deterministic grammar gate for every managed template and hand-authored reference.</Title>
+        <DependsOn>T-001, T-002, T-003, T-004, T-005, T-006</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>src/lib/managed-skills.grammar.test.ts loads every MANAGED_SKILL_NAMES template and exposes an assertSkillGrammar helper that scans the body after removing YAML frontmatter, CDATA sections, fenced code blocks, and inline code, and rejects a banned block, an out-of-order block, a missing required block, an unapproved attribute, a kebab-case top-level element name, a frontmatter name that disagrees with its directory, a referenced file that does not exist, a reference file not listed in refs, and a nested reference directory.</Criterion>
+          <Criterion>The contents-section rule applies only to hand-authored markdown references; the generated tool-contracts.md, the XML plan, spec, and design-context templates, and the session-graph.py extractor are explicitly exempt and verified by their own loaders and byte pins. The gate rejects a hand-authored markdown reference over one hundred lines without a contents section.</Criterion>
+          <Criterion>Synthetic negative fixtures exercise each rejection path, including a body containing kebab-case XML inside a fenced block and a CDATA artifact template, proving the exclusions do not hide real top-level violations; at least one positive synthetic document proves the validator itself is not rejecting everything.</Criterion>
+          <Criterion>The new test file carries the repository-required GRACE file header, module contract, module map, and one LAST_CHANGE so bun run check's grace-markup step passes.</Criterion>
+          <Criterion>All eleven shipped templates and all eligible hand-authored references pass the gate; bun test src/lib/managed-skills.grammar.test.ts passes.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-skills.grammar.test.ts</Command>
+          <Command>bun test src/lib/managed-skills.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-007>
+      <T-008>
+        <Title>Reconcile the managed-skills graph and verification projections.</Title>
+        <DependsOn>T-007</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>M-CLI-MANAGED-SKILLS states the canonical six-block grammar using that phrase, the addressability policy, the removed envelope blocks, and the grammar gate without renaming or dropping existing owned content.</Criterion>
+          <Criterion>V-M-CLI-MANAGED-SKILLS lists src/lib/managed-skills.grammar.test.ts among its test files, adds the grammar test command to its checks, and describes the canonical six-block grammar and its structural gate in its scenario using that phrase.</Criterion>
+          <Criterion>grace lint --path . and grace status --path . report no new errors or warnings, and no archived bundle or unrelated anchor changes.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>grace lint --path .</Command>
+          <Command>grace status --path .</Command>
+        </Verification>
+      </T-008>
+      <T-009>
+        <Title>Run the integrated repository gate and confirm a clean diff.</Title>
+        <DependsOn>T-008</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>Focused tests pass with fresh output, and bun run check passes with typecheck, lint, formatting, GRACE markup, tool-contract gate, and all tests green.</Criterion>
+          <Criterion>bun run build and bun run pack:check pass, proving the reserialized templates are still included in the packed surface with no export change.</Criterion>
+          <Criterion>grace lint and grace status pass, and git diff --check is clean. The diff contains only the approved template, reference, test, graph, verification, and own plan files; dist and archived bundles are untouched.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-skills.test.ts src/lib/managed-skills.grammar.test.ts</Command>
+          <Command>bun run check</Command>
+          <Command>bun run build</Command>
+          <Command>bun run pack:check</Command>
+          <Command>grace lint --path .</Command>
+          <Command>grace status --path .</Command>
+          <Command>git diff --check</Command>
+        </Verification>
+      </T-009>
+    </ImplementationPlan>
+  </C-MANAGED-SKILLS-CANONICAL-GRAMMAR>
+</GraceChangePlan>
