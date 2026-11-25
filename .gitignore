@@ -6,3 +6,4 @@ dist/
 !AGENTS.md
 !docs/
 !docs/**
+__pycache__/

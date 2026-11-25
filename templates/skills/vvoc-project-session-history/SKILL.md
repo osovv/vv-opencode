@@ -8,10 +8,10 @@ Recover recent project context from OpenCode's local SQLite history without muta
 </scope>
 
 <workflow>
-1. Run the extractor from the current working directory, with the script path resolved relative to this skill's own directory:
+1. Run the extractor with the script path inside this skill's own directory — substitute that directory, since the managed install root is scope-dependent:
 
    ```bash
-   python3 scripts/project_history.py --project "$PWD" --sessions 6
+   python3 <skill-dir>/scripts/project_history.py --project "$PWD" --sessions 6
    ```
 
    The default database is `~/.local/share/opencode/opencode.db`; pass `--db PATH` to override it.
@@ -51,8 +51,9 @@ Recover recent project context from OpenCode's local SQLite history without muta
 Data source layout — why the extractor sees what it sees:
 
 - Session lists come from the OpenCode V2 `session_v2` table, with a `session` (V1) fallback union for databases that still hold pre-V2 rows; a database with only one of the two tables is also supported.
-- History after 2026-10-02 lives only in `session_v2`/`session_message`; older sessions keep their messages in the legacy `message`+`part` tables. The extractor reads both stores and deduplicates.
-- Only `type: text` parts are extracted — reasoning, tool transcripts, and synthetic/system rows are excluded by design.
+- Messages span three storage eras: V1 sessions keep messages in the legacy `message`+`part` tables; V2 sessions written before 2026-11-25 keep assistant text inline in `session_message`; sessions written after the 2026-11-25 storage migration keep their parts in `session_part` (assistant rows carry empty inline content). The extractor reads all three and deduplicates.
+- Only `type: text` parts are extracted — inline, from `session_part`, or from the legacy `part` table — while reasoning, tool transcripts, and synthetic/system rows are excluded by design.
+- Files touched by recorded patches come from `summary_diffs`, legacy `part` patch rows, and post-migration `session_part` edit/write tool parts.
 - V2 writes sessions immediately, so the "newest" entry is often the currently running session; use `--skip-newest` with that in mind.
 - Sessions without a generated title are shown under their slug (for example `swift-meadow`).
 

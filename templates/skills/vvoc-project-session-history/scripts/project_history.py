@@ -12,6 +12,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
+from urllib.parse import quote
 
 
 DEFAULT_DB = Path("~/.local/share/opencode/opencode.db").expanduser()
@@ -65,7 +66,9 @@ def connect_readonly(db_path: Path) -> sqlite3.Connection:
     path = db_path.expanduser().resolve()
     if not path.is_file():
         fail(f"OpenCode database not found: {path}")
-    connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=10)
+    # Percent-encode the path: SQLite URI parsing treats '?' and '#' as
+    # query/fragment delimiters, so raw interpolation breaks odd --db values.
+    connection = sqlite3.connect(f"file:{quote(str(path))}?mode=ro", uri=True, timeout=10)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA query_only = ON")
     return connection
@@ -254,11 +257,31 @@ def legacy_messages(
 def modern_messages(
     connection: sqlite3.Connection, tables: set[str], session_id: str
 ) -> list[dict[str, Any]]:
+    # OpenCode's 2026-11-25 storage migration moved message parts into
+    # session_part (keyed by session_message.id, ordered by ordinal) while
+    # assistant session_message rows keep content=[]. Preload the text parts
+    # for this session once; a message row uses them only when its inline
+    # extraction is empty, so transition-era rows cannot duplicate.
+    part_texts: dict[str, list[str]] = {}
+    if "session_part" in tables:
+        for row in connection.execute(
+            """
+            SELECT message_id, ordinal, data
+            FROM session_part
+            WHERE session_id = ? AND type = 'text'
+            ORDER BY message_id, ordinal
+            """,
+            (session_id,),
+        ):
+            text = content_text(load_json(row["data"]))
+            if text:
+                part_texts.setdefault(row["message_id"], []).append(text)
+
     messages: list[dict[str, Any]] = []
     if "session_message" in tables:
         for row in connection.execute(
             """
-            SELECT type, time_created, data
+            SELECT id, type, time_created, data
             FROM session_message
             WHERE session_id = ?
             ORDER BY time_created, seq, id
@@ -278,6 +301,8 @@ def modern_messages(
             if role not in {"user", "assistant"}:
                 continue
             text = content_text(data)
+            if not text:
+                text = "\n".join(part_texts.get(row["id"], []))
             if text:
                 messages.append(
                     {"role": role, "time": row["time_created"], "text": text}
@@ -401,6 +426,20 @@ def changed_files(
             data = load_json(row["data"])
             if data.get("type") == "patch":
                 collect_files_from_json(data, root, found)
+
+    # Post-migration patch parts live in session_part tool rows: edit and
+    # write carry the touched file in state.input.path. Other tools are not
+    # recorded patches and contribute nothing.
+    if "session_part" in tables:
+        for row in connection.execute(
+            "SELECT data FROM session_part WHERE session_id = ? AND type = 'tool'",
+            (session["id"],),
+        ):
+            data = load_json(row["data"])
+            if str(data.get("name", "")).lower() in {"edit", "write"}:
+                state = data.get("state")
+                if isinstance(state, dict) and isinstance(state.get("input"), dict):
+                    collect_files_from_json(state["input"], root, found)
 
     unique = []
     seen = set()
