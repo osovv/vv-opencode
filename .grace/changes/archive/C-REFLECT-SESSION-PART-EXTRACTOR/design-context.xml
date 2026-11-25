@@ -1,0 +1,21 @@
+<GraceChangeDesignContext graceVersion="4.0">
+  <Change>C-REFLECT-SESSION-PART-EXTRACTOR</Change>
+  <NormativeStatus>non-normative</NormativeStatus>
+  <Rationale>The measurement fixed the scope before any design: a fully post-migration session with dozens of real tool calls reports tool_calls=0, errors=0, test_runs=0, no files, and an empty tail, while a pre-migration session reports 509/11/49 with 20 files — the extractor's entire signal surface is dead on the current host, in both the single-session tree and the archive aggregate. The fix mirrors the C-SESSION-PART-EXTRACTOR approach rather than inventing a new one: join session_part by message_id when inline content is empty, keeping inline-wins precedence so transition rows cannot duplicate. Two structural differences forced mode-specific work: session-graph.py reads tools and text through separate functions (tool_entries over data.content, message_tail over data.content), so each gets its own join, and the archive path has its own call union (legacy part table plus a whole-table session_message scan) that never sees per-message rows, so session_part calls join there by call id with the documented session_message-wins precedence. No URI hardening is needed: this extractor already connects through path.as_uri(), which percent-encodes, unlike the raw interpolation the predecessor had.</Rationale>
+  <Alternatives>
+    <Alternative>Derive all message content from session_part unconditionally. Rejected: transition-era rows with inline content would duplicate or race; the empty-inline gate preserves the union precedence the extractor already documents.</Alternative>
+    <Alternative>Fix only the tree mode and leave the archive aggregate blind. Rejected: the archive is the mode for cross-session and cross-project reflection questions, and it silently under-reports exactly the newest sessions.</Alternative>
+    <Alternative>Rewrite the two extraction paths around one shared part-store reader shared with project_history.py. Rejected: the two extractors are separate shipped skill assets with different output contracts; a shared module would couple unrelated skills' references for a few lines of duplicated SQL.</Alternative>
+    <Alternative>Extend the legacy part-table union in archive_calls to also read session_part by treating it as a third source in the same loop. Rejected in favor of a separate scan: the part table uses callID/id variants and column-optionality probing, while session_part has a stable shape; a separate guarded scan keeps each union leg honest.</Alternative>
+  </Alternatives>
+  <DeferredDecisions>
+    <Decision>Whether the four stuck review work items and the unregistered verdict headers in the workflow plugin get their own fix is deferred; it is tracked with the maintainer separately.</Decision>
+    <Decision>Whether the project-session-history and session-graph extractors ever converge on one shared storage-layout reference document is deferred until a third consumer appears.</Decision>
+  </DeferredDecisions>
+  <Scenarios>
+    <Scenario>A user runs $vv-reflect after a long post-migration session: the pre-pass now reports real tool-call counts, errors, test runs, repeated-call friction, changed files from edit/write parts, and an assistant tail joined from session_part, restoring the reflection input the skill depends on.</Scenario>
+    <Scenario>A reflection question spans sessions and projects: the --archive aggregate counts post-migration calls from session_part once per call id, older sessions keep their inline and legacy-part counts, and no call is double-counted across stores.</Scenario>
+    <Scenario>A host predates the migration or holds mixed-era data: inline content and the legacy part union produce the previous output unchanged; transition-era rows with both shapes resolve to their inline content once.</Scenario>
+    <Scenario>CI without python3 on PATH: the synthetic extractor suite is skipped and the delivery suites still run; nothing else degrades.</Scenario>
+  </Scenarios>
+</GraceChangeDesignContext>

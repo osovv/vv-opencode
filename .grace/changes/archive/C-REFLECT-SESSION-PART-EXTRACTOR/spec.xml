@@ -1,0 +1,53 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-REFLECT-SESSION-PART-EXTRACTOR>
+    <Summary>Adapt the vv-reflect session-graph extractor to the post-2026-11-25 part store in both operating modes: the single-session tree joins tool entries and assistant text from session_part for rows whose inline content is empty, and the archive aggregate adds session_part tool calls to the existing call union by call id, restoring friction signals, changed files, and message tails for post-migration sessions.</Summary>
+    <Problem>OpenCode's 2026-11-25 storage migration moved message parts into session_part while assistant session_message rows persist with content=[]. The session-graph extractor — vv-reflect's mechanical pre-pass for friction signals — reads tool entries and text only from inline session_message content (plus the legacy part union for old sessions), so it is blind on the current host. Measured with the shipped extractor on 2026-11-25: a fully post-migration session that performed dozens of tool calls reports tool_calls=0, errors=0, test_runs=0, no changed files, and an empty message tail, while a pre-migration session reports 509 tool calls, 11 errors, 49 test runs, 20 changed files, and a populated tail. The single-session tree and the --archive machine-wide aggregate share the blindness, so $vv-reflect reports no friction for exactly the newest sessions it exists to reflect on.</Problem>
+    <Goals>
+      <Goal>In tree mode, assistant session_message rows whose data.content is empty take their tool entries and text from session_part: tool entries are the row's type='tool' parts and text is the joined type='text' parts, both keyed by message_id and ordered by ordinal; rows with non-empty inline content keep using it, so transition-era rows cannot duplicate.</Goal>
+      <Goal>In archive mode, archive_calls reads session_part tool rows (session_id, data with id/name/state) and adds each call to the existing union by call id only when that id is not already present from session_message or the legacy part table, preserving the established session_message-wins precedence.</Goal>
+      <Goal>The extractor docstring's storage model names all three stores — legacy part, inline session_message content, and post-migration session_part — instead of the current two-store description.</Goal>
+      <Goal>The synthetic-schema suite in src/lib/session-graph.test.ts gains post-migration coverage for both modes: a tree fixture whose assistant rows carry empty content with session_part parts (tool counts, edit-not-read file collection, tail text, reasoning excluded) and an archive fixture whose calls are counted from session_part.</Goal>
+      <Goal>A live smoke re-run of the measured sessions shows non-zero tool calls, populated files, and a non-empty tail for the post-migration session, recorded as change-time evidence in the bundle.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>The extractor stays read-only (as_uri mode=ro connection, query_only) with a minimal diff; pre-migration and legacy-era output is unchanged, pinned by the existing fixtures.</Constraint>
+      <Constraint>The call-id union precedence is preserved exactly: session_message inline entries win, the legacy part table follows, session_part fills only ids absent from both.</Constraint>
+      <Constraint>No changes to the project_history.py extractor (owned by C-SESSION-PART-EXTRACTOR), no changes to the vv-reflect SKILL.md workflow, and no archive output-schema changes.</Constraint>
+      <Constraint>README and the M-CLI-MANAGED-SKILLS graph and V-M-CLI-MANAGED-SKILLS verification projections are reconciled inside this change's lifecycle, not retroactively.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>No changes to the workflow engine, managed-skill delivery machinery, or unrelated managed skills and references.</NonGoal>
+      <NonGoal>No archive output reshaping, no new filters or metrics, and no streaming/pagination changes.</NonGoal>
+      <NonGoal>No investigation of V2 todo storage or of user-row parts (user text stays inline in the current host generation).</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>AC-01: For a tree-mode session whose assistant rows have empty inline content and whose parts live in session_part, tool_stats report the session_part tool calls (counts, errors, test-run classification) and changed_files list the mutating tools' state.input paths, with non-mutating tools excluded.</Criterion>
+      <Criterion>AC-02: For the same session, the message tail contains the assistant text joined from session_part type='text' parts, in message order, while reasoning and tool parts contribute no tail text.</Criterion>
+      <Criterion>AC-03: Pre-migration sessions (inline content) and legacy-era sessions (part-table union) produce identical output to before this change, pinned by the existing test fixtures.</Criterion>
+      <Criterion>AC-04: In archive mode, calls from session_part are counted once per call id, only for ids absent from session_message inline entries and the legacy part table; sessions without session_part rows keep their previous aggregates.</Criterion>
+      <Criterion>AC-05: The extractor docstring describes the three-store model accurately.</Criterion>
+      <Criterion>AC-06: src/lib/session-graph.test.ts covers AC-01, AC-02, and AC-04 deterministically with synthetic post-migration fixtures, python3-gated, alongside the unchanged existing fixtures.</Criterion>
+      <Criterion>AC-07: A live smoke run of the shipped extractor over the measured post-migration session returns non-zero tool calls, a non-empty files list, and a non-empty tail, recorded in the bundle's smoke-evidence.md.</Criterion>
+      <Criterion>AC-08: bun run check, bun run build, and bun run pack:check pass, and the grace lint baseline, target, and final assertion gates for this change pass with fresh runs.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-CLI-MANAGED-SKILLS />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/lib/session-graph.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun test src/lib/managed-skills.test.ts src/lib/managed-skills.grammar.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>bun run pack:check</ExpectedCommand>
+      <ExpectedCommand>grace lint --path .</ExpectedCommand>
+      <ExpectedCommand>manual: python3 templates/skills/vv-reflect/references/session-graph.py --session ses_dedda6929ffejII1QtOWIPyYUG --project . --format json</ExpectedCommand>
+      <ExpectedEvidence>The extended synthetic suite demonstrates post-migration extraction in both modes with the existing fixtures unchanged as regression pins. The live smoke run restores the measured signals for the post-migration session (previously zero across the board). The full gate stack and the grace assertion gates pass fresh. Deterministic tests assert extraction behavior against fixed schemas, not model behavior.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>session_part tool rows carry the call id in data.id with name and state shaped like inline content entries, and session_part rows expose session_id directly; verified on the live database on 2026-11-25.</Assumption>
+      <Assumption>The path.as_uri() connection already percent-encodes the database path, so no URI hardening is needed here, unlike the project_history.py predecessor.</Assumption>
+      <Assumption>The archive aggregate needs only call-level data from session_part; it carries no per-session message tails, so no archive tail work exists.</Assumption>
+      <Assumption>This stage was directed as measure, specify, plan, execute, review, and merge in one flow; the spec and plan are approved by that directive and no implementation precedes the bundle's baseline gate.</Assumption>
+    </Assumptions>
+  </C-REFLECT-SESSION-PART-EXTRACTOR>
+</GraceChangeSpec>

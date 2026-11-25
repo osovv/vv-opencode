@@ -1,0 +1,102 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-REFLECT-SESSION-PART-EXTRACTOR>
+    <IntentSummary>Restore vv-reflect's mechanical pre-pass on post-migration sessions: join session_part tool entries and assistant text for rows with empty inline content in tree mode, add session_part calls to the archive call union by call id with session_message winning, update the storage-model docstring, extend the synthetic suite for both modes, and prove the fix live on the measured session before shipping a new PR reviewed by an unprimed subagent.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-CLI-MANAGED-SKILLS</Value>
+        <Value>V-M-CLI-MANAGED-SKILLS</Value>
+        <Value>templates/skills/vv-reflect/references/session-graph.py</Value>
+        <Value>src/lib/session-graph.test.ts</Value>
+        <Value>.grace/graph/main.xml</Value>
+        <Value>.grace/verification/main.xml</Value>
+      </MustExist>
+      <MustContain><File>templates/skills/vv-reflect/references/session-graph.py</File><Text>def tool_entries</Text></MustContain>
+      <MustContain><File>templates/skills/vv-reflect/references/session-graph.py</File><Text>FROM session_message</Text></MustContain>
+      <MustContain><File>templates/skills/vv-reflect/references/session-graph.py</File><Text>def archive_calls</Text></MustContain>
+      <MustContain><File>src/lib/session-graph.test.ts</File><Text>pythonTest</Text></MustContain>
+      <MustNotContain><File>templates/skills/vv-reflect/references/session-graph.py</File><Text>session_part</Text></MustNotContain>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-CLI-MANAGED-SKILLS</Module>
+      </MustVerify>
+      <MustContain><File>templates/skills/vv-reflect/references/session-graph.py</File><Text>FROM session_part</Text></MustContain>
+      <MustContain><File>templates/skills/vv-reflect/references/session-graph.py</File><Text>message_id</Text></MustContain>
+      <MustContain><File>templates/skills/vv-reflect/references/session-graph.py</File><Text>as_uri</Text></MustContain>
+      <MustContain><File>src/lib/session-graph.test.ts</File><Text>session_part</Text></MustContain>
+      <MustContain><File>src/lib/session-graph.test.ts</File><Text>post-migration</Text></MustContain>
+      <MustContain><File>.grace/verification/main.xml</File><Text>session_part</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/lib/session-graph.test.ts</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun test src/lib/managed-skills.test.ts src/lib/managed-skills.grammar.test.ts</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run typecheck</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run pack:check</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <DurableScope>
+      <GraphAnchors>
+        <M-CLI-MANAGED-SKILLS />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-CLI-MANAGED-SKILLS />
+      </VerificationAnchors>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>.grace/changes/active/C-REFLECT-SESSION-PART-EXTRACTOR/plan.xml</File>
+      <File>.grace/changes/active/C-REFLECT-SESSION-PART-EXTRACTOR/smoke-evidence.md</File>
+      <File>templates/skills/vv-reflect/references/session-graph.py</File>
+      <File>src/lib/session-graph.test.ts</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/main.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Join session_part in the extractor: tree-mode tool entries and tails, archive calls, docstring.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>session_messages selects the message id, and a part loader reads the session's session_part rows grouped by message_id in ordinal order once per session.</Criterion>
+          <Criterion>tool_entries uses a row's inline content when it is a non-empty list and otherwise the row's session_part tool entries; message_tail joins assistant text from session_part type='text' parts when inline content yields none; user rows and reasoning/tool parts stay unchanged.</Criterion>
+          <Criterion>archive_calls scans session_part tool rows and adds calls by data.id only for ids absent from the session_message and legacy part scans, keeping session_message-wins precedence.</Criterion>
+          <Criterion>The module docstring describes the three-store model (legacy part subset, inline session_message content, post-migration session_part).</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>python3 -m py_compile templates/skills/vv-reflect/references/session-graph.py</Command>
+          <Command>python3 templates/skills/vv-reflect/references/session-graph.py --session ses_dedda6929ffejII1QtOWIPyYUG --project . --format json</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Extend the synthetic suite with post-migration fixtures for tree and archive modes.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>The tree fixture adds a session whose assistant rows carry empty inline content with session_part rows (reasoning, text, edit and read tool parts): stats count the session_part tools, files include the edit path and exclude the read path, and the tail carries the assistant text from parts.</Criterion>
+          <Criterion>The archive fixture asserts calls from session_part are counted once, that inline and legacy-part calls are not double-counted, and that a session without session_part rows keeps its aggregate.</Criterion>
+          <Criterion>The existing fixtures and assertions stay unchanged as regression pins.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/session-graph.test.ts</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Run gates and the live re-measurement, reconcile projections, archive, and open the PR.</Title>
+        <DependsOn>T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>The grace lint baseline, target, and final assertion gates pass for this change, and bun run check, build, and pack:check pass fresh.</Criterion>
+          <Criterion>The live smoke re-run over the measured post-migration session returns non-zero tool calls, a non-empty files list, and a non-empty tail; the command, numbers, and date are recorded in the bundle's smoke-evidence.md.</Criterion>
+          <Criterion>The M-CLI-MANAGED-SKILLS graph purpose and the V-M-CLI-MANAGED-SKILLS scenario truthfully cover the session_part reads for the reflect extractor; the bundle is archived with applied statuses before the commit, and a PR is opened from the branch for unprimed subagent review.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run check</Command>
+          <Command>bun run build</Command>
+          <Command>bun run pack:check</Command>
+          <Command>python3 templates/skills/vv-reflect/references/session-graph.py --session ses_dedda6929ffejII1QtOWIPyYUG --project . --format json</Command>
+        </Verification>
+      </T-003>
+    </ImplementationPlan>
+  </C-REFLECT-SESSION-PART-EXTRACTOR>
+</GraceChangePlan>
