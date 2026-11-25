@@ -1,6 +1,6 @@
 ---
 name: vvoc-project-session-history
-description: Use when the user asks what was recently done in this project, where the work stopped, or wants a recap or handoff from recent OpenCode sessions before continuing. Runs a read-only Python extractor over the OpenCode session database, reconstructs recent sessions and their outcomes, and reconciles them against fresh repository state. Token usage, cache, and cost analysis belong to vvoc-usage-analytics; session history is evidence, never proof of current repository state.
+description: Use when the user asks what was recently done in this project, where the work stopped, or wants a recap or handoff from recent OpenCode sessions before continuing. Not for token usage, cache, or cost analysis (vvoc-usage-analytics) and not for current repository state.
 ---
 
 <scope>
