@@ -348,7 +348,7 @@ describe("vvoc-project-session-history managed skill", () => {
     const template = await loadManagedSkillTemplate("vvoc-project-session-history");
     const { frontmatter, body } = splitFrontmatter(template);
     expect(frontmatter).toContain("name: vvoc-project-session-history");
-    expect(frontmatter).toContain("recap this project");
+    expect(frontmatter).toContain("recent OpenCode sessions");
     expect(frontmatter).toContain("vvoc-usage-analytics");
     const description = frontmatter.split("\n").find((line) => line.startsWith("description:"));
     expect(description?.length ?? 0).toBeLessThanOrEqual(1038);

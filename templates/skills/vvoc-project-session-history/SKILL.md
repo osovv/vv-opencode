@@ -1,6 +1,6 @@
 ---
 name: vvoc-project-session-history
-description: Use when the user asks "что мы делали в этом проекте?", "на чём остановились?", "напомни контекст проекта", "recap this project", or otherwise wants a handoff from recent OpenCode sessions of this project. Runs a read-only Python extractor over ~/.local/share/opencode/opencode.db, reconstructs recent work and stopping points, then checks the repository's current state. Not for token usage, cache hit rate, or cost analysis — that is vvoc-usage-analytics.
+description: Use when the user asks what was recently done in this project, where the work stopped, or wants a recap or handoff from recent OpenCode sessions before continuing. Runs a read-only Python extractor over the OpenCode session database, reconstructs recent sessions and their outcomes, and reconciles them against fresh repository state. Token usage, cache, and cost analysis belong to vvoc-usage-analytics; session history is evidence, never proof of current repository state.
 ---
 
 <scope>
@@ -31,10 +31,10 @@ Recover recent project context from OpenCode's local SQLite history without muta
 
 5. Synthesize the answer; do not paste the extractor's raw transcript. Prefer this structure:
 
-   - **Коротко** — what the project was pursuing recently.
-   - **Последние сессии** — chronological bullets with dates, outcomes, and important decisions.
-   - **Где остановились** — completed work, unfinished work, blockers, uncommitted state, or approvals still needed.
-   - **Что логично делать дальше** — only evidence-backed next steps.
+   - **Summary** — what the project was pursuing recently.
+   - **Recent sessions** — chronological bullets with dates, outcomes, and important decisions.
+   - **Where work stopped** — completed work, unfinished work, blockers, uncommitted state, or approvals still needed.
+   - **Sensible next steps** — only evidence-backed ones.
 </workflow>
 
 <rules>
