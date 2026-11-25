@@ -1,0 +1,57 @@
+<GraceChangeSpec graceVersion="4.0" status="applied">
+  <C-SESSION-PART-EXTRACTOR>
+    <Summary>Extend the bundled vvoc-project-session-history extractor to read the post-migration part store: assistant text comes from session_part when session_message rows carry empty content, recorded edit/write file paths come from session_part tool parts, the data-layout documentation describes all three storage eras truthfully, and the read-only URI plus the run command are hardened. This supersedes the byte-identity freeze of C-BUNDLE-SESSION-HISTORY-SKILL, whose verified layout ceased to exist when OpenCode migrated storage mid-day on 2026-11-25.</Summary>
+    <Problem>OpenCode migrated its message storage on 2026-11-25 around 09:51 (migration entries 20261120004954_machine-key and siblings): message parts now land in session_part keyed by session_message.id, while assistant session_message rows persist with content=[] and user rows keep inline text. The extractor frozen in C-BUNDLE-SESSION-HISTORY-SKILL reads only inline content, so on the current layout its recaps contain zero assistant messages — reproduced with the shipped script over the five newest sessions: 13 USER and 0 ASSISTANT lines — and the "Files mentioned by recorded patches" section is empty because summary_diffs is null on new sessions and patch information moved into edit/write tool parts. The change's own verification and smoke evidence were recorded before the migration and remain accurate for that era; the shipped artifact block and README now state a two-era layout that is false on the current host. Secondary defects found in review: the SQLite URI interpolates the path raw (mis-parsed for --db paths containing ? or #), and the workflow's run command is not executable verbatim because the script path needs substitution.</Problem>
+    <Goals>
+      <Goal>modern_messages reads session_part: when a session_message row yields no text and the session_part table exists, the row's type='text' parts (joined on message_id, ordered by ordinal) become that message's text, preserving the typed non-text exclusion so reasoning and tool parts stay out.</Goal>
+      <Goal>changed_files reads session_part tool parts named edit or write and feeds their JSON through the existing collect_files_from_json so post-migration sessions list the files their recorded patches touched.</Goal>
+      <Goal>The SKILL.md Data Source Layout and the README row describe three eras truthfully: V1 message+part, V2 inline session_message content, and the post-2026-11-25 session_part layout where assistant text and patch parts live in session_part.</Goal>
+      <Goal>connect_readonly percent-encodes the database path so --db values containing ? or # open correctly, and the SKILL.md workflow presents the run command as an explicit substitution of the skill's own directory instead of a verbatim-runnable relative path.</Goal>
+      <Goal>A deterministic synthetic-schema test runs the shipped extractor through python3 (skipped when python3 is absent), mirroring the session-graph.test.ts pattern, covering post-migration extraction, the typed non-text exclusion, pre-migration inline content, the legacy V1 path, and edit/write file collection.</Goal>
+      <Goal>A live smoke run on the current database demonstrates at least one ASSISTANT line for a post-migration session and is recorded in the change bundle.</Goal>
+    </Goals>
+    <Constraints>
+      <Constraint>The extractor stays Python 3, strictly read-only (mode=ro URI, query_only), with a minimal diff; the three storage layouts coexist and the pre-migration and V1 paths keep their current behavior.</Constraint>
+      <Constraint>The byte-identity freeze (md5 09a533b18b7ed4794de118d2041b9fc4) from C-BUNDLE-SESSION-HISTORY-SKILL is superseded by this change: content markers replace the md5 pin, and the supersession is recorded here rather than edited into the immutable predecessor bundle.</Constraint>
+      <Constraint>Inline content wins when non-empty; session_part text is used only for rows whose inline extraction is empty, so transition-era rows cannot duplicate.</Constraint>
+      <Constraint>No changes to message selection, head/tail limits, or deduplication semantics; no changes to the TypeScript delivery machinery, managed-skill registration, or install/sync counts; no new Python dependencies beyond the standard library.</Constraint>
+      <Constraint>README, the M-CLI-MANAGED-SKILLS graph projection, and the V-M-CLI-MANAGED-SKILLS verification projection are reconciled inside this change's lifecycle, not retroactively.</Constraint>
+    </Constraints>
+    <NonGoals>
+      <NonGoal>No session_part handling in the vv-reflect session-graph.py extractor or any other consumer of the session database; the same-storage gap observed there is reported, not fixed here.</NonGoal>
+      <NonGoal>No rewrite of the extractor, no streaming or pagination changes, and no investigation of V2 todo storage.</NonGoal>
+      <NonGoal>No changes to the managed-skill delivery machinery, the workflow engine, or unrelated managed skills.</NonGoal>
+      <NonGoal>No update to user-installed standalone copies of the skill inside this repository change; machine-local copies are synced outside the repository after verification.</NonGoal>
+    </NonGoals>
+    <AcceptanceCriteria>
+      <Criterion>AC-01: For a session whose assistant session_message rows have empty content and whose text parts live in session_part, the extractor output contains ASSISTANT lines with those texts, in message order, with message timestamps from the session_message rows.</Criterion>
+      <Criterion>AC-02: reasoning and tool parts in session_part are excluded from conversation evidence by the existing typed non-text rule; user rows with inline text and synthetic/idle rows are unaffected.</Criterion>
+      <Criterion>AC-03: Pre-migration sessions (inline content) and V1-era sessions (message+part) produce the same output as before this change.</Criterion>
+      <Criterion>AC-04: For a session with edit or write tool parts in session_part, the "Files mentioned by recorded patches" section lists their input paths that fall inside the project root, and other tools' paths are not listed.</Criterion>
+      <Criterion>AC-05: connect_readonly opens a database whose path contains ? or # without error.</Criterion>
+      <Criterion>AC-06: SKILL.md and README state the three storage eras accurately, and the SKILL.md run command names the substitution of the skill's own directory explicitly.</Criterion>
+      <Criterion>AC-07: A python3-gated synthetic-schema test in src/lib deterministically covers AC-01 through AC-04 against a fixture database with session_v2, session_message, session_part, and the legacy tables, and is skipped when python3 is unavailable.</Criterion>
+      <Criterion>AC-08: A live smoke run of the shipped extractor against the current OpenCode database returns at least one ASSISTANT line for a post-migration session and is recorded as change-time evidence in the bundle.</Criterion>
+      <Criterion>AC-09: bun run check, bun run build, and bun run pack:check pass, and the grace lint baseline, target, and final assertion gates for this change pass with fresh runs.</Criterion>
+    </AcceptanceCriteria>
+    <AffectedAreas>
+      <M-CLI-MANAGED-SKILLS />
+    </AffectedAreas>
+    <VerificationIntent>
+      <ExpectedCommand>bun test src/lib/session-history.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun test src/lib/managed-skills.test.ts src/lib/managed-skills.grammar.test.ts src/lib/managed-agents.test.ts</ExpectedCommand>
+      <ExpectedCommand>bun run check</ExpectedCommand>
+      <ExpectedCommand>bun run build</ExpectedCommand>
+      <ExpectedCommand>bun run pack:check</ExpectedCommand>
+      <ExpectedCommand>grace lint --path .</ExpectedCommand>
+      <ExpectedCommand>manual: python3 templates/skills/vvoc-project-session-history/scripts/project_history.py --project . --sessions 3 --include-children | grep -c ASSISTANT</ExpectedCommand>
+      <ExpectedEvidence>The synthetic-schema test demonstrates post-migration assistant extraction, the typed exclusion, pre-migration and V1 regression coverage, and edit/write file collection deterministically, skipped only when python3 is absent. The live smoke run shows at least one ASSISTANT line on a post-migration session. Delivery suites, the full gate stack, and the grace assertion gates pass fresh. Deterministic tests assert extraction behavior against fixed schemas, not model behavior.</ExpectedEvidence>
+    </VerificationIntent>
+    <Assumptions>
+      <Assumption>session_part rows reference session_message.id through message_id and are ordered by ordinal; type='text' part data keeps the inline part shape (a JSON object with type and text fields). Verified on the live database on 2026-11-25.</Assumption>
+      <Assumption>edit and write tool parts carry the touched file in state.input.path; other tools' inputs are not treated as recorded patches. Verified on the live database on 2026-11-25.</Assumption>
+      <Assumption>OpenCode will keep writing user text inline in session_message.data for the current host generation; if user rows also move to parts, the same join extends symmetrically and is not part of this change.</Assumption>
+      <Assumption>This change supersedes the frozen md5 of the predecessor bundle; the standalone user copies on both machines are updated outside the repository after verification, and their sync remains a manual step.</Assumption>
+    </Assumptions>
+  </C-SESSION-PART-EXTRACTOR>
+</GraceChangeSpec>

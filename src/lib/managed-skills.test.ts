@@ -2,7 +2,7 @@
 // VERSION: 1.2.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Verify managed workflow skill discovery metadata, loaded behavior contracts with correctness obligations, and scoped project/global lookup.
-//   SCOPE: vv-execute metadata isolation and explicit mode choice with evidence sufficiency, bounded recovery operations distinct from acceptance and rework, native plan registration boundaries, scoped re-review guidance, exact returned work-item identity in the execute/review dispatch steps, vv-spec ambiguity resolution and preserved properties, vv-plan preserved-property criteria, vv-review findings-only honest reporting, managed skill lookup precedence, vvoc-usage-analytics template/reference coverage, vv-ui-design-principles template and reference catalog coverage, the vv-write-for-humans / vv-write-for-agents writing-skill contracts with consumer-safe language, banned-token, and volume gates, and vv-verification registration, decision workflow, six-reference anchors, and vv-spec/vv-plan verification-intent delivery.
+//   SCOPE: vv-execute metadata isolation and explicit mode choice with evidence sufficiency, bounded recovery operations distinct from acceptance and rework, native plan registration boundaries, scoped re-review guidance, exact returned work-item identity in the execute/review dispatch steps, vv-spec ambiguity resolution and preserved properties, vv-plan preserved-property criteria, vv-review findings-only honest reporting, managed skill lookup precedence, vvoc-usage-analytics template/reference coverage, vvoc-project-session-history template and script coverage, vv-ui-design-principles template and reference catalog coverage, the vv-write-for-humans / vv-write-for-agents writing-skill contracts with consumer-safe language, banned-token, and volume gates, and vv-verification registration, decision workflow, six-reference anchors, and vv-spec/vv-plan verification-intent delivery.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/lib/managed-skills.ts, src/lib/vvoc-paths.ts]
 //   LINKS: [M-CLI-MANAGED-SKILLS, V-M-CLI-MANAGED-SKILLS]
 //   ROLE: TEST
@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WRITE-FOR-HUMANS-SKILL T-002, C-WRITE-FOR-AGENTS-SKILL T-002, C-VV-VERIFICATION-SKILL T-003 - Added writing-skill and vv-verification registration, frontmatter triggers, reference catalog and anchor assertions, bilingual pattern markers, the agents skill's banned-token and volume gates, and vv-spec/vv-plan verification-intent delivery.]
+//   LAST_CHANGE: [C-BUNDLE-SESSION-HISTORY-SKILL T-005 - Added vvoc-project-session-history registration, six-block grammar markers, script listing/loading assertions, and empty-script-list coverage for reference-only skills.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -337,6 +337,47 @@ describe("vvoc-usage-analytics managed skill", () => {
     expect(reference).toContain("mode=ro");
     expect(reference).toContain("step-finish");
     expect(reference).toContain("1.18.x");
+  });
+});
+
+describe("vvoc-project-session-history managed skill", () => {
+  test("registers in MANAGED_SKILL_NAMES and loads a template with frontmatter", async () => {
+    const { MANAGED_SKILL_NAMES } = await import("./managed-skills.js");
+    expect(MANAGED_SKILL_NAMES).toContain("vvoc-project-session-history");
+
+    const template = await loadManagedSkillTemplate("vvoc-project-session-history");
+    const { frontmatter, body } = splitFrontmatter(template);
+    expect(frontmatter).toContain("name: vvoc-project-session-history");
+    expect(frontmatter).toContain("recent OpenCode sessions");
+    expect(frontmatter).toContain("vvoc-usage-analytics");
+    const description = frontmatter.split("\n").find((line) => line.startsWith("description:"));
+    expect(description?.length ?? 0).toBeLessThanOrEqual(1038);
+    expect(body).toContain("<scope>");
+    expect(body).toContain("<workflow>");
+    expect(body).toContain("<rules>");
+    expect(body).toContain("<done>");
+    expect(body).toContain("scripts/project_history.py");
+    expect(body).toContain("session_v2");
+    expect(body).not.toContain("project-session-history/scripts");
+  });
+
+  test("ships the extractor script and lists scripts only for skills that have them", async () => {
+    const { listManagedSkillScriptNames, loadManagedSkillScript } =
+      await import("./managed-skills.js");
+    expect(await listManagedSkillScriptNames("vvoc-project-session-history")).toEqual([
+      "project_history.py",
+    ]);
+    const script = await loadManagedSkillScript(
+      "vvoc-project-session-history",
+      "project_history.py",
+    );
+    expect(script).toContain("UNION ALL");
+    expect(script).toContain("id, project_id, parent_id, slug, directory, title, time_updated");
+    expect(script).toContain("database has neither session nor session_v2 table");
+
+    for (const name of ["vv-spec", "vv-verification", "vvoc-usage-analytics"] as const) {
+      expect(await listManagedSkillScriptNames(name)).toEqual([]);
+    }
   });
 });
 

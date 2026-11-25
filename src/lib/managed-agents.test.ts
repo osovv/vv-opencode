@@ -16,7 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Pin the approved consolidated controller requirements and native skill/artifact ownership while retaining worker and lookup regression coverage.]
+//   LAST_CHANGE: [C-BUNDLE-SESSION-HISTORY-SKILL T-005 - Added script delivery tests: install copies scripts/project_history.py byte-identically, sync keeps an up-to-date copy, and sync refreshes a modified copy back to the template.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -30,7 +30,7 @@ import {
   loadManagedAgentPromptTemplate,
   loadManagedAgentPromptText,
 } from "./managed-agents.js";
-import { loadManagedSkillReference } from "./managed-skills.js";
+import { loadManagedSkillReference, loadManagedSkillScript } from "./managed-skills.js";
 import { installManagedSkillFiles, syncManagedSkillFiles } from "./opencode/agent-registrations.js";
 import type { ResolvedPaths } from "./opencode/paths.js";
 import { getGlobalVvocDir, getProjectVvocDir, getVvocAgentsDir } from "./vvoc-paths.js";
@@ -680,6 +680,41 @@ describe("managed skill reference installation", () => {
       const copied = join(dir, "vv-execute", "references", "tool-contracts.md");
       const synced = await syncManagedSkillFiles(skillsPaths(dir), { force: true });
       expect(synced.find((result) => result.path === copied)?.action).toBe("kept");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("installManagedSkillFiles copies the vvoc-project-session-history script byte-identically", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "vvoc-managed-project-history-"));
+    try {
+      const results = await installManagedSkillFiles(skillsPaths(dir), { force: false });
+      const copied = join(dir, "vvoc-project-session-history", "scripts", "project_history.py");
+      expect(existsSync(copied)).toBe(true);
+      expect(results.find((result) => result.path === copied)?.action).toBe("created");
+      expect(await readFile(copied, "utf8")).toBe(
+        await loadManagedSkillScript("vvoc-project-session-history", "project_history.py"),
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("syncManagedSkillFiles keeps an up-to-date script and refreshes a modified one", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "vvoc-managed-project-history-sync-"));
+    try {
+      await installManagedSkillFiles(skillsPaths(dir), { force: false });
+      const copied = join(dir, "vvoc-project-session-history", "scripts", "project_history.py");
+
+      const kept = await syncManagedSkillFiles(skillsPaths(dir), { force: true });
+      expect(kept.find((result) => result.path === copied)?.action).toBe("kept");
+
+      await writeFile(copied, "# user-edited script\n", "utf8");
+      const refreshed = await syncManagedSkillFiles(skillsPaths(dir), { force: true });
+      expect(refreshed.find((result) => result.path === copied)?.action).toBe("updated");
+      expect(await readFile(copied, "utf8")).toBe(
+        await loadManagedSkillScript("vvoc-project-session-history", "project_history.py"),
+      );
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

@@ -1,0 +1,219 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-BUNDLE-SESSION-HISTORY-SKILL>
+    <IntentSummary>Bundle the fixed project-session recap skill as the managed skill vvoc-project-session-history: ship its six-block SKILL.md and the byte-identical V2-aware extractor script under templates/skills/, add a flat scripts/ capability to the managed-skill delivery path (managed-skills loader functions, install/sync copying, staleness inspection) mirroring the references/ semantics, extend the count arithmetic and path-shape assertions in the opencode test suite, document the skill in README (table row, additive compatibility entry, manual legacy-removal note), and reconcile the owning graph and verification projections — then verify through the targeted suites, the full gate stack, pack:check, and a live smoke run of the installed extractor.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-CLI-MANAGED-SKILLS</Value>
+        <Value>M-CLI-CONFIG</Value>
+        <Value>V-M-CLI-MANAGED-SKILLS</Value>
+        <Value>V-M-CLI-CONFIG</Value>
+        <Value>src/lib/managed-skills.ts</Value>
+        <Value>src/lib/managed-skills.test.ts</Value>
+        <Value>src/lib/managed-skills.grammar.test.ts</Value>
+        <Value>src/lib/managed-agents.test.ts</Value>
+        <Value>src/lib/opencode.test.ts</Value>
+        <Value>src/lib/opencode/agent-registrations.ts</Value>
+        <Value>src/lib/opencode/inspection.ts</Value>
+        <Value>templates/skills/vvoc-usage-analytics/SKILL.md</Value>
+        <Value>README.md</Value>
+        <Value>.grace/graph/main.xml</Value>
+        <Value>.grace/verification/main.xml</Value>
+      </MustExist>
+      <MustContain><File>src/lib/managed-skills.ts</File><Text>vvoc-usage-analytics</Text></MustContain>
+      <MustContain><File>src/lib/managed-skills.ts</File><Text>listManagedSkillReferenceNames</Text></MustContain>
+      <MustContain><File>src/lib/opencode/agent-registrations.ts</File><Text>syncManagedSkillReferences</Text></MustContain>
+      <MustContain><File>src/lib/opencode/inspection.ts</File><Text>differs from the shipped template</Text></MustContain>
+      <MustContain><File>src/lib/opencode.test.ts</File><Text>expectedManagedSkillResultCount</Text></MustContain>
+      <MustContain><File>src/lib/managed-skills.grammar.test.ts</File><Text>assertSkillGrammar</Text></MustContain>
+      <MustContain><File>README.md</File><Text>### Managed skills</Text></MustContain>
+      <MustContain><File>README.md</File><Text>and `vvoc-usage-analytics` are additive</Text></MustContain>
+      <MustContain><File>.grace/verification/main.xml</File><Text>33 files, 31 in the vv-spec-skip case</Text></MustContain>
+      <MustNotContain><File>src/lib/managed-skills.ts</File><Text>vvoc-project-session-history</Text></MustNotContain>
+      <MustNotContain><File>README.md</File><Text>vvoc-project-session-history</Text></MustNotContain>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-CLI-MANAGED-SKILLS</Module>
+        <Module>M-CLI-CONFIG</Module>
+      </MustVerify>
+      <MustContain><File>src/lib/managed-skills.ts</File><Text>vvoc-project-session-history</Text></MustContain>
+      <MustContain><File>src/lib/managed-skills.ts</File><Text>listManagedSkillScriptNames</Text></MustContain>
+      <MustContain><File>templates/skills/vvoc-project-session-history/SKILL.md</File><Text>name: vvoc-project-session-history</Text></MustContain>
+      <MustContain><File>templates/skills/vvoc-project-session-history/SKILL.md</File><Text>&lt;scope&gt;</Text></MustContain>
+      <MustContain><File>templates/skills/vvoc-project-session-history/SKILL.md</File><Text>&lt;workflow&gt;</Text></MustContain>
+      <MustContain><File>templates/skills/vvoc-project-session-history/SKILL.md</File><Text>&lt;rules&gt;</Text></MustContain>
+      <MustContain><File>templates/skills/vvoc-project-session-history/SKILL.md</File><Text>&lt;done&gt;</Text></MustContain>
+      <MustContain><File>templates/skills/vvoc-project-session-history/SKILL.md</File><Text>scripts/project_history.py</Text></MustContain>
+      <MustContain><File>templates/skills/vvoc-project-session-history/SKILL.md</File><Text>session_v2</Text></MustContain>
+      <MustContain><File>templates/skills/vvoc-project-session-history/SKILL.md</File><Text>vvoc-usage-analytics</Text></MustContain>
+      <MustContain><File>templates/skills/vvoc-project-session-history/scripts/project_history.py</File><Text>UNION ALL</Text></MustContain>
+      <MustContain><File>templates/skills/vvoc-project-session-history/scripts/project_history.py</File><Text>id, project_id, parent_id, slug, directory, title, time_updated</Text></MustContain>
+      <MustContain><File>templates/skills/vvoc-project-session-history/scripts/project_history.py</File><Text>database has neither session nor session_v2 table</Text></MustContain>
+      <MustContain><File>src/lib/opencode/agent-registrations.ts</File><Text>syncManagedSkillScripts</Text></MustContain>
+      <MustContain><File>src/lib/opencode/inspection.ts</File><Text>managed skill script</Text></MustContain>
+      <MustContain><File>src/lib/opencode.test.ts</File><Text>vvoc-project-session-history</Text></MustContain>
+      <MustContain><File>src/lib/managed-agents.test.ts</File><Text>scripts/project_history.py</Text></MustContain>
+      <MustContain><File>src/lib/managed-skills.test.ts</File><Text>vvoc-project-session-history</Text></MustContain>
+      <MustContain><File>README.md</File><Text>vvoc-project-session-history</Text></MustContain>
+      <MustContain><File>.grace/graph/main.xml</File><Text>vvoc-project-session-history</Text></MustContain>
+      <MustContain><File>.grace/graph/main.xml</File><Text>script files</Text></MustContain>
+      <MustContain><File>.grace/verification/main.xml</File><Text>vvoc-project-session-history</Text></MustContain>
+      <MustContain><File>.grace/verification/main.xml</File><Text>35 files, 33 in the vv-spec-skip case</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/lib/managed-skills.test.ts src/lib/managed-skills.grammar.test.ts</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun test src/lib/opencode.test.ts src/lib/managed-agents.test.ts</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run typecheck</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run pack:check</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <DurableScope>
+      <GraphAnchors>
+        <M-CLI-MANAGED-SKILLS />
+        <M-CLI-CONFIG />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-CLI-MANAGED-SKILLS />
+        <V-M-CLI-CONFIG />
+      </VerificationAnchors>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>.grace/changes/active/C-BUNDLE-SESSION-HISTORY-SKILL/plan.xml</File>
+      <File>.grace/changes/active/C-BUNDLE-SESSION-HISTORY-SKILL/smoke-evidence.md</File>
+      <File>templates/skills/vvoc-project-session-history/SKILL.md</File>
+      <File>templates/skills/vvoc-project-session-history/scripts/project_history.py</File>
+      <File>src/lib/managed-skills.ts</File>
+      <File>src/lib/managed-skills.test.ts</File>
+      <File>src/lib/managed-agents.test.ts</File>
+      <File>src/lib/opencode/agent-registrations.ts</File>
+      <File>src/lib/opencode/inspection.ts</File>
+      <File>src/lib/opencode.test.ts</File>
+      <File>README.md</File>
+      <File>.grace/graph/index.xml</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/index.xml</File>
+      <File>.grace/verification/main.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Ship the vvoc-project-session-history templates: six-block SKILL.md and the byte-identical extractor script.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>templates/skills/vvoc-project-session-history/scripts/project_history.py is byte-identical to the fixed standalone script of 2026-11-25 (md5 09a533b18b7ed4794de118d2041b9fc4, source ~/.config/opencode/skills/project-session-history/scripts/project_history.py); it is copied, never retyped.</Criterion>
+          <Criterion>SKILL.md has YAML frontmatter with name vvoc-project-session-history and a single-line description of at most 1024 characters carrying the recap trigger branches (Russian and English), the vvoc-usage-analytics exclusion, and the history-is-not-current-state caveat.</Criterion>
+          <Criterion>SKILL.md uses the canonical six-block grammar with required scope, workflow, rules, and done blocks in canonical order; Data Source Layout (session_v2 with V1 fallback, dual message stores, text-only parts, immediate V2 writes and --skip-newest consequences) and the extractor options live as markdown inside the allowed blocks; the run command is python3 against scripts/project_history.py relative to the skill's own directory with no absolute or legacy standalone path; the template names no references/ paths.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>md5sum templates/skills/vvoc-project-session-history/scripts/project_history.py</Command>
+          <Command>python3 -c "import xml.etree.ElementTree,pathlib; t=pathlib.Path('templates/skills/vvoc-project-session-history/SKILL.md').read_text(); assert all(f'&lt;{b}&gt;' in t for b in ('scope','workflow','rules','done')); print('blocks ok')"</Command>
+          <Command>python3 -c "import pathlib; d=pathlib.Path('templates/skills/vvoc-project-session-history/SKILL.md').read_text().split('---')[1]; n=[l for l in d.splitlines() if l.startswith('name:')][0]; ds=[l for l in d.splitlines() if l.startswith('description:')][0]; assert len(ds)&lt;=1038 and len(ds.split('description:')[1])&lt;=1024; print(n, 'desc-len', len(ds.split('description:')[1]))"</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Register the skill and add the template-side scripts/ loader API in managed-skills.ts.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>MANAGED_SKILL_NAMES gains "vvoc-project-session-history" (12 entries total, existing order preserved, new entry appended after vvoc-usage-analytics).</Criterion>
+          <Criterion>New exported functions listManagedSkillScriptNames and loadManagedSkillScript mirror the reference API: one level deep under templates/skills/&lt;name&gt;/scripts/, UTF-8 text loading, empty list for skills without scripts, and the same error behavior shape as the reference loaders.</Criterion>
+          <Criterion>The file's MODULE_CONTRACT, MODULE_MAP, and START_CHANGE_SUMMARY LAST_CHANGE are updated for the scripts capability.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-skills.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Deliver scripts/ through install and sync in agent-registrations.ts.</Title>
+        <DependsOn>T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>A syncManagedSkillScripts function mirrors syncManagedSkillReferences: for each script name it compares installed content against the template and reports created/kept/updated by content comparison, with no per-file frontmatter or ownership check.</Criterion>
+          <Criterion>installManagedSkillFiles calls it exactly where references are synced (created or forced skills), and syncManagedSkillFiles calls it whenever the parent skill result is not skipped; the module's contract, map, and change summary reflect the scripts capability.</Criterion>
+          <Criterion>Skills without scripts produce no additional write results, so the eleven existing skills' outputs stay unchanged.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-agents.test.ts src/lib/opencode.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Extend the staleness inspection to script files.</Title>
+        <DependsOn>T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>inspectInstallation's managed-skill loop compares each installed script file against its template and pushes a warning of the same shape as the reference drift warning, naming the script path and the sync remedy; absent script files and skills without scripts produce no warnings.</Criterion>
+          <Criterion>The module's contract, map, and change summary reflect the scripts drift check.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/opencode.test.ts</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Cover registration, grammar, script loading, and script delivery semantics with tests.</Title>
+        <DependsOn>T-002, T-003</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>src/lib/managed-skills.test.ts gains the per-skill registration test for vvoc-project-session-history following the existing pattern (MANAGED_SKILL_NAMES membership, template loading with frontmatter, script listing returning project_history.py, and empty script lists for skills without scripts).</Criterion>
+          <Criterion>src/lib/managed-agents.test.ts gains script delivery tests mirroring the reference installation tests: install copies scripts/project_history.py byte-identically from the template, sync keeps an up-to-date copy, and sync with force refreshes a modified copy back to the template.</Criterion>
+          <Criterion>The grammar suite passes for the new template without loosening the grammar (no changes to the grammar gate itself).</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-skills.test.ts src/lib/managed-skills.grammar.test.ts src/lib/managed-agents.test.ts</Command>
+        </Verification>
+      </T-005>
+      <T-006>
+        <Title>Update the opencode suite: count arithmetic, path shape, spot checks, and script drift inspection test.</Title>
+        <DependsOn>T-003, T-004</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>expectedManagedSkillResultCount counts 1 + references + scripts per skill, the skipped-skill subtraction drops references and scripts, and the resulting totals re-derive to 35 files (33 in the vv-spec-skip case); if the measured totals differ, the spec assumption is amended through a recorded change, not silently.</Criterion>
+          <Criterion>The install path-shape assertion accepts scripts/ paths alongside SKILL.md and references, and the install/sync tests gain spot checks that vvoc-project-session-history/scripts/project_history.py is created.</Criterion>
+          <Criterion>An inspectInstallation test covers the script drift warning: a modified installed script produces the managed-skill-script warning, an identical one produces none.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/opencode.test.ts</Command>
+        </Verification>
+      </T-006>
+      <T-007>
+        <Title>Document the skill in README.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>The managed-skills table gains a vvoc-project-session-history row with the vvoc-* family framing, the recap triggers, and the read-only SQLite reading description.</Criterion>
+          <Criterion>The Stability and compatibility section's managed-skill list gains vvoc-project-session-history as an additive entry.</Criterion>
+          <Criterion>The skill-discovery note (or the table row) states that standalone pre-bundle copies of project-session-history are user-owned and removed manually after the first sync.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>grep -n "vvoc-project-session-history" README.md</Command>
+        </Verification>
+      </T-007>
+      <T-008>
+        <Title>Reconcile the durable graph and verification projections.</Title>
+        <DependsOn>T-005, T-006</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>M-CLI-MANAGED-SKILLS's purpose and M-CLI-CONFIG's purpose truthfully cover script listing/loading and script sync plus script drift reporting, and both mention vvoc-project-session-history where skill enumeration appears.</Criterion>
+          <Criterion>V-M-CLI-MANAGED-SKILLS states the new install/sync surface totals (35 files, 33 in the vv-spec-skip case) and the scripts delivery/drift coverage with its test files; V-M-CLI-CONFIG's inspection sentence covers script drift warnings.</Criterion>
+          <Criterion>Routed index files stay consistent with the updated documents.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>grace lint --path .</Command>
+        </Verification>
+      </T-008>
+      <T-009>
+        <Title>Run the full gate stack, the live smoke run, and record change-time evidence.</Title>
+        <DependsOn>T-007, T-008</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>bun run check, bun run build, and bun run pack:check pass, and the packed archive contains templates/skills/vvoc-project-session-history/SKILL.md and scripts/project_history.py.</Criterion>
+          <Criterion>python3 templates/skills/vvoc-project-session-history/scripts/project_history.py --project ~/dev/vv-opencode --sessions 3 returns recent sessions from the live database (recorded in .grace/changes/active/C-BUNDLE-SESSION-HISTORY-SKILL/smoke-evidence.md with command, output excerpt, and date).</Criterion>
+          <Criterion>The baseline and target assertion phases pass through the grace lint gates for this change.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run check</Command>
+          <Command>bun run build</Command>
+          <Command>bun run pack:check</Command>
+          <Command>python3 templates/skills/vvoc-project-session-history/scripts/project_history.py --project ~/dev/vv-opencode --sessions 3</Command>
+        </Verification>
+      </T-009>
+    </ImplementationPlan>
+  </C-BUNDLE-SESSION-HISTORY-SKILL>
+</GraceChangePlan>

@@ -14,7 +14,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Managed-skill install/sync result counts are derived from MANAGED_SKILL_NAMES and reference discovery instead of hardcoded totals, so adding a skill no longer edits five literals.]
+//   LAST_CHANGE: [C-BUNDLE-SESSION-HISTORY-SKILL T-006 - Managed-skill install/sync result counts now include script discovery, the install path-shape assertion accepts scripts/ paths, the suite spot-checks the vvoc-project-session-history script creation, and inspectInstallation warns on drifted managed skill scripts.]
 // END_CHANGE_SUMMARY
 
 import { describe, expect, test } from "bun:test";
@@ -847,16 +847,20 @@ describe("managed skill files", () => {
   async function expectedManagedSkillResultCount(
     options: { skippedSkill?: import("./managed-skills.js").ManagedSkillName } = {},
   ) {
-    const { MANAGED_SKILL_NAMES, listManagedSkillReferenceNames } =
+    const { MANAGED_SKILL_NAMES, listManagedSkillReferenceNames, listManagedSkillScriptNames } =
       await import("./managed-skills.js");
     let count = 0;
     for (const name of MANAGED_SKILL_NAMES) {
-      count += 1 + (await listManagedSkillReferenceNames(name)).length;
+      count +=
+        1 +
+        (await listManagedSkillReferenceNames(name)).length +
+        (await listManagedSkillScriptNames(name)).length;
     }
     if (options.skippedSkill) {
       // A skipped skill still yields one result entry for its SKILL.md, but its
-      // references are not synced, so only the reference count drops.
+      // references and scripts are not synced, so only those counts drop.
       count -= (await listManagedSkillReferenceNames(options.skippedSkill)).length;
+      count -= (await listManagedSkillScriptNames(options.skippedSkill)).length;
     }
     return count;
   }
@@ -875,12 +879,18 @@ describe("managed skill files", () => {
       for (const r of results) {
         const isSkill = r.path.endsWith("SKILL.md");
         const isReference = r.path.includes(join("references", ""));
-        expect(isSkill || isReference).toBe(true);
+        const isScript = r.path.includes(join("scripts", ""));
+        expect(isSkill || isReference || isScript).toBe(true);
       }
       expect(results.some((r) => r.path.endsWith(join("vv-reflect", "SKILL.md")))).toBe(true);
       expect(results.some((r) => r.path.endsWith(join("vv-handoff", "SKILL.md")))).toBe(true);
       expect(
         results.some((r) => r.path.endsWith(join("vv-ui-design-principles", "SKILL.md"))),
+      ).toBe(true);
+      expect(
+        results.some((r) =>
+          r.path.endsWith(join("vvoc-project-session-history", "scripts", "project_history.py")),
+        ),
       ).toBe(true);
       expect(
         results.some((r) =>
@@ -1480,6 +1490,40 @@ describe("inspectInstallation", () => {
     } finally {
       await rm(configHome, { recursive: true, force: true });
       await rm(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  test("warns when an installed managed skill script drifts from the template", async () => {
+    const configHome = await mkdtemp(join(tmpdir(), "vvoc-managed-script-drift-"));
+    try {
+      const paths = await resolvePaths({
+        scope: "global",
+        cwd: "/workspace/project",
+        configDir: configHome,
+      });
+      await ensurePackageInstalled(paths);
+      await installVvocConfig(paths);
+      await installManagedSkillFiles(paths, { force: true });
+
+      const scriptPath = join(
+        paths.managedSkillsDirPath,
+        "vvoc-project-session-history",
+        "scripts",
+        "project_history.py",
+      );
+
+      const fresh = await inspectInstallation(paths);
+      expect(fresh.warnings.some((warning) => warning.startsWith("managed skill script"))).toBe(
+        false,
+      );
+
+      await writeFile(scriptPath, "# drifted script\n", "utf8");
+      const drifted = await inspectInstallation(paths);
+      expect(drifted.warnings).toContain(
+        `managed skill script ${scriptPath} differs from the shipped template; run vvoc sync or vvoc sync --force`,
+      );
+    } finally {
+      await rm(configHome, { recursive: true, force: true });
     }
   });
 });

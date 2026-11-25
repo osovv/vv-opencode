@@ -1,0 +1,122 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-SESSION-PART-EXTRACTOR>
+    <IntentSummary>Adapt the bundled vvoc-project-session-history extractor to the post-2026-11-25 storage layout: assistant text joined from session_part for rows with empty inline content, edit/write tool parts feeding changed_files, truthful three-era documentation, percent-encoded read-only URI, an explicit run-command substitution note, a python3-gated synthetic-schema regression test mirroring session-graph.test.ts, and a live smoke run proving ASSISTANT lines return — superseding the predecessor's byte-identity freeze with recorded content markers.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-CLI-MANAGED-SKILLS</Value>
+        <Value>V-M-CLI-MANAGED-SKILLS</Value>
+        <Value>templates/skills/vvoc-project-session-history/scripts/project_history.py</Value>
+        <Value>templates/skills/vvoc-project-session-history/SKILL.md</Value>
+        <Value>src/lib/session-graph.test.ts</Value>
+        <Value>README.md</Value>
+        <Value>.grace/graph/main.xml</Value>
+        <Value>.grace/verification/main.xml</Value>
+      </MustExist>
+      <MustContain><File>templates/skills/vvoc-project-session-history/scripts/project_history.py</File><Text>def modern_messages</Text></MustContain>
+      <MustContain><File>templates/skills/vvoc-project-session-history/scripts/project_history.py</File><Text>session_message</Text></MustContain>
+      <MustContain><File>templates/skills/vvoc-project-session-history/scripts/project_history.py</File><Text>collect_files_from_json</Text></MustContain>
+      <MustContain><File>templates/skills/vvoc-project-session-history/SKILL.md</File><Text>session_v2</Text></MustContain>
+      <MustContain><File>README.md</File><Text>vvoc-project-session-history</Text></MustContain>
+      <MustContain><File>.grace/verification/main.xml</File><Text>35 files, 33 in the vv-spec-skip case</Text></MustContain>
+      <MustNotContain><File>templates/skills/vvoc-project-session-history/scripts/project_history.py</File><Text>session_part</Text></MustNotContain>
+      <MustNotContain><File>templates/skills/vvoc-project-session-history/scripts/project_history.py</File><Text>urllib.parse</Text></MustNotContain>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-CLI-MANAGED-SKILLS</Module>
+      </MustVerify>
+      <MustContain><File>templates/skills/vvoc-project-session-history/scripts/project_history.py</File><Text>FROM session_part</Text></MustContain>
+      <MustContain><File>templates/skills/vvoc-project-session-history/scripts/project_history.py</File><Text>urllib.parse</Text></MustContain>
+      <MustContain><File>templates/skills/vvoc-project-session-history/scripts/project_history.py</File><Text>mode=ro</Text></MustContain>
+      <MustContain><File>templates/skills/vvoc-project-session-history/SKILL.md</File><Text>session_part</Text></MustContain>
+      <MustContain><File>templates/skills/vvoc-project-session-history/SKILL.md</File><Text>substitut</Text></MustContain>
+      <MustContain><File>README.md</File><Text>session_part</Text></MustContain>
+      <MustContain><File>src/lib/session-history.test.ts</File><Text>pythonTest</Text></MustContain>
+      <MustContain><File>src/lib/session-history.test.ts</File><Text>ASSISTANT</Text></MustContain>
+      <MustContain><File>src/lib/session-history.test.ts</File><Text>session_part</Text></MustContain>
+      <MustContain><File>.grace/verification/main.xml</File><Text>session-history.test.ts</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/lib/session-history.test.ts</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun test src/lib/managed-skills.test.ts src/lib/managed-skills.grammar.test.ts src/lib/managed-agents.test.ts src/lib/opencode.test.ts</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run typecheck</Command>
+      </MustPassCommand>
+      <MustPassCommand>
+        <Command>bun run pack:check</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <DurableScope>
+      <GraphAnchors>
+        <M-CLI-MANAGED-SKILLS />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-CLI-MANAGED-SKILLS />
+      </VerificationAnchors>
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>.grace/changes/active/C-SESSION-PART-EXTRACTOR/plan.xml</File>
+      <File>.grace/changes/active/C-SESSION-PART-EXTRACTOR/smoke-evidence.md</File>
+      <File>templates/skills/vvoc-project-session-history/scripts/project_history.py</File>
+      <File>templates/skills/vvoc-project-session-history/SKILL.md</File>
+      <File>README.md</File>
+      <File>src/lib/session-history.test.ts</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/main.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Read post-migration parts in the extractor: session_part text join, edit/write file collection, percent-encoded URI.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>modern_messages loads a session's session_part type='text' rows once (WHERE session_id = ? ORDER BY message_id, ordinal) when the table exists, groups them by message_id, and uses them as the text for session_message rows whose inline extraction is empty; inline non-empty rows are untouched, and reasoning/tool parts are never read as text.</Criterion>
+          <Criterion>changed_files reads session_part tool parts for the session, filters JSON names edit and write, and passes their data through collect_files_from_json so state.input.path lands in the file list when inside the root.</Criterion>
+          <Criterion>connect_readonly percent-encodes the database path (urllib.parse.quote) before composing the mode=ro URI.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>python3 -m py_compile templates/skills/vvoc-project-session-history/scripts/project_history.py</Command>
+          <Command>python3 templates/skills/vvoc-project-session-history/scripts/project_history.py --project . --sessions 3 --include-children</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Update the shipped documentation to the three-era truth and the explicit run-command substitution.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>SKILL.md's Data Source Layout describes the three storage eras — V1 message+part, V2 inline session_message content, and the post-2026-11-25 layout where assistant text and patch parts live in session_part — and the workflow's run command names the substitution of the skill's own directory explicitly instead of presenting a verbatim-runnable relative path.</Criterion>
+          <Criterion>README's skill row states the current part store accurately instead of claiming history lives only in session_v2/session_message.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>grep -n "session_part" templates/skills/vvoc-project-session-history/SKILL.md README.md</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Add the python3-gated synthetic-schema regression test.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>src/lib/session-history.test.ts mirrors the session-graph.test.ts pattern: python3 via Bun.which with test.skipIf, a temp SQLite database built with bun:sqlite, and execFileSync running the shipped script with --db and a temp project directory.</Criterion>
+          <Criterion>The fixtures cover: post-migration extraction (assistant content=[] plus session_part text/reasoning/tool parts — ASSISTANT line present, reasoning absent), pre-migration inline content (unchanged output), a legacy V1 table pair (unchanged output), and edit/write tool parts contributing files while other tools do not.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/session-history.test.ts</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Run the gates and the live smoke run, record evidence, reconcile projections, archive, and ship.</Title>
+        <DependsOn>T-002, T-003</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>The grace lint baseline, target, and final assertion gates pass for this change, and bun run check, build, and pack:check pass fresh.</Criterion>
+          <Criterion>A live smoke run against the current OpenCode database returns at least one ASSISTANT line for a post-migration session; the command, output excerpt, and date are recorded in the bundle's smoke-evidence.md.</Criterion>
+          <Criterion>The M-CLI-MANAGED-SKILLS graph purpose and the V-M-CLI-MANAGED-SKILLS scenario truthfully cover the session_part extraction and the new test file, and the change bundle is archived with applied statuses before the commit.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run check</Command>
+          <Command>bun run build</Command>
+          <Command>bun run pack:check</Command>
+          <Command>python3 templates/skills/vvoc-project-session-history/scripts/project_history.py --project . --sessions 3 --include-children</Command>
+        </Verification>
+      </T-004>
+    </ImplementationPlan>
+  </C-SESSION-PART-EXTRACTOR>
+</GraceChangePlan>
