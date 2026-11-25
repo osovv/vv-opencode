@@ -22,7 +22,6 @@
 //   DelegatedHarnessPlugin - Native tool and hook handles captured from a real WorkflowPlugin.setup.
 //   DelegatedEventQueue - Minimal event queue delivering queued events in order.
 //   DelegatedPluginHarness - Captured plugin hooks, tools, logs, prompt calls, and workspace paths for one delegated fixture.
-//   writeProfile - Writes an isolated orchestration profile fixture.
 //   specXml - Renders the approved spec fixture for the task pipeline.
 //   PlanTaskInput - Task index and wave pairing used by the plan builder.
 //   planXml - Renders the approved delegated plan fixture with waves and checkpoints.
@@ -76,9 +75,9 @@ interface TaskToolPart {
   readonly tool: string;
   readonly state: TaskToolPartState;
 }
-import { loadVvocConfig, resetVvocConfigForTests } from "../lib/config-layers.js";
+import { resetVvocConfigForTests } from "../lib/config-layers.js";
 import type { OrchestrationProfile } from "../lib/orchestration.js";
-import { createDefaultVvocConfig, renderVvocConfig } from "../lib/vvoc-config.js";
+import { createDefaultVvocConfig } from "../lib/vvoc-config.js";
 import { createWorkflowPlugin } from "./workflow/index.js";
 import {
   deleteWorkflowSessionDir,
@@ -228,16 +227,6 @@ afterEach(async () => {
     if (path) rmSync(path, { recursive: true, force: true });
   }
 });
-
-function writeProfile(profile: OrchestrationProfile): void {
-  const configHome = process.env.XDG_CONFIG_HOME;
-  if (!configHome) throw new Error("XDG_CONFIG_HOME required");
-  const config = createDefaultVvocConfig();
-  config.orchestration = { profile };
-  const configDir = join(configHome, "vvoc");
-  mkdirSync(configDir, { recursive: true });
-  writeFileSync(join(configDir, "vvoc.json"), renderVvocConfig(config), "utf8");
-}
 
 function specXml(taskCount: number): string {
   return `<spec><status>approved</status><goal>Deliver ${taskCount} delegated tasks.</goal><architecture>Pipeline of independent tasks.</architecture><tech_stack>TypeScript.</tech_stack><components>
@@ -426,7 +415,6 @@ async function createDelegatedPluginHarness(
   options?: { promptResponses?: string[] },
 ): Promise<DelegatedPluginHarness> {
   resetVvocConfigForTests();
-  writeProfile(profile);
   const logs: string[] = [];
   const sessions = new Map<string, StubSession>();
   const promptCalls: DelegatedPromptCall[] = [];
@@ -596,8 +584,11 @@ async function createDelegatedPluginHarness(
     },
   };
 
-  const loaded = await loadVvocConfig({ cwd: workspaceRoot });
-  const defaultCapture = { vvoc: loaded.config };
+  const baseConfig = createDefaultVvocConfig();
+  const defaultCapture = {
+    vvoc: baseConfig,
+    settings: { version: 1 as const, roles: {}, plugins: {}, profile },
+  };
   const fakeRuntime = {
     settings: {
       configFor: async () => defaultCapture,
@@ -608,7 +599,7 @@ async function createDelegatedPluginHarness(
       }
       return fakeClient;
     },
-    effectiveConfig: () => ({ vvoc: loaded.config }),
+    effectiveConfig: () => ({ vvoc: baseConfig }),
     release: async () => undefined,
   };
 

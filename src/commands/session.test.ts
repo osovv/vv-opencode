@@ -2,7 +2,7 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-SESSION - explicit session-settings changes through lineage-rooted metadata read-modify-write.
-//   SCOPE: Shared action parsing, family isolation (only the named family changes), foreign-metadata preservation on every write, preset/profile/role/plugin/pull-defaults application, and summary rendering.
+//   SCOPE: Shared action parsing, family isolation (only the named family changes), foreign-metadata preservation on every write, preset/role/plugin/pull-defaults application, legacy profile read/clear behavior, and summary rendering.
 //   DEPENDS: [bun:test, node:fs/promises, node:os, node:path, src/commands/session.ts, src/lib/vvoc-config.ts, src/runtime/session-settings.ts]
 //   LINKS: [M-CLI-SESSION, V-M-CLI-SESSION]
 //   ROLE: TEST
@@ -115,10 +115,9 @@ describe("parseSessionSettingsAction", () => {
       kind: "preset",
       name: "vv-zai",
     });
-    expect(parseSessionSettingsAction("profile orchestrated")).toEqual({
-      kind: "profile",
-      profile: "orchestrated",
-    });
+    expect(() => parseSessionSettingsAction("profile orchestrated")).toThrow(
+      /unknown settings action/,
+    );
     expect(parseSessionSettingsAction("role smart prov/m2#high")).toEqual({
       kind: "role-set",
       roleId: "smart",
@@ -155,8 +154,9 @@ describe("applySessionSettingsAction", () => {
       const result = await applySessionSettingsAction({
         client: host.client(),
         sessionID: "child_a",
-        action: { kind: "profile", profile: "orchestrated" },
+        action: { kind: "role-set", roleId: "smart", model: "prov/m2#high" },
         cwd: project,
+        configDir: project,
       });
       expect(result.rootID).toBe("root_a");
       // Family A was written through a child id, exactly once, at the root.
@@ -165,7 +165,7 @@ describe("applySessionSettingsAction", () => {
       // The foreign metadata key survived the replace-semantics write.
       expect(host.sessions.get("root_a")?.metadata?.user).toEqual({ note: "keep me" });
       expect(readSettingsFromMetadata(host.sessions.get("root_a")?.metadata)).toMatchObject({
-        settings: { profile: "orchestrated" },
+        settings: { roles: { smart: "prov/m2#high" } },
       });
       // Family B was not touched.
       expect(host.sessions.get("root_b")?.metadata).toEqual({ other: 1 });
@@ -174,7 +174,7 @@ describe("applySessionSettingsAction", () => {
     }
   });
 
-  test("preset resolves the configured preset's roles and profile", async () => {
+  test("preset resolves the configured preset's roles without recording a profile", async () => {
     const host = new FakeHost();
     host.add({ id: "ses_root" });
     const project = await makeProject();
@@ -183,7 +183,6 @@ describe("applySessionSettingsAction", () => {
         config.presets["vv-test"] = {
           description: "test preset",
           agents: { smart: "prov/m-smart#high", fast: "prov/m-fast" },
-          orchestration: { profile: "orchestrated" },
         };
       });
       const result = await applySessionSettingsAction({
@@ -191,9 +190,10 @@ describe("applySessionSettingsAction", () => {
         sessionID: "ses_root",
         action: { kind: "preset", name: "vv-test" },
         cwd: project,
+        configDir: project,
       });
       expect(result.settings.preset).toBe("vv-test");
-      expect(result.settings.profile).toBe("orchestrated");
+      expect(result.settings.profile).toBeUndefined();
       expect(result.settings.roles).toEqual({
         smart: "prov/m-smart#high",
         fast: "prov/m-fast",
@@ -214,6 +214,7 @@ describe("applySessionSettingsAction", () => {
           sessionID: "ses_root",
           action: { kind: "preset", name: "missing" },
           cwd: project,
+          configDir: project,
         }),
       ).rejects.toThrow(/unknown preset: missing/);
       expect(host.updates).toHaveLength(0);
@@ -232,6 +233,7 @@ describe("applySessionSettingsAction", () => {
         sessionID: "ses_root",
         action: { kind: "role-set", roleId: "smart", model: "prov/m2#high" },
         cwd: project,
+        configDir: project,
       });
       expect(set.settings.roles.smart).toBe("prov/m2#high");
       const unset = await applySessionSettingsAction({
@@ -239,6 +241,7 @@ describe("applySessionSettingsAction", () => {
         sessionID: "ses_root",
         action: { kind: "role-unset", roleId: "smart" },
         cwd: project,
+        configDir: project,
       });
       expect(unset.settings.roles.smart).toBeUndefined();
     } finally {
@@ -257,6 +260,7 @@ describe("applySessionSettingsAction", () => {
           sessionID: "ses_root",
           action: { kind: "role-set", roleId: "Bad Role", model: "prov/m" },
           cwd: project,
+          configDir: project,
         }),
       ).rejects.toThrow(/invalid role id/);
       await expect(
@@ -265,6 +269,7 @@ describe("applySessionSettingsAction", () => {
           sessionID: "ses_root",
           action: { kind: "plugin", plugin: "not-a-plugin", enabled: true },
           cwd: project,
+          configDir: project,
         }),
       ).rejects.toThrow(/unknown plugin/);
       expect(host.updates).toHaveLength(0);
@@ -286,9 +291,11 @@ describe("applySessionSettingsAction", () => {
         sessionID: "ses_root",
         action: { kind: "pull-defaults" },
         cwd: project,
+        configDir: project,
       });
       expect(result.settings.preset).toBeUndefined();
-      expect(result.settings.profile).toBeDefined();
+      // pull-defaults is an explicit rewrite: the recorded profile marker is cleared.
+      expect(result.settings.profile).toBeUndefined();
       // The RMW write still preserves the foreign key.
       expect(host.sessions.get("ses_root")?.metadata?.keep).toBe("me");
     } finally {
@@ -307,16 +314,44 @@ describe("applySessionSettingsAction", () => {
     await applySessionSettingsAction({
       client,
       sessionID: "ses_child",
-      action: { kind: "profile", profile: "single-session" },
+      action: { kind: "role-set", roleId: "smart", model: "prov/m2" },
       cwd: project,
+      configDir: project,
     });
     const read = await readFamilySettingsViaClient({ client, sessionID: "ses_child" });
-    expect(read?.profile).toBe("single-session");
+    expect(read?.roles.smart).toBe("prov/m2");
+    expect(read?.profile).toBeUndefined();
+  });
+
+  test("a legacy recorded profile is readable and is cleared by an explicit rewrite", async () => {
+    const host = new FakeHost();
+    host.add({
+      id: "ses_root",
+      metadata: {
+        "vvoc:settings": { version: 1, roles: {}, profile: "delegated", plugins: {} },
+      },
+    });
+    const client = host.client();
+    const project = await makeProject();
+    tempDirs.push(project);
+
+    const legacy = await readFamilySettingsViaClient({ client, sessionID: "ses_root" });
+    expect(legacy?.profile).toBe("delegated");
+
+    await applySessionSettingsAction({
+      client,
+      sessionID: "ses_root",
+      action: { kind: "role-set", roleId: "smart", model: "prov/m2" },
+      cwd: project,
+      configDir: project,
+    });
+    const rewritten = await readFamilySettingsViaClient({ client, sessionID: "ses_root" });
+    expect(rewritten?.profile).toBeUndefined();
   });
 });
 
 describe("describeFamilySettings", () => {
-  test("renders bounded deterministic summary lines", () => {
+  test("renders bounded deterministic summary lines and omits an absent profile", () => {
     const lines = describeFamilySettings({
       version: 1,
       preset: "vv-zai",
@@ -330,5 +365,12 @@ describe("describeFamilySettings", () => {
       "profile: orchestrated",
       "plugins: hashline-edit=off, secrets-redaction=on",
     ]);
+
+    const withoutProfile = describeFamilySettings({
+      version: 1,
+      roles: { default: "prov/m1" },
+      plugins: {},
+    });
+    expect(withoutProfile).toEqual(["roles: default=prov/m1", "plugins: (defaults)"]);
   });
 });

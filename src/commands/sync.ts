@@ -2,8 +2,8 @@
 // VERSION: 0.5.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Sync the canonical vvoc.json config file, managed prompts, and keep OpenCode runtime/TUI plugin specifiers current.
-//   SCOPE: Scope parsing, path resolution, host-gated V1 OpenCode config materialization, pinned runtime/TUI plugin sync, managed OpenCode agent sync, managed agent prompt sync, managed plan directory sync, and canonical vvoc config rewrite.
-//   DEPENDS: [citty, src/lib/opencode.ts]
+//   SCOPE: Scope parsing, path resolution, explicit host-gated legacy-orchestration migration of project and global vvoc configs, host-gated V1 OpenCode config materialization, pinned runtime/TUI plugin sync, managed OpenCode agent sync, managed agent prompt sync, managed plan directory sync, and canonical vvoc config rewrite.
+//   DEPENDS: [citty, src/lib/opencode.ts, src/lib/opencode/vvoc-orchestration-migration.ts]
 //   LINKS: [M-CLI-COMMANDS, M-CLI-CONFIG]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -15,7 +15,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-CLI-JSON-PIN-SYNC-R1 T-001 - Kept the native cli.json TUI client pin in sync beside the opencode.json server pin.]
+//   LAST_CHANGE: [C-REMOVE-SESSION-ORCHESTRATION-PROFILES T-004 - Sync migrates legacy orchestration sections from project and global vvoc configs with a backup and change report before strict validation.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -35,6 +35,7 @@ import {
   type OpenCodeRuntimeInspection,
   type Scope,
 } from "../lib/opencode.js";
+import { migrateVvocOrchestration } from "../lib/opencode/vvoc-orchestration-migration.js";
 
 export default defineCommand({
   meta: {
@@ -78,6 +79,31 @@ export async function runSync(
   // strictly validate any existing vvoc.json, before mutating anything so the
   // command fails loudly up front instead of after a partial sync.
   await assertSupportedOpenCodeRuntime(options.inspectRuntime);
+  // Explicit legacy-orchestration migration: runs after the host gate and before
+  // the strict config read, covers project and global documents, writes a
+  // timestamped backup, and reports every removed section. Invalid JSON is left
+  // untouched so the strict read below fails loudly.
+  const projectPaths = await resolvePaths({
+    scope: "project",
+    cwd: process.cwd(),
+    configDir,
+  });
+  const globalPaths = await resolvePaths({
+    scope: "global",
+    cwd: process.cwd(),
+    configDir,
+  });
+  const vvocMigration = await migrateVvocOrchestration([projectPaths, globalPaths]);
+  for (const migratedDocument of vvocMigration.migrated) {
+    console.log(
+      `Migrated legacy orchestration from ${migratedDocument.path} (removed: ${migratedDocument.sections.join(", ")}; backup: ${migratedDocument.backupPath})`,
+    );
+  }
+  for (const invalidPath of vvocMigration.skippedInvalid) {
+    console.log(
+      `Left ${invalidPath} unchanged: invalid JSON; strict vvoc validation will fail loudly.`,
+    );
+  }
   await readVvocConfig(paths);
   // Host-gated V1-to-V2 materialization: only runs once the host is inside the
   // supported window, before the native document is validated and rewritten.

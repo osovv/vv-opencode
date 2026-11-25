@@ -16,7 +16,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SESSION-OWNED-SETTINGS T-005 - Added /vv-settings as the explicit family-settings command replacing the removed /vv-rebind marker command.]
+//   LAST_CHANGE: [C-REMOVE-SESSION-ORCHESTRATION-PROFILES T-002 - /vv-settings no longer offers a profile action; preset, role, plugin toggle, pull-defaults, and read behavior remain.]
 // END_CHANGE_SUMMARY
 
 import type { Plugin } from "@opencode/plugin/tui";
@@ -46,7 +46,7 @@ export type SettingsTuiDependencies = {
  * registration: the layer must be created inside a mounted slot render, so the
  * command claims the always-present `app` slot. With no argument the command
  * shows the current family settings; with the shared text action syntax
- * (`preset <name>`, `profile <name>`, `role <id> <model>`, `role unset <id>`,
+ * (`preset <name>`, `role <id> <model>`, `role unset <id>`,
  * `plugin <name> on|off`, `pull-defaults`) it applies exactly one change to the
  * active session's family root through a lineage-rooted metadata
  * read-modify-write. The command displays bounded summaries only and never
@@ -80,8 +80,7 @@ export function registerSettingsTuiCommand(
           {
             id: SETTINGS_COMMAND_ID,
             title: "Session settings",
-            description:
-              "Show or change this session family's settings (preset, profile, roles, plugins)",
+            description: "Show or change this session family's settings (preset, roles, plugins)",
             group: "VVOC",
             palette: true,
             slash: { name: "vv-settings", arguments: true },

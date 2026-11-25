@@ -1,9 +1,9 @@
 // FILE: src/lib/vvoc-config.ts
 // VERSION: 3.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Define the canonical vvoc.json document shape, schema versions, orchestration normalization, and validation helpers.
-//   SCOPE: Versioned schema constants, preset-aware default config generation including managed built-in profiles, strict current config parsing including direct Z.AI provider regions, section rendering/parsing helpers, and schema plus semantic validation for vvoc-owned configuration including OpenCode alias-model defaults.
-//   DEPENDS: [ajv/dist/2020, src/lib/agent-models.ts, src/lib/orchestration.ts, src/lib/package.ts, src/lib/vvoc-preset-registry.ts]
+//   PURPOSE: Define the canonical vvoc.json document shape, schema versions, and validation helpers.
+//   SCOPE: Versioned schema constants, preset-aware default config generation including managed built-in presets, strict current config parsing including direct Z.AI provider regions, section rendering/parsing helpers, and schema plus semantic validation for vvoc-owned configuration including OpenCode alias-model defaults. Orchestration profiles are not part of the canonical document; legacy documents that still carry an orchestration section are rejected loudly and migrated only through the explicit vvoc sync step.
+//   DEPENDS: [ajv/dist/2020, src/lib/agent-models.ts, src/lib/package.ts, src/lib/vvoc-preset-registry.ts]
 //   LINKS: [M-CLI-CONFIG, M-WEB-CONFIG, M-ORCHESTRATION-PROFILES, M-CLI-CONFIG-VALIDATE, M-CLI-PRESET, M-PLUGIN-GUARDIAN, M-PLUGIN-SECRETS-REDACTION]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -52,8 +52,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct change - Added deepseek to the canonical web provider vocabularies and types without a region requirement.]
-//   PREVIOUS: [C-TELEGRAM-BRIDGE-PLUGIN T-001 - Added the optional strict top-level telegram section with ${VAR} token convention, single-owner allowlist, activity window, mutually exclusive connectivity modes, and delivery settings defaults. Prior: C-SYSTEMONE-DECISION-BACKEND T-002 - Added the optional strict systemone connection section and the guardian decisionBackend and systemone policy fields.]
+//   LAST_CHANGE: [C-REMOVE-SESSION-ORCHESTRATION-PROFILES T-002 - Removed orchestration from the canonical document, presets, schema, seeding, normalization, and rendering; legacy documents with the section fail strict v3 validation and migrate only through vvoc sync.]
 // END_CHANGE_SUMMARY
 
 import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
@@ -63,11 +62,6 @@ import {
   REFLECTOR_ROLE_NAME,
   type BuiltInRoleName,
 } from "./model-roles.js";
-import {
-  ORCHESTRATION_PROFILE_NAMES,
-  createOrchestrationConfig,
-  type OrchestrationConfig,
-} from "./orchestration.js";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./package.js";
 import {
   BUILTIN_VVOC_PRESET_REGISTRY,
@@ -114,7 +108,6 @@ export type VvocPresetAgents = VvocRoleAssignments;
 export type VvocPreset = {
   description?: string;
   agents: VvocPresetAgents;
-  orchestration?: OrchestrationConfig;
 };
 
 export type VvocPresets = Record<string, VvocPreset>;
@@ -227,7 +220,6 @@ export type VvocConfig = {
   $schema: string;
   version: number;
   roles: Record<string, string>;
-  orchestration?: OrchestrationConfig;
   guardian: GuardianConfig;
   secretsRedaction: SecretsRedactionConfig;
   presets: VvocPresets;
@@ -417,15 +409,6 @@ const ROLE_ASSIGNMENTS_SCHEMA = {
   additionalProperties: { type: "string", minLength: 1 },
 };
 
-const ORCHESTRATION_CONFIG_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  required: ["profile"],
-  properties: {
-    profile: { type: "string", enum: [...ORCHESTRATION_PROFILE_NAMES] },
-  },
-};
-
 const VVOC_PRESET_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -433,7 +416,6 @@ const VVOC_PRESET_SCHEMA = {
   properties: {
     description: { type: "string", minLength: 1 },
     agents: ROLE_ASSIGNMENTS_SCHEMA,
-    orchestration: ORCHESTRATION_CONFIG_SCHEMA,
   },
 };
 
@@ -511,7 +493,6 @@ export const VVOC_CONFIG_SCHEMA = {
       minProperties: BUILTIN_ROLE_NAMES.length,
       additionalProperties: { type: "string", minLength: 1 },
     },
-    orchestration: ORCHESTRATION_CONFIG_SCHEMA,
     guardian: GUARDIAN_CONFIG_SCHEMA,
     secretsRedaction: SECRETS_REDACTION_CONFIG_SCHEMA,
     presets: {
@@ -776,7 +757,6 @@ export function createDefaultVvocConfig(): VvocConfig {
     $schema: VVOC_CONFIG_SCHEMA_URL,
     version: VVOC_CONFIG_VERSION,
     roles: createDefaultRoleAssignments(),
-    orchestration: createOrchestrationConfig(),
     guardian: createGuardianConfig(),
     secretsRedaction: createDefaultSecretsRedactionConfig(),
     presets: createDefaultVvocPresets(),
@@ -966,7 +946,6 @@ export function renderVvocConfig(config: VvocConfig = createDefaultVvocConfig())
     $schema: VVOC_CONFIG_SCHEMA_URL,
     version: VVOC_CONFIG_VERSION,
     roles: createDefaultRoleAssignments(config.roles),
-    orchestration: createOrchestrationConfig(config.orchestration),
     guardian: createGuardianConfig(config.guardian),
     secretsRedaction: createSecretsRedactionConfig(config.secretsRedaction),
     presets: createVvocPresets(config.presets),
@@ -1001,9 +980,6 @@ function normalizeStrictVvocConfig(value: JsonObject): ParsedVvocConfig {
       $schema: VVOC_CONFIG_SCHEMA_URL,
       version: VVOC_CONFIG_VERSION,
       roles: createDefaultRoleAssignments(value.roles as VvocRoleAssignments),
-      orchestration: createOrchestrationConfig(
-        value.orchestration as OrchestrationConfig | undefined,
-      ),
       guardian: createGuardianConfig(value.guardian as GuardianConfig),
       secretsRedaction: createSecretsRedactionConfig(
         value.secretsRedaction as SecretsRedactionConfig,
@@ -1132,10 +1108,6 @@ function createVvocPreset(overrides: Partial<VvocPreset> = {}): VvocPreset {
   return compactObject({
     description: normalizeOptionalString(overrides.description),
     agents: createVvocPresetAgents(overrides.agents),
-    orchestration:
-      overrides.orchestration === undefined
-        ? undefined
-        : createOrchestrationConfig(overrides.orchestration),
   });
 }
 

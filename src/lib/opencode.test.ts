@@ -404,10 +404,10 @@ describe("canonical vvoc config helpers", () => {
       properties?: {
         version?: { const?: number };
         plugins?: unknown;
-        orchestration?: { properties?: { profile?: { enum?: string[] } } };
+        orchestration?: unknown;
         presets?: {
           additionalProperties?: {
-            properties?: { orchestration?: { properties?: { profile?: { enum?: string[] } } } };
+            properties?: { orchestration?: unknown };
           };
         };
       };
@@ -418,16 +418,10 @@ describe("canonical vvoc config helpers", () => {
     expect(schema.required).toContain("plugins");
     expect(schema.required).not.toContain("orchestration");
     expect(schema.properties?.plugins).toBeDefined();
-    expect(schema.properties?.orchestration?.properties?.profile?.enum).toEqual([
-      "single-session",
-      "balanced",
-      "orchestrated",
-      "delegated",
-    ]);
+    expect(schema.properties?.orchestration).toBeUndefined();
     expect(
-      schema.properties?.presets?.additionalProperties?.properties?.orchestration?.properties
-        ?.profile?.enum,
-    ).toEqual(["single-session", "balanced", "orchestrated", "delegated"]);
+      schema.properties?.presets?.additionalProperties?.properties?.orchestration,
+    ).toBeUndefined();
     expect(schema.plugins).toBeUndefined();
   });
 
@@ -445,28 +439,24 @@ describe("canonical vvoc config helpers", () => {
 
     expect(validate.errors ?? []).toEqual([]);
     expect(valid).toBe(true);
-    expect(renderedConfig.orchestration).toEqual({ profile: "balanced" });
-    expect(renderedConfig.presets["vv-codex"]?.orchestration).toEqual({
-      profile: "single-session",
-    });
-    expect(renderedConfig.presets["vv-deepseek"]?.orchestration).toEqual({
-      profile: "balanced",
-    });
+    expect(renderedConfig).not.toHaveProperty("orchestration");
+    expect(renderedConfig.presets["vv-codex"]).not.toHaveProperty("orchestration");
+    expect(renderedConfig.presets["vv-deepseek"]).not.toHaveProperty("orchestration");
   });
 
-  test("old valid v3 config without orchestration parses with balanced effective behavior", () => {
+  test("a v3 config that still carries orchestration sections fails loudly", () => {
     const legacy = createDefaultVvocConfig() as ReturnType<typeof createDefaultVvocConfig> &
       Record<string, unknown>;
-    delete legacy.orchestration;
-    for (const preset of Object.values(legacy.presets)) {
-      delete preset.orchestration;
-    }
+    legacy.orchestration = { profile: "balanced" };
+    const legacyPresets = legacy.presets as unknown as Record<string, Record<string, unknown>>;
+    legacyPresets["vv-codex"] = {
+      ...legacyPresets["vv-codex"],
+      orchestration: { profile: "single-session" },
+    };
 
-    const parsed = parseVvocConfigText(JSON.stringify(legacy), "legacy v3 config");
-
-    expect(parsed.orchestration).toEqual({ profile: "balanced" });
-    expect(parsed.presets["vv-codex"]?.orchestration).toEqual({ profile: "single-session" });
-    expect(parsed.presets["vv-deepseek"]?.orchestration).toEqual({ profile: "balanced" });
+    expect(() => parseVvocConfigText(JSON.stringify(legacy), "legacy v3 config")).toThrow(
+      /orchestration/,
+    );
   });
 
   test("parseVvocConfigText rejects old, incomplete, and old-field documents", () => {
@@ -547,7 +537,7 @@ describe("canonical vvoc config helpers", () => {
       expect(vvocConfig?.roles.smart).toBeDefined();
       expect(vvocConfig?.roles.fast).toBeDefined();
       expect(vvocConfig?.roles.reviewer).toBeDefined();
-      expect(vvocConfig?.orchestration).toEqual({ profile: "balanced" });
+      expect(vvocConfig).not.toHaveProperty("orchestration");
       expect(Object.keys(vvocConfig?.presets ?? {})).toEqual([
         "vv-codex",
         "vv-zai",
@@ -560,10 +550,8 @@ describe("canonical vvoc config helpers", () => {
         "vv-astra-solo",
         "vv-astra-workers",
       ]);
-      expect(vvocConfig?.presets["vv-codex"]?.orchestration).toEqual({
-        profile: "single-session",
-      });
-      expect(vvocConfig?.presets["vv-zai"]?.orchestration).toEqual({ profile: "balanced" });
+      expect(vvocConfig?.presets["vv-codex"]).not.toHaveProperty("orchestration");
+      expect(vvocConfig?.presets["vv-zai"]).not.toHaveProperty("orchestration");
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
@@ -585,7 +573,6 @@ describe("canonical vvoc config helpers", () => {
         JSON.stringify(
           {
             ...createDefaultVvocConfig(),
-            orchestration: { profile: "single-session" },
             guardian: {
               ...createDefaultVvocConfig().guardian,
               model: "openai/gpt-5.4",
@@ -601,14 +588,12 @@ describe("canonical vvoc config helpers", () => {
                 agents: {
                   default: "openai/gpt-5",
                 },
-                orchestration: { profile: "single-session" },
               },
               custom: {
                 description: "user preset",
                 agents: {
                   custom: "openai/gpt-5.4-mini",
                 },
-                orchestration: { profile: "orchestrated" },
               },
             },
             plugins: {
@@ -637,16 +622,16 @@ describe("canonical vvoc config helpers", () => {
       expect(synced?.guardian.model).toBe("openai/gpt-5.4");
       expect(synced?.guardian.timeoutMs).toBe(12_345);
       expect(synced?.roles.custom).toBe("openai/gpt-5.4-mini");
-      expect(synced?.orchestration).toEqual({ profile: "single-session" });
+      expect(synced).not.toHaveProperty("orchestration");
       expect(synced?.presets.custom?.agents.custom).toBe("openai/gpt-5.4-mini");
       expect(synced?.presets.custom?.description).toBe("user preset");
-      expect(synced?.presets.custom?.orchestration).toEqual({ profile: "orchestrated" });
+      expect(synced?.presets.custom).not.toHaveProperty("orchestration");
       expect(synced?.presets["vv-deepseek"]?.description).toBe(
         "Starter DeepSeek role assignments for built-in vvoc roles.",
       );
       expect(synced?.presets["vv-deepseek"]?.agents.default).toBe("deepseek/deepseek-flash#max");
       expect(synced?.presets["vv-deepseek"]?.agents.fast).toBe("deepseek/deepseek-flash#max");
-      expect(synced?.presets["vv-deepseek"]?.orchestration).toEqual({ profile: "balanced" });
+      expect(synced?.presets["vv-deepseek"]).not.toHaveProperty("orchestration");
       expect(synced?.presets["vv-zai"]?.agents.default).toBe("zai-coding-plan/glm-5.3-flash#max");
       expect(synced?.plugins["secrets-redaction"]).toBe(false);
     } finally {
@@ -654,7 +639,7 @@ describe("canonical vvoc config helpers", () => {
     }
   });
 
-  test("syncVvocConfig preserves retired saved presets, custom presets, and active role/profile", async () => {
+  test("syncVvocConfig preserves retired saved presets, custom presets, and active roles", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "vvoc-retired-presets-"));
 
     try {
@@ -671,7 +656,6 @@ describe("canonical vvoc config helpers", () => {
             default: "deepseek/deepseek-v4-flash",
             smart: "openai/gpt-5.6-sol#xhigh",
           },
-          orchestration: { profile: "single-session" },
         },
         "vv-osovv-flash": {
           description: "saved retired flash preset",
@@ -687,7 +671,6 @@ describe("canonical vvoc config helpers", () => {
       } as const;
       const savedConfig = {
         ...defaults,
-        orchestration: { profile: "single-session" },
         roles: {
           ...defaults.roles,
           default: "deepseek/deepseek-v4-flash",
@@ -699,7 +682,6 @@ describe("canonical vvoc config helpers", () => {
           custom: {
             description: "user preset",
             agents: { custom: "openai/gpt-5.4-mini" },
-            orchestration: { profile: "orchestrated" },
           },
         },
       };
@@ -721,11 +703,10 @@ describe("canonical vvoc config helpers", () => {
       expect(synced.presets.custom).toEqual({
         description: "user preset",
         agents: { custom: "openai/gpt-5.4-mini" },
-        orchestration: { profile: "orchestrated" },
       });
       expect(synced.roles.default).toBe("deepseek/deepseek-v4-flash");
       expect(synced.roles.custom).toBe("openai/gpt-5.4-mini");
-      expect(synced.orchestration).toEqual({ profile: "single-session" });
+      expect(synced).not.toHaveProperty("orchestration");
       expect(synced.presets["vv-osovv-ds"]).toBeDefined();
       expect(synced.presets["vv-osovv-zai"]).toBeDefined();
       expect(synced.presets["vv-zai"]?.agents.default).toBe("zai-coding-plan/glm-5.3-flash#max");
@@ -741,7 +722,6 @@ describe("canonical vvoc config helpers", () => {
       expect(settled.presets["vv-osovv-sol"]).toEqual(retiredPresets["vv-osovv-sol"]);
       expect(settled.presets.custom).toEqual(synced.presets.custom);
       expect(settled.roles.default).toBe("deepseek/deepseek-v4-flash");
-      expect(settled.orchestration).toEqual({ profile: "single-session" });
     } finally {
       await rm(configHome, { recursive: true, force: true });
     }
@@ -1470,7 +1450,7 @@ describe("inspectInstallation", () => {
 
       const inspection = await inspectInstallation(paths);
 
-      expect(inspection.orchestration.profile).toBe("balanced");
+      expect(inspection).not.toHaveProperty("orchestration");
       expect(inspection.roles.assignments.map((entry) => entry.roleId)).toEqual([
         "default",
         "smart",

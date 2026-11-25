@@ -191,7 +191,7 @@ All prompt files are scaffolded by `vvoc install` / `vvoc sync`:
 
 | Agent | When it helps |
 |---|---|
-| `vv-controller` | Primary agent that follows the concrete work policy selected for the session by the orchestration profile |
+| `vv-controller` | Primary agent that applies the stable controller default, or the legacy recorded policy for a family that kept one |
 | `enhancer` | Improves rough requests before execution when a clearer prompt would help |
 | `vv-implementer` | Applies a focused approved change and verifies it before reporting completion |
 | `vv-spec-reviewer` | Checks whether implementation matches the requested spec and acceptance criteria |
@@ -202,7 +202,7 @@ All prompt files are scaffolded by `vvoc install` / `vvoc sync`:
 
 Managed prompts and the universal guidance injected into primary sessions carry explicit correctness obligations. For behavior changes, agents derive the material properties that must be preserved from the request and established contracts, separate write scope from impact and verification scope, investigate directly affected consumers, challenge a material assumption with a diagnostic counterexample, and choose verification at the level the risk arises. Controllers tie completion claims to observed evidence rather than status markers; reviewers distinguish no discovered defect from sufficient support for a material claim and can fail a change for a material verification gap. Agents also keep evidence-supported conclusions settled until a concrete trigger — contradictory evidence, a specific counterexample, a changed requirement, or changed inputs — reopens them; they surface false premises instead of silently satisfying them, distinguish unsupported pressure from concrete evidence, and interpret test results as evidence against the request and contracts rather than as the specification. These obligations are prompt-level guidance only: `vvoc install` / `vvoc sync` deliver the current wording, changes take effect after an OpenCode restart like all vvoc config changes, and the bundled contract tests check instruction delivery and wording — they do not evaluate or guarantee how a real model behaves.
 
-The complete controller prompt has seven sections: `task_and_scope`, `project_context`, `repository_memory`, `evidence_discipline`, `working_cycle`, `delegation_and_workflow`, and `communication`. Its single wording source is `templates/agents/vv-controller.md`; the plugin reads that bundled template locally at startup. Other eligible primary agents receive the shared project, memory, evidence, and working-cycle sections plus the shared authority and delivery fragments, without the controller's role, task policy, worker-dispatch/recovery instructions, or full communication policy. Repository memory remains instruction-driven reading of `.vvoc/lessons/index.xml` and `.vvoc/runbooks/index.xml`. The workflow plugin still owns profile-specific machine protocols, and the active orchestration policy remains outside the stable system prefix. Run `vvoc sync` and restart OpenCode to update an existing managed controller prompt together with the plugin.
+The complete controller prompt has the sections `task_and_scope`, `work_policy_default`, `project_context`, `repository_memory`, `evidence_discipline`, `working_cycle`, `delegation_and_workflow`, and `communication`. Its single wording source is `templates/agents/vv-controller.md`; the plugin reads that bundled template locally at startup. Other eligible primary agents receive the shared project, memory, evidence, and working-cycle sections plus the shared authority and delivery fragments, without the controller's role, task policy, worker-dispatch/recovery instructions, or full communication policy. Repository memory remains instruction-driven reading of `.vvoc/lessons/index.xml` and `.vvoc/runbooks/index.xml`. The stable `work_policy_default` is projected for families with no recorded profile, while a family carrying a legacy recorded profile keeps its previously resolved tail policy instead. Run `vvoc sync` and restart OpenCode to update an existing managed controller prompt together with the plugin.
 
 ### Managed skills
 
@@ -239,11 +239,10 @@ Skills are discovered by OpenCode through the native `skills` string array in `o
 | `vvoc config validate` | Validate canonical `vvoc.json` |
 | `vvoc role list\|set\|unset` | Manage model role assignments |
 | `vvoc preset list\|show\|<name>` | Inspect or apply named presets |
-| `vvoc session set` | Change one session family's recorded settings (preset, profile, role, plugin toggle, or pull current defaults) through the running host |
+| `vvoc session set` | Change one session family's recorded settings (preset, role, plugin toggle, or pull current defaults) through the running host |
 | `vvoc guardian config` | Print or write the guardian section |
 | `vvoc plugin list` | List OpenCode plugin entries |
 | `vvoc plugin enable\|disable` | Toggle a vvoc-managed plugin on or off |
-| `vvoc orchestration show\|set` | Show or set the vv-controller orchestration profile |
 | `vvoc patch-provider stepfun-ai\|codex\|deepseek\|alibaba\|zai\|xiaomi\|all` | Patch OpenCode providers; `codex` adds real gpt-5.5/5.6/6 models with effort variants (also accepts `openai`), `deepseek`/`alibaba`/`zai`/`xiaomi` add `#variant` suffixes on real models, `stepfun-ai` sets the StepFun `.ai` baseURL, `all` patches every provider at once |
 | `vvoc completion` | Install shell completions |
 | `vvoc upgrade` | Upgrade the global package and run follow-up sync; sync failure or an out-of-window host exits non-zero with best-effort method-aware host guidance |
@@ -320,7 +319,7 @@ The native document shape vvoc validates, extends, and writes into:
 
 Role intent has a native home as well: the pinned package entry's `options.modelIntent` envelope (`model`, `smallModel`, `agents`, `commands`) carries root, small-model, agent, and command model intent inside the native document — native hosts in the supported window have no `small_model` field and reject role references in `model` and `agents.<id>.model`, so vv-opencode never writes a `vv-role:*` reference as a native model literal (the model-overrides APIs route role intent into the envelope instead). Role assignments themselves live in `vvoc.json`: `vvoc role set` and preset application edit only that file, and the model-roles runtime combines the effective role map with the raw envelope intent to resolve concrete `provider/model#variant` selections (for example `xiaomi/mimo-v2.6-flash#thinking`) for newly created sessions.
 
-Runtime plugins resolve a session family's settings from native session metadata: the first time a session family (a root session plus its forks and subagents) is seen, the resolved roles, orchestration profile, and plugin toggles from the effective `vvoc.json` are recorded under the `vvoc:settings` key of the root session's metadata, and the family keeps resolving that record — across config edits and across server restarts — until it is explicitly changed. A new session always births the current configuration, and provider and web credentials are never persisted: they keep coming from the live configuration at request time. A family changes only when you explicitly ask: run `vvoc session set --session <id>` with one of `--preset <name>`, `--profile <name>`, `--role <id>=<model>` (or `--role unset:<id>`), `--plugin <name>=on|off`, or `--pull-defaults` (re-record the current defaults), or run `/vv-settings` in the OpenCode TUI with the same one-line actions (`preset <name>`, `profile <name>`, `role <id> <model>`, `role unset <id>`, `plugin <name> on|off`, `pull-defaults`) — with no argument it shows the current family settings. Both change only the family of the session you name; every write is a read-modify-write of the metadata key, so unrelated metadata on the session survives. The first start after upgrading converts the previous version's family bindings into root metadata once and then removes the old stores. Orchestration policy is injected at the request tail rather than into the system prefix, so switching policy does not invalidate the cached prompt prefix.
+Runtime plugins resolve a session family's settings from native session metadata: the first time a session family (a root session plus its forks and subagents) is seen, the resolved roles and plugin toggles from the effective `vvoc.json` are recorded under the `vvoc:settings` key of the root session's metadata, and the family keeps resolving that record — across config edits and across server restarts — until it is explicitly changed. A new session always births the current configuration without a profile, and provider and web credentials are never persisted: they keep coming from the live configuration at request time. A family changes only when you explicitly ask: run `vvoc session set --session <id>` with one of `--preset <name>`, `--role <id>=<model>` (or `--role unset:<id>`), `--plugin <name>=on|off`, or `--pull-defaults` (re-record the current defaults), or run `/vv-settings` in the OpenCode TUI with the same one-line actions (`preset <name>`, `role <id> <model>`, `role unset <id>`, `plugin <name> on|off`, `pull-defaults`) — with no argument it shows the current family settings. Both change only the family of the session you name; every write is a read-modify-write of the metadata key, so unrelated metadata on the session survives. The first start after upgrading converts the previous version's family bindings into root metadata once and then removes the old stores; a migrated family keeps its previously recorded profile as a transition marker. A family with a recorded profile still receives its legacy policy at the request tail rather than inside the system prefix, so its cached prefix stays stable.
 
 ### Strict schema, loud failures
 
@@ -418,61 +417,40 @@ vvoc patch-provider xiaomi      # mimo-v2.6-flash#thinking (thinking.type=enable
 vvoc patch-provider all         # every patch above in one run
 ```
 
-Built-in role IDs: `default`, `smart`, `fast`, `reviewer`, plus any custom lowercase-hyphenated IDs. Presets are partial — applying one only changes the roles it defines. Managed built-in presets (`vv-*`) are refreshed from the shipped registry as part of the other work `vvoc install` and `vvoc sync` already do; neither command activates a preset or writes the active roles or orchestration profile on its own — that only happens when you run `vvoc preset <name>`.
+Built-in role IDs: `default`, `smart`, `fast`, `reviewer`, plus any custom lowercase-hyphenated IDs. Presets are partial — applying one only changes the roles it defines. Managed built-in presets (`vv-*`) are refreshed from the shipped registry as part of the other work `vvoc install` and `vvoc sync` already do; neither command activates a preset or writes the active roles on its own — that only happens when you run `vvoc preset <name>`.
 
-Every shipped preset declares an explicit role matrix and orchestration profile:
+Every shipped preset declares an explicit role matrix:
 
-| Preset | default | fast | smart | reviewer | Profile |
-|---|---|---|---|---|---|
-| `vv-codex` | `openai/gpt-5.6-terra#high` | `openai/gpt-6-luna#low` | `openai/gpt-5.6-sol#xhigh` | `openai/gpt-5.6-sol#xhigh` | single-session |
-| `vv-zai` | `zai-coding-plan/glm-5.3-flash#max` | `zai-coding-plan/glm-5.3-flash#max` | `zai-coding-plan/glm-5.3#max` | `zai-coding-plan/glm-5.3#max` | balanced |
-| `vv-deepseek` | `deepseek/deepseek-flash#max` | `deepseek/deepseek-flash#max` | `deepseek/deepseek-flash#max` | `deepseek/deepseek-flash#max` | balanced |
-| `vv-alibaba` | `alibaba-token-plan/qwen3.8-max` | `alibaba-token-plan/deepseek-v4-flash` | `alibaba-token-plan/qwen3.8-max#xhigh` | `alibaba-token-plan/glm-5.2` | single-session |
-| `vv-osovv-ds` | `deepseek/deepseek-flash#max` | `openai/gpt-6-luna#low` | `deepseek/deepseek-flash#max` | `zai-coding-plan/glm-5.3#max` | single-session |
-| `vv-osovv-mimo` | `xiaomi/mimo-v2.6-flash#thinking` | `openai/gpt-6-luna#low` | `xiaomi/mimo-v2.6-flash#thinking` | `zai-coding-plan/glm-5.3#max` | single-session |
-| `vv-osovv-zai` | `xiaomi/mimo-v2.6-flash#thinking` | `openai/gpt-6-luna#low` | `zai-coding-plan/glm-5.3#max` | `zai-coding-plan/glm-5.3#max` | single-session |
-| `vv-osovv-qwen` | `xiaomi/mimo-v2.6-flash#thinking` | `openai/gpt-6-luna#low` | `alibaba-token-plan/qwen3.8-max#xhigh` | `zai-coding-plan/glm-5.3#max` | delegated |
-| `vv-astra-solo` | `xiaomi/mimo-v2.6-flash#thinking` | `openai/gpt-6-luna#low` | `openai/gpt-6-astra#max` | `zai-coding-plan/glm-5.3#high` | single-session |
-| `vv-astra-workers` | `xiaomi/mimo-v2.6-flash#thinking` | `openai/gpt-6-luna#low` | `openai/gpt-6-astra#max` | `zai-coding-plan/glm-5.3#high` | delegated |
+| Preset | default | fast | smart | reviewer |
+|---|---|---|---|---|
+| `vv-codex` | `openai/gpt-5.6-terra#high` | `openai/gpt-6-luna#low` | `openai/gpt-5.6-sol#xhigh` | `openai/gpt-5.6-sol#xhigh` |
+| `vv-zai` | `zai-coding-plan/glm-5.3-flash#max` | `zai-coding-plan/glm-5.3-flash#max` | `zai-coding-plan/glm-5.3#max` | `zai-coding-plan/glm-5.3#max` |
+| `vv-deepseek` | `deepseek/deepseek-flash#max` | `deepseek/deepseek-flash#max` | `deepseek/deepseek-flash#max` | `deepseek/deepseek-flash#max` |
+| `vv-alibaba` | `alibaba-token-plan/qwen3.8-max` | `alibaba-token-plan/deepseek-v4-flash` | `alibaba-token-plan/qwen3.8-max#xhigh` | `alibaba-token-plan/glm-5.2` |
+| `vv-osovv-ds` | `deepseek/deepseek-flash#max` | `openai/gpt-6-luna#low` | `deepseek/deepseek-flash#max` | `zai-coding-plan/glm-5.3#max` |
+| `vv-osovv-mimo` | `xiaomi/mimo-v2.6-flash#thinking` | `openai/gpt-6-luna#low` | `xiaomi/mimo-v2.6-flash#thinking` | `zai-coding-plan/glm-5.3#max` |
+| `vv-osovv-zai` | `xiaomi/mimo-v2.6-flash#thinking` | `openai/gpt-6-luna#low` | `zai-coding-plan/glm-5.3#max` | `zai-coding-plan/glm-5.3#max` |
+| `vv-osovv-qwen` | `xiaomi/mimo-v2.6-flash#thinking` | `openai/gpt-6-luna#low` | `alibaba-token-plan/qwen3.8-max#xhigh` | `zai-coding-plan/glm-5.3#max` |
+| `vv-astra-solo` | `xiaomi/mimo-v2.6-flash#thinking` | `openai/gpt-6-luna#low` | `openai/gpt-6-astra#max` | `zai-coding-plan/glm-5.3#high` |
+| `vv-astra-workers` | `xiaomi/mimo-v2.6-flash#thinking` | `openai/gpt-6-luna#low` | `openai/gpt-6-astra#max` | `zai-coding-plan/glm-5.3#high` |
 
-`vv-osovv-ds` replaces the former `vv-osovv-flash` offering and `vv-osovv-zai` is new; `vv-osovv-sol`, `vv-osovv-flash`, and `vv-osovv-kimi` are no longer shipped. A retired preset definition already present in a saved `vvoc.json` is preserved in place rather than migrated or removed across `vvoc install`/`vvoc sync`; delete it manually if you no longer want it. No automatic provider migration or legacy-name cleanup runs, and applying a preset changes only the roles and profile it declares.
+`vv-osovv-ds` replaces the former `vv-osovv-flash` offering and `vv-osovv-zai` is new; `vv-osovv-sol`, `vv-osovv-flash`, and `vv-osovv-kimi` are no longer shipped. A retired preset definition already present in a saved `vvoc.json` is preserved in place rather than migrated or removed across `vvoc install`/`vvoc sync`; delete it manually if you no longer want it. No automatic provider migration or legacy-name cleanup runs, and applying a preset changes only the roles it declares.
 
 Provider patches bind real model ids with `#variant` suffixes instead of alias models. `deepseek/deepseek-flash` carries `#max` and `#high` effort variants (image input, 384000-token output limit), and `deepseek/deepseek-v4-flash#max` stays text-only with the same output limit. On `zai-coding-plan`, `glm-5.3` carries `#high` and `#max` (both text-only) and `glm-5.3-flash` carries `#max` (text, image, video, and PDF input); `alibaba-token-plan/qwen3.8-max` carries `#xhigh`. On `xiaomi`, `mimo-v2.6-flash#thinking` enables the documented thinking toggle (`thinking.type=enabled`) with no PDF declaration and no `reasoningEffort` — text/image/audio/video input, 1M context / 131K output — because the public Xiaomi API documents a thinking toggle rather than an effort knob; live thinking behavior is not smoke-verified. Codex variants keep the established OpenAI reasoning-summary and encrypted-reasoning options, with the GPT-5.5/5.6 family capped at 400K context / 272K input and GPT-6 Luna/Astra keeping 1.05M/922K/128K. The `stepfun-ai` patch keeps the StepFun `.ai` baseURL (`https://api.stepfun.ai/v1`) for `step-3.7-flash`. `gpt-5.3-codex-spark` keeps its `#medium` variant only for manual configurations that already reference it, advertised conservatively as text-only, and no shipped preset selects it. The shared `fast` role also serves `smallModel` (through the `modelIntent` envelope — native 2.0.18 has no `small_model` field), `explore`, and `guardian`; availability for those consumers is not verified until you use it. Real model access, review quality, latency, and Astra-token savings are unmeasured: metadata here describes provider capability and pricing boundaries, not benchmarked behavior, and credentialed smoke runs would require separate authorization.
 
-### Orchestration profiles
+### Controller execution default
 
-Four concrete policies control how vv-controller delegates work at runtime:
+The controller prompt carries one short stable default: repository exploration, investigation, planning, implementation, and verification happen in the current session unless you explicitly request delegation or a selected plan calls for it. Bounded search assistance does not select an execution mode. An independent reviewer is used when you explicitly request review or when a materially risky completed change benefits from it — one review round by default, findings validated personally, confirmed fixes applied by the controller, and fresh verification. Review-only requests report findings and stop before fixes unless you confirm them.
 
-- `single-session` — vv-controller performs exploration, investigation, planning, implementation, and verification directly. Independent reviewer subagents remain available when the user explicitly requests review or when a materially risky completed change benefits from independent cross-model evaluation.
-- `balanced` — vv-controller keeps architecture, critical reading, and final synthesis in the primary session and may selectively delegate bounded search, investigation, mechanical implementation, or review when that is the lightest safe route. Delegation is optional, not mechanically mandatory.
-- `orchestrated` — vv-controller uses the full tracked implementer/reviewer workflow with explicit work items, required reviewers, bounded rounds, and hard stops.
-- `delegated` — implementation is delegated to workers while the primary session keeps architecture, important code reading, task contracts, explicit acceptance, and final synthesis. Source edits, tests, config changes, formatting, lint fixes, and reviewer-requested fixes — including small mechanical ones — go to workers through bounded task packets. Independent review happens at declared plan checkpoints instead of after every task; `BLOCKED` and `NEEDS_CONTEXT` remain hard stops, and stopped or exhausted work resumes only through recorded bounded recovery.
+The default lives in the stable managed controller prompt, so it stays inside the cached system prefix. Detailed execution and review guidance remains on demand through `vv-execute`, `vv-review`, and their references; new families receive no session-wide profile policy at the request tail. `vv-execute` supports inline, classic, and delegated execution per plan without a session-wide profile, and ordinary requests open no work item unless you explicitly request execution or review or a selected approved plan calls for it.
 
-Pick a profile explicitly or let a built-in preset select one:
+### Legacy orchestration migration
 
-```bash
-vvoc orchestration show --scope effective
-vvoc orchestration set single-session --scope project
-```
+Earlier versions offered four session-wide orchestration profiles. They are no longer a CLI, config, preset, or session-settings choice: `vvoc orchestration`, `vvoc session set --profile`, and the `/vv-settings profile` action are gone, presets assign roles only, and completions and `vvoc status` never offer a profile.
 
-Built-in presets declare an orchestration mapping:
+An existing `vvoc.json` that still contains a root or per-preset `orchestration` section is rejected loudly by strict validation. The one explicit migration path is `vvoc sync`: after the host-window gate and before strict validation it removes only those sections from the project and global documents, preserves every other key verbatim, writes a timestamped `.vvoc-backup-<timestamp>` sibling, and reports each migrated path and removed section. Invalid JSON is left untouched so validation still fails loudly.
 
-| Preset | Profile |
-|---|---|
-| `vv-codex` | single-session |
-| `vv-alibaba` | single-session |
-| `vv-osovv-ds` | single-session |
-| `vv-osovv-mimo` | single-session |
-| `vv-osovv-zai` | single-session |
-| `vv-astra-solo` | single-session |
-| `vv-astra-workers` | delegated |
-| `vv-osovv-qwen` | delegated |
-| `vv-zai` | balanced |
-| `vv-deepseek` | balanced |
-
-Applying a built-in preset changes both model roles and the root orchestration profile atomically. A custom user-defined preset without an orchestration section preserves the current root profile. `vvoc status` reports the profile resolved from the selected vvoc source; effective status with no config files reports `balanced`.
-
-Profiles are enforced through the concrete policy injected into vv-controller at startup — the model only receives its active work instructions and never sees inactive profile alternatives. The policy is behavioral, not a filesystem sandbox: the delegated profile instructs the controller not to write source files (and not to bypass that via shell rewrites), while runtime authorization genuinely enforces acceptance and checkpoint operations. Asynchronous vv-execute classic mode remains available through that skill's explicit inline/classic/delegated selection. Profile changes take effect after an OpenCode restart, like all vvoc config changes.
+Families created before the removal keep the behavior they were bound to: a family whose recorded `vvoc:settings` already contains a profile keeps its previously resolved tail policy and workflow-protocol variant and does not receive the new default, while runtime enforcement of acceptance, review, blockers, and bounded recovery is unchanged. Any explicit rewrite through `vvoc session set` or `/vv-settings` — including `pull-defaults` — drops the recorded profile, and a family whose root no longer resolves through lineage has ended. The recorded profile is the documented boundary marker.
 
 ### Workflow work items
 
@@ -495,7 +473,7 @@ For review-only reports, use `"mode": "review_only"`. In review-only mode, revie
 
 #### Delegated execution and review checkpoints
 
-The workflow plugin registers two control tools — `work_item_decide` and `work_checkpoint` — for the primary vv-controller session independent of the startup profile. Registration is profile-independent; enforcement is not: child sessions, untrusted workspaces, and unverifiable session identity are denied by the root-controller guard.
+The workflow plugin registers two control tools — `work_item_decide` and `work_checkpoint` — for the primary vv-controller session independent of any recorded profile. Registration is profile-independent; enforcement is not: child sessions, untrusted workspaces, and unverifiable session identity are denied by the root-controller guard.
 
 Delegated tasks are opened with `"mode": "delegated"`, an explicitly empty `requiredReviewers` array, and a declared `writeScope` of workspace-relative files. One worker (`vv-implementer`) is launched per task with a bounded packet; attempts are bound to the host call identity, so stale or duplicate callbacks fail without side effects. A `DONE` worker parks the item in `awaiting_acceptance` — it never closes the item and the worker never accepts its own result. The controller explicitly decides with `work_item_decide`:
 

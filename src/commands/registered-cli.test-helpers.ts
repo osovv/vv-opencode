@@ -4,7 +4,7 @@
 //   PURPOSE: Launch the registered CLI in bounded, retried subprocesses for colocated command tests.
 //   SCOPE: Shared Bun.spawn wrapping with a per-attempt kill timeout, one stall retry, piped output capture, and the documented per-test budget constant; no command logic and no assertions.
 //   DEPENDS: [node:url]
-//   LINKS: [M-CLI-GUARDIAN, M-CLI-PRESET, M-CLI-ORCHESTRATION]
+//   LINKS: [M-CLI-GUARDIAN, M-CLI-PRESET]
 //   ROLE: TEST
 //   MAP_MODE: LOCALS
 // END_MODULE_CONTRACT

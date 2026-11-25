@@ -21,6 +21,7 @@
 
 import { describe, expect, test } from "bun:test";
 import type { Plugin } from "@opencode/plugin/tui";
+import { parseSessionSettingsAction } from "../../commands/session.js";
 import {
   SETTINGS_COMMAND_ID,
   registerSettingsTuiCommand,
@@ -81,20 +82,20 @@ function dependencies(overrides: Partial<SettingsTuiDependencies> = {}): {
   return {
     deps: {
       apply: async ({ sessionID, actionText }) => {
+        parseSessionSettingsAction(actionText);
         applied.push(`${sessionID}:${actionText}`);
         return {
           rootID: sessionID,
           settings: {
             version: 1,
             roles: { smart: "prov/m2" },
-            profile: "orchestrated",
             plugins: {},
           },
         };
       },
       describe: async (sessionID) => {
         described.push(sessionID);
-        return "profile: orchestrated";
+        return "roles: smart=prov/m2";
       },
       ...overrides,
     },
@@ -123,7 +124,7 @@ describe("registerSettingsTuiCommand", () => {
     registerSettingsTuiCommand(harness.context, deps);
     harness.mount();
     expect(harness.command()?.enabled()).toBe(false);
-    await harness.command()?.run("profile orchestrated");
+    await harness.command()?.run("preset vv-zai");
     expect(applied).toHaveLength(0);
     expect(harness.toasts[0]?.variant).toBe("warning");
   });
@@ -137,7 +138,7 @@ describe("registerSettingsTuiCommand", () => {
     expect(described).toEqual(["ses_1"]);
     expect(applied).toHaveLength(0);
     expect(harness.toasts[0]?.variant).toBe("info");
-    expect(harness.toasts[0]?.message).toContain("profile: orchestrated");
+    expect(harness.toasts[0]?.message).toContain("roles: smart=prov/m2");
   });
 
   test("with no recorded settings it says so", async () => {
@@ -160,7 +161,7 @@ describe("registerSettingsTuiCommand", () => {
     expect(applied).toEqual(["ses_9:preset vv-zai"]);
     expect(described).toHaveLength(0);
     expect(harness.toasts[0]?.variant).toBe("success");
-    expect(harness.toasts[0]?.message).toContain("profile: orchestrated");
+    expect(harness.toasts[0]?.message).toContain("roles: smart=prov/m2");
   });
 
   test("a failed apply surfaces a bounded error toast and never throws", async () => {
@@ -174,9 +175,20 @@ describe("registerSettingsTuiCommand", () => {
     });
     registerSettingsTuiCommand(harness.context, deps);
     harness.mount();
-    await expect(harness.command()?.run("profile orchestrated")).resolves.toBeUndefined();
+    await expect(harness.command()?.run("preset vv-zai")).resolves.toBeUndefined();
     expect(harness.toasts[0]?.variant).toBe("error");
     expect(harness.toasts[0]?.message).toContain("roles are not a nonempty-string map");
+  });
+
+  test("the removed profile action is rejected with a bounded error toast", async () => {
+    const harness = createHarness({ type: "session", sessionID: "ses_1" });
+    const { deps, applied } = dependencies();
+    registerSettingsTuiCommand(harness.context, deps);
+    harness.mount();
+    await expect(harness.command()?.run("profile orchestrated")).resolves.toBeUndefined();
+    expect(applied).toHaveLength(0);
+    expect(harness.toasts[0]?.variant).toBe("error");
+    expect(harness.toasts[0]?.message).toContain("unknown settings action");
   });
 
   test("a failed read surfaces an error toast and never throws", async () => {

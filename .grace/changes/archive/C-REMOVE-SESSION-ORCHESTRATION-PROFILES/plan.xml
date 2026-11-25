@@ -1,0 +1,249 @@
+<GraceChangePlan graceVersion="4.0" status="applied">
+  <C-REMOVE-SESSION-ORCHESTRATION-PROFILES>
+    <IntentSummary>Remove the four session-wide orchestration profiles from every public surface and runtime request path while preserving subagents and tracked workflows. Families with a recorded profile keep their previously resolved tail policy and workflow-protocol variant as a documented transition boundary and never receive the new stable controller default; families without a recorded profile receive one short controller default inside the stable managed controller system prompt, no tail injection, and no profile-specific workflow protocol. Legacy vvoc.json documents with root or per-preset orchestration sections migrate through one explicit host-gated vvoc sync step with a timestamped backup and a change report; strict parsing elsewhere fails loudly and the canonical schema stays v3. Graph, verification projections, README, and tests are synchronized.</IntentSummary>
+    <BaselineAssertions>
+      <MustExist>
+        <Value>M-ORCHESTRATION-PROFILES</Value><Value>M-CLI-ORCHESTRATION</Value><Value>M-CLI-CONFIG</Value>
+        <Value>M-CLI-PRESET</Value><Value>M-VVOC-PRESET-REGISTRY</Value><Value>M-CLI-COMPLETION</Value>
+        <Value>M-CLI-MANAGED-SKILLS</Value><Value>M-CLI-MANAGED-AGENTS</Value><Value>M-PLUGIN-CONTEXT-TUI</Value>
+        <Value>M-NATIVE-RUNTIME</Value><Value>M-PLUGIN-SYSTEM-CONTEXT-INJECTION</Value><Value>M-PLUGIN-WORKFLOW</Value>
+        <Value>M-WORKFLOW-EXECUTION</Value><Value>M-CLI-COMMANDS</Value>
+        <Value>src/commands/orchestration.ts</Value>
+        <Value>src/lib/orchestration.ts</Value>
+        <Value>src/runtime/session-settings.ts</Value>
+        <Value>src/plugins/system-context-injection/index.ts</Value>
+        <Value>src/plugins/workflow/index.ts</Value>
+        <Value>templates/agents/vv-controller.md</Value>
+        <Value>schemas/vvoc/v3.json</Value>
+        <Value>src/commands/sync.ts</Value>
+        <Value>README.md</Value>
+      </MustExist>
+      <MustContain><File>.grace/changes/active/C-REMOVE-SESSION-ORCHESTRATION-PROFILES/spec.xml</File><Text>graceVersion="4.0" status="approved"</Text></MustContain>
+      <MustContain><File>schemas/vvoc/v3.json</File><Text>"orchestration"</Text></MustContain>
+      <MustContain><File>src/lib/orchestration.ts</File><Text>export function createOrchestrationConfig(</Text></MustContain>
+      <MustContain><File>src/lib/orchestration.ts</File><Text>export function resolveOrchestrationPolicy(</Text></MustContain>
+      <MustContain><File>src/runtime/session-settings.ts</File><Text>readonly profile: OrchestrationProfile;</Text></MustContain>
+      <MustContain><File>src/plugins/system-context-injection/index.ts</File><Text>appendTailContext(event.messages as</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/index.ts</File><Text>switch (policy.workflowGuidance)</Text></MustContain>
+      <MustContain><File>templates/agents/vv-controller.md</File><Text>Follow the concrete work policy supplied for this session</Text></MustContain>
+      <MustContain><File>src/commands/completion.ts</File><Text>_vvoc_orchestration_profiles</Text></MustContain>
+      <MustContain><File>src/lib/vvoc-preset-registry.ts</File><Text>orchestration: { profile: "single-session" }</Text></MustContain>
+      <MustContain><File>src/tui/settings/plugin.ts</File><Text>profile &lt;name&gt;</Text></MustContain>
+      <MustContain><File>src/runtime/context-inspection.ts</File><Text>typeof value.settings.profile !== "string"</Text></MustContain>
+      <MustContain><File>README.md</File><Text>### Orchestration profiles</Text></MustContain>
+      <MustPassCommand>
+        <Command>bun test src/lib/orchestration.test.ts src/runtime/session-settings.test.ts</Command>
+        <Command>bun run typecheck</Command>
+      </MustPassCommand>
+    </BaselineAssertions>
+    <TargetAssertions>
+      <MustVerify>
+        <Module>M-ORCHESTRATION-PROFILES</Module><Module>M-CLI-COMMANDS</Module><Module>M-CLI-CONFIG</Module>
+        <Module>M-CLI-PRESET</Module><Module>M-VVOC-PRESET-REGISTRY</Module><Module>M-CLI-COMPLETION</Module>
+        <Module>M-CLI-MANAGED-SKILLS</Module><Module>M-CLI-MANAGED-AGENTS</Module><Module>M-PLUGIN-CONTEXT-TUI</Module>
+        <Module>M-NATIVE-RUNTIME</Module><Module>M-PLUGIN-SYSTEM-CONTEXT-INJECTION</Module><Module>M-PLUGIN-WORKFLOW</Module>
+        <Module>M-WORKFLOW-EXECUTION</Module>
+      </MustVerify>
+      <MustContain><File>src/lib/orchestration.ts</File><Text>export function policyForRecordedProfile(</Text></MustContain>
+      <MustContain><File>src/runtime/session-settings.ts</File><Text>profile?: OrchestrationProfile</Text></MustContain>
+      <MustContain><File>src/plugins/system-context-injection/index.ts</File><Text>policyForRecordedProfile</Text></MustContain>
+      <MustContain><File>src/plugins/workflow/index.ts</File><Text>policyForRecordedProfile</Text></MustContain>
+      <MustContain><File>templates/agents/vv-controller.md</File><Text>&lt;work_policy_default&gt;</Text></MustContain>
+      <MustContain><File>src/commands/sync.ts</File><Text>migrateVvocOrchestration</Text></MustContain>
+      <MustContain><File>README.md</File><Text>Legacy orchestration migration</Text></MustContain>
+      <MustContain><File>README.md</File><Text>Controller execution default</Text></MustContain>
+      <MustNotContain><File>schemas/vvoc/v3.json</File><Text>"orchestration"</Text></MustNotContain>
+      <MustNotContain><File>README.md</File><Text>### Orchestration profiles</Text></MustNotContain>
+      <MustNotContain><File>src/cli.ts</File><Text>commands/orchestration.js</Text></MustNotContain>
+      <MustNotContain><File>src/commands/completion.ts</File><Text>_vvoc_orchestration_profiles</Text></MustNotContain>
+      <MustNotContain><File>src/commands/session.ts</File><Text>readonly kind: "profile"</Text></MustNotContain>
+      <MustNotContain><File>src/commands/status.ts</File><Text>Orchestration profile:</Text></MustNotContain>
+      <MustNotContain><File>src/lib/vvoc-preset-registry.ts</File><Text>orchestration:</Text></MustNotContain>
+      <MustNotContain><File>src/lib/vvoc-config.ts</File><Text>OrchestrationConfig</Text></MustNotContain>
+      <MustNotContain><File>src/lib/orchestration.ts</File><Text>createOrchestrationConfig</Text></MustNotContain>
+      <MustNotContain><File>src/tui/settings/plugin.ts</File><Text>profile &lt;name&gt;</Text></MustNotContain>
+      <MustNotContain><File>src/runtime/context-inspection.ts</File><Text>typeof value.settings.profile !== "string"</Text></MustNotContain>
+      <MustNotExist>
+        <Value>src/commands/orchestration.ts</Value>
+        <Value>src/commands/orchestration.test.ts</Value>
+      </MustNotExist>
+      <MustPassCommand>
+        <Command>bun test src/lib/orchestration.test.ts src/lib/vvoc-config.test.ts src/commands/config-validate.test.ts src/commands/preset.test.ts src/commands/session.test.ts src/commands/status.test.ts src/commands/completion.test.ts src/tui/settings/plugin.test.ts</Command>
+        <Command>bun run typecheck</Command>
+        <Command>bun run check</Command>
+        <Command>bun run build</Command>
+        <Command>bun run release:check</Command>
+        <Command>bash -c "grep -rE 'createOrchestrationConfig|resolveOrchestrationPolicy' src/ &gt;/dev/null 2&gt;&amp;1 &amp;&amp; exit 1 || exit 0"</Command>
+      </MustPassCommand>
+    </TargetAssertions>
+    <PlanningNotes>
+      <Note>Transition model: the recorded profile in the session-owned family settings record is the only boundary marker. Families with a recorded profile keep the existing tail policy text and workflow-protocol variant and are excluded from the new short default; families without a recorded profile get no tail injection, no profile-specific workflow protocol, and the single short default from the stable controller system prompt. Every explicit settings rewrite (any vvoc session set change or /vv-settings action, including pull-defaults) drops the profile and completes the transition; a family whose root no longer resolves through lineage has ended.</Note>
+      <Note>Short default placement: the new stable section &lt;work_policy_default&gt; lives in templates/agents/vv-controller.md and is projected by system-context-injection as an additional system part for families without a recorded profile, so it stays inside the cached stable prefix and never enters user messages.</Note>
+      <Note>Legacy policies stay internal: src/lib/orchestration.ts keeps ORCHESTRATION_PROFILE_NAMES, the profile type, strict parse for decoding recorded values, and the four frozen policy texts; only the config-facing constructors and the absent-section default are removed, so no public CLI or config surface remains.</Note>
+      <Note>Migration semantics: a new M-CLI-CONFIG helper runs inside vvoc sync after the host-window gate and before readVvocConfig, for project and global vvoc.json; it removes only root and per-preset orchestration keys via formatting-preserving edits, writes &lt;path&gt;.vvoc-backup-&lt;timestamp&gt;, reports removed sections and paths, leaves invalid JSON untouched so strict parsing fails loudly, and is idempotent. The canonical schema version stays v3 because orchestration was optional.</Note>
+      <Note>Workflow behavior: tool registration, root gating, acceptance, review, blocker, and recovery enforcement are untouched; only the profile-selected guidance injection becomes conditional on a recorded profile. Ordinary requests open no work item because work_item_open remains an explicit tool call.</Note>
+      <Note>Durable cleanup: M-CLI-ORCHESTRATION and V-M-CLI-ORCHESTRATION are removed from both indexes and routed documents; every surviving anchor's purpose and verification scenario drops the profile choice while describing the transition behavior and the sync migration.</Note>
+      <Note>GRACE lifecycle commands (grace lint, grace status, assertion phases) run externally around execution and never inside plan commands; plan status moves to approved only after the review round completes and the user-approved execution flow starts.</Note>
+    </PlanningNotes>
+    <DurableScope>
+      <GraphAnchors>
+        <M-ORCHESTRATION-PROFILES />
+        <M-CLI-COMMANDS />
+        <M-CLI-CONFIG />
+        <M-CLI-PRESET />
+        <M-VVOC-PRESET-REGISTRY />
+        <M-CLI-COMPLETION />
+        <M-CLI-MANAGED-SKILLS />
+        <M-CLI-MANAGED-AGENTS />
+        <M-PLUGIN-CONTEXT-TUI />
+        <M-NATIVE-RUNTIME />
+        <M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+        <M-PLUGIN-WORKFLOW />
+        <M-WORKFLOW-EXECUTION />
+      </GraphAnchors>
+      <VerificationAnchors>
+        <V-M-ORCHESTRATION-PROFILES />
+        <V-M-CLI-COMMANDS />
+        <V-M-CLI-CONFIG />
+        <V-M-CLI-PRESET />
+        <V-M-VVOC-PRESET-REGISTRY />
+        <V-M-CLI-COMPLETION />
+        <V-M-CLI-MANAGED-SKILLS />
+        <V-M-CLI-MANAGED-AGENTS />
+        <V-M-PLUGIN-CONTEXT-TUI />
+        <V-M-NATIVE-RUNTIME />
+        <V-M-PLUGIN-SYSTEM-CONTEXT-INJECTION />
+        <V-M-PLUGIN-WORKFLOW />
+        <V-M-WORKFLOW-EXECUTION />
+      </VerificationAnchors>
+      <GD-MAIN />
+      <VD-MAIN />
+    </DurableScope>
+    <ObservedWriteScope>
+      <File>src/lib/orchestration.ts</File>
+      <File>src/lib/orchestration.test.ts</File>
+      <File>src/lib/vvoc-config.ts</File>
+      <File>src/lib/vvoc-config.test.ts</File>
+      <File>src/lib/vvoc-preset-registry.ts</File>
+      <File>src/lib/opencode/inspection.ts</File>
+      <File>src/lib/opencode/vvoc-orchestration-migration.ts</File>
+      <File>src/lib/opencode/vvoc-orchestration-migration.test.ts</File>
+      <File>src/lib/opencode.test.ts</File>
+      <File>src/cli.ts</File>
+      <File>src/commands/orchestration.ts</File>
+      <File>src/commands/orchestration.test.ts</File>
+      <File>src/commands/status.ts</File>
+      <File>src/commands/status.test.ts</File>
+      <File>src/commands/completion.ts</File>
+      <File>src/commands/completion.test.ts</File>
+      <File>src/commands/preset.ts</File>
+      <File>src/commands/preset.test.ts</File>
+      <File>src/commands/session.ts</File>
+      <File>src/commands/session.test.ts</File>
+      <File>src/commands/config-validate.test.ts</File>
+      <File>src/commands/sync.ts</File>
+      <File>src/commands/sync.test.ts</File>
+      <File>src/tui/settings/plugin.ts</File>
+      <File>src/tui/settings/plugin.test.ts</File>
+      <File>src/runtime/session-settings.ts</File>
+      <File>src/runtime/session-settings.test.ts</File>
+      <File>src/runtime/context-inspection.ts</File>
+      <File>src/runtime/context-inspection.test.ts</File>
+      <File>src/plugins/system-context-injection/index.ts</File>
+      <File>src/plugins/system-context-injection/guidance.ts</File>
+      <File>src/plugins/system-context-injection.integration.test.ts</File>
+      <File>src/plugins/workflow/index.ts</File>
+      <File>src/plugins/workflow.integration.test.ts</File>
+      <File>src/plugins/workflow.delegated.integration.test.ts</File>
+      <File>src/plugins/workflow.execution.integration.test.ts</File>
+      <File>src/plugins/model-roles.integration.test.ts</File>
+      <File>src/lib/managed-agents.test.ts</File>
+      <File>src/lib/managed-skills.test.ts</File>
+      <File>templates/agents/vv-controller.md</File>
+      <File>templates/skills/vv-execute/SKILL.md</File>
+      <File>schemas/vvoc/v3.json</File>
+      <File>README.md</File>
+      <File>.grace/graph/index.xml</File>
+      <File>.grace/graph/main.xml</File>
+      <File>.grace/verification/index.xml</File>
+      <File>.grace/verification/main.xml</File>
+    </ObservedWriteScope>
+    <ImplementationPlan>
+      <T-001>
+        <Title>Make the recorded profile optional and resolve policy from it in both plugins.</Title>
+        <DependsOn></DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>src/lib/orchestration.ts exposes policyForRecordedProfile(profile) returning the frozen legacy policy for a recorded profile and undefined for an absent one, while the existing config-facing constructors stay in place for the later surface-removal task.</Criterion>
+          <Criterion>FamilySettings.profile is optional; decodeFamilySettings accepts an absent profile and still fails soft on an invalid present value; describeFamilySettings prints the profile only when it is present.</Criterion>
+          <Criterion>projectFamilyConfig overrides roles and plugin toggles only and never fabricates an orchestration section.</Criterion>
+          <Criterion>system-context-injection resolves the tail policy only from a recorded profile and appends no tail for a record without one; the workflow plugin resolves policy the same way and injects guidance only when a recorded profile exists; tool registration and root gating are unchanged.</Criterion>
+          <Criterion>isMeaningfulFamilySettingsView accepts a settings record without a profile and still rejects incomplete records; the allowlisted projection exposes a profile only when recorded.</Criterion>
+          <Criterion>Session-settings, context-inspection, both plugin suites, and model-roles integration tests pass with records that both carry and omit a profile.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/runtime/session-settings.test.ts src/runtime/context-inspection.test.ts src/plugins/system-context-injection.integration.test.ts src/plugins/workflow.integration.test.ts src/plugins/workflow.delegated.integration.test.ts src/plugins/workflow.execution.integration.test.ts src/plugins/model-roles.integration.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-001>
+      <T-002>
+        <Title>Remove orchestration from the canonical config, presets, CLI, and session-settings write paths.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>VvocConfig, the JSON schema (root and per-preset), config seeding, normalization, and preset overrides no longer contain or accept orchestration; a document with an orchestration section fails strict v3 validation loudly and no version bump occurs.</Criterion>
+          <Criterion>Built-in presets declare roles only; vvoc preset applies and reports roles without any profile notion.</Criterion>
+          <Criterion>The vvoc orchestration command and its test are deleted and the command is unregistered; CLI help, status output, inspection, and bash/zsh/fish completions expose no orchestration or profile choice.</Criterion>
+          <Criterion>vvoc session set has no profile action and the TUI /vv-settings command offers no profile action; preset, role, plugin toggle, and pull-defaults still work; pull-defaults rewrites the family record without a profile.</Criterion>
+          <Criterion>settingsFromConfig births records without a profile; src/lib/orchestration.ts no longer exports createOrchestrationConfig, resolveOrchestrationPolicy, or the absent-section default; no source file references the removed symbols.</Criterion>
+          <Criterion>All command, config, orchestration, TUI, and opencode seeding tests pass on the updated behavior.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/orchestration.test.ts src/lib/vvoc-config.test.ts src/commands/config-validate.test.ts src/commands/preset.test.ts src/commands/session.test.ts src/commands/status.test.ts src/commands/completion.test.ts src/tui/settings/plugin.test.ts src/lib/opencode.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-002>
+      <T-003>
+        <Title>Add the stable short controller default and retire profile wording from managed skills.</Title>
+        <DependsOn>T-001</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>templates/agents/vv-controller.md carries exactly one &lt;work_policy_default&gt; section stating that ordinary implementation stays in the current session unless the user requests delegation or a selected plan calls for it, bounded search assistance does not select an execution mode, and independent review happens only when explicitly requested or materially useful; the existing sections keep their meaning.</Criterion>
+          <Criterion>guidance.ts requires exactly one work-policy-default section and exposes it separately from the seven controller sections; a missing or duplicated section throws explicitly, and the shared-primary projection stays free of controller-only instructions.</Criterion>
+          <Criterion>system-context-injection appends the default fragment to system parts only for families without a recorded profile and never to user messages; families with a recorded profile keep the legacy tail and receive no default fragment.</Criterion>
+          <Criterion>templates/skills/vv-execute/SKILL.md no longer references an active orchestration profile; execution intent comes from the plan, the user, or a selected execution mode without any session-wide policy lookup.</Criterion>
+          <Criterion>Managed agent and managed skill suites plus the system-context-injection suite pass with the new template and skill text.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/managed-agents.test.ts src/lib/managed-skills.test.ts src/plugins/system-context-injection.integration.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-003>
+      <T-004>
+        <Title>Add the explicit host-gated legacy orchestration migration to vvoc sync.</Title>
+        <DependsOn>T-002</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>A new M-CLI-CONFIG helper removes root and per-preset orchestration keys from project and global vvoc.json using formatting-preserving edits, leaves every other key and value verbatim, and is a no-op on documents without those keys.</Criterion>
+          <Criterion>Each migrated document gets a timestamped sibling backup named &lt;path&gt;.vvoc-backup-&lt;timestamp&gt; before the write, and the command reports each migrated path with the removed sections.</Criterion>
+          <Criterion>vvoc sync runs the migration after the host-window gate and before the strict vvoc config read; invalid JSON is left untouched so the subsequent strict parse fails loudly, and a second run changes nothing.</Criterion>
+          <Criterion>Unit tests cover root-only, preset-only, mixed, absent, invalid-JSON, backup-creation, and idempotent second-run cases through isolated temp directories; the sync suite passes.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun test src/lib/opencode/vvoc-orchestration-migration.test.ts src/commands/sync.test.ts</Command>
+          <Command>bun run typecheck</Command>
+        </Verification>
+      </T-004>
+      <T-005>
+        <Title>Synchronize GRACE durable state and README with the removed profile surface.</Title>
+        <DependsOn>T-002, T-003, T-004</DependsOn>
+        <AcceptanceCriteria>
+          <Criterion>M-CLI-ORCHESTRATION and V-M-CLI-ORCHESTRATION are removed from the graph and verification indexes and routed documents, and no anchor or reference points at them.</Criterion>
+          <Criterion>Every surviving affected module purpose/scope and verification scenario describes the retired profile surface, the recorded-profile transition boundary, the sync migration, and the stable short default instead of the removed profile choice; test file and command lists match the actual suites.</Criterion>
+          <Criterion>README drops the orchestration-profile section, the orchestration command rows, the preset-to-profile table, and every claim that profiles select behavior; it documents the Controller execution default, the Legacy orchestration migration step, and the recorded-profile transition boundary, and no longer claims a seven-section controller prompt.</Criterion>
+          <Criterion>bun run check (including the GRACE markup gate) and bun run build pass on the finished tree.</Criterion>
+        </AcceptanceCriteria>
+        <Verification>
+          <Command>bun run check</Command>
+          <Command>bun run build</Command>
+        </Verification>
+      </T-005>
+    </ImplementationPlan>
+  </C-REMOVE-SESSION-ORCHESTRATION-PROFILES>
+</GraceChangePlan>

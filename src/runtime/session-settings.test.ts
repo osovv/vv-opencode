@@ -40,7 +40,6 @@ import {
 function baseConfig(): VvocConfig {
   const config = createDefaultVvocConfig();
   config.roles = { smart: "prov/m-smart", fast: "prov/m-fast" };
-  config.orchestration = { profile: "orchestrated" };
   config.plugins = { ...config.plugins, workflow: false, "peak-hours": { enabled: true } };
   return config;
 }
@@ -62,6 +61,30 @@ describe("decodeFamilySettings", () => {
       profile: "balanced",
       plugins: { workflow: false },
     });
+  });
+
+  test("accepts a record without a profile and keeps a legacy recorded profile", () => {
+    const withoutProfile = decodeFamilySettings({
+      version: FAMILY_SETTINGS_VERSION,
+      roles: { smart: "prov/m1" },
+      plugins: {},
+    });
+    expect(withoutProfile.error).toBeUndefined();
+    expect(withoutProfile.settings).toEqual({
+      version: 1,
+      roles: { smart: "prov/m1" },
+      plugins: {},
+    });
+    expect(withoutProfile.settings?.profile).toBeUndefined();
+
+    const legacy = decodeFamilySettings({
+      version: FAMILY_SETTINGS_VERSION,
+      roles: {},
+      profile: "delegated",
+      plugins: {},
+    });
+    expect(legacy.error).toBeUndefined();
+    expect(legacy.settings?.profile).toBe("delegated");
   });
 
   test("rejects wrong version, malformed maps, unknown profiles, and bad presets", () => {
@@ -104,10 +127,10 @@ describe("decodeFamilySettings", () => {
 });
 
 describe("settingsFromConfig and projection", () => {
-  test("resolves toggles, roles, and profile from the effective config", () => {
+  test("resolves toggles and roles from the effective config without recording a profile", () => {
     const settings = settingsFromConfig(baseConfig());
     expect(settings.version).toBe(1);
-    expect(settings.profile).toBe("orchestrated");
+    expect(settings.profile).toBeUndefined();
     expect(settings.roles).toEqual({ smart: "prov/m-smart", fast: "prov/m-fast" });
     expect(settings.plugins.workflow).toBe(false);
     expect(settings.plugins["peak-hours"]).toBe(true);
@@ -118,7 +141,6 @@ describe("settingsFromConfig and projection", () => {
     const settings = settingsFromConfig(baseConfig());
     const live = baseConfig();
     live.roles = { smart: "prov/m-new" };
-    live.orchestration = { profile: "single-session" };
     live.plugins = {
       ...live.plugins,
       workflow: true,
@@ -127,7 +149,8 @@ describe("settingsFromConfig and projection", () => {
     const projected = projectFamilyConfig(settings, live);
     // Family-governed fields come from the settings record.
     expect(projected.roles).toEqual({ smart: "prov/m-smart", fast: "prov/m-fast" });
-    expect(projected.orchestration).toEqual({ profile: "orchestrated" });
+    // Orchestration is not part of the projected document at all.
+    expect(projected).not.toHaveProperty("orchestration");
     expect(projected.plugins.workflow).toBe(false);
     // Resolved-enabled overrides a later live disable while live detail survives.
     expect(projected.plugins["peak-hours"]).toEqual({

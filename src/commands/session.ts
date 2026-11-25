@@ -2,8 +2,8 @@
 // VERSION: 1.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Provide `vvoc session set` for explicit session-owned family-settings changes through the running host, plus the shared action parsing, application, and summary helpers reused by the native TUI /vv-settings command.
-//   SCOPE: Discovery of the running native service, lineage-rooted read-modify-write metadata updates (preset, profile, role, plugin toggle, pull-defaults), and human-readable summaries. Config reads follow the scoped layering; credentials are never written into settings.
-//   DEPENDS: [citty, @opencode/client, @opencode/client/service, src/lib/config-layers.ts, src/lib/model-roles.ts, src/lib/orchestration.ts, src/lib/plugin-toggle-config.ts, src/runtime/session-settings.ts, src/runtime/types.ts]
+//   SCOPE: Discovery of the running native service, lineage-rooted read-modify-write metadata updates (preset, role, plugin toggle, pull-defaults), and human-readable summaries. Config reads follow the scoped layering; credentials are never written into settings. A legacy recorded profile is displayed but never written; every explicit rewrite drops it.
+//   DEPENDS: [citty, @opencode/client, @opencode/client/service, src/lib/config-layers.ts, src/lib/model-roles.ts, src/lib/plugin-toggle-config.ts, src/runtime/session-settings.ts, src/runtime/types.ts]
 //   LINKS: [M-CLI-SESSION, M-NATIVE-RUNTIME, M-PLUGIN-CONTEXT-TUI, V-M-CLI-SESSION]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -20,7 +20,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-SESSION-OWNED-SETTINGS T-003 - Added the explicit session-settings command set: preset, profile, role, plugin toggle, and pull-defaults through a lineage-rooted metadata read-modify-write.]
+//   LAST_CHANGE: [C-REMOVE-SESSION-ORCHESTRATION-PROFILES T-002 - Removed the profile action and --profile flag; presets apply roles only, and every rewrite records no profile.]
 // END_CHANGE_SUMMARY
 
 import { defineCommand } from "citty";
@@ -28,7 +28,6 @@ import { OpenCode } from "@opencode/client";
 import { Service } from "@opencode/client/service";
 import { loadVvocConfigForRead } from "../lib/config-layers.js";
 import { parseModelSelection } from "../lib/model-roles.js";
-import { parseOrchestrationProfile } from "../lib/orchestration.js";
 import { PLUGIN_TOGGLE_NAMES } from "../lib/plugin-toggle-config.js";
 import {
   readSettingsFromMetadata,
@@ -45,7 +44,6 @@ const ROLE_ID_PATTERN = /^[a-z][a-z0-9-]*$/;
 /** One explicit settings change requested by name. */
 export type SessionSettingsAction =
   | { readonly kind: "preset"; readonly name: string }
-  | { readonly kind: "profile"; readonly profile: string }
   | { readonly kind: "role-set"; readonly roleId: string; readonly model: string }
   | { readonly kind: "role-unset"; readonly roleId: string }
   | { readonly kind: "plugin"; readonly plugin: string; readonly enabled: boolean }
@@ -65,11 +63,6 @@ export function parseSessionSettingsAction(raw: string | undefined): SessionSett
       const name = rest.join(" ").trim();
       if (!name) throw new Error("usage: preset <name>");
       return { kind: "preset", name };
-    }
-    case "profile": {
-      const profile = rest.join(" ").trim();
-      if (!profile) throw new Error("usage: profile <name>");
-      return { kind: "profile", profile };
     }
     case "role": {
       const roleId = rest[0]?.trim() ?? "";
@@ -95,7 +88,7 @@ export function parseSessionSettingsAction(raw: string | undefined): SessionSett
       return { kind: "pull-defaults" };
     default:
       throw new Error(
-        "unknown settings action; accepted: preset <name> | profile <name> | role <id> <model> | role unset <id> | plugin <name> on|off | pull-defaults",
+        "unknown settings action; accepted: preset <name> | role <id> <model> | role unset <id> | plugin <name> on|off | pull-defaults",
       );
   }
 }
@@ -154,6 +147,14 @@ async function applyToSettings(
   input: { readonly cwd?: string; readonly configDir?: string },
 ): Promise<FamilySettings> {
   const base: FamilySettings = current ?? (await settingsFromCurrentConfig(input));
+  // Every explicit rewrite drops a legacy recorded profile: the boundary marker
+  // is cleared by any session-settings change, including pull-defaults.
+  const baseRecord: FamilySettings = {
+    version: base.version,
+    roles: base.roles,
+    plugins: base.plugins,
+    ...(base.preset === undefined ? {} : { preset: base.preset }),
+  };
   switch (action.kind) {
     case "preset": {
       const { config } = await loadVvocConfigForRead({
@@ -180,45 +181,35 @@ async function applyToSettings(
         version: 1,
         preset: presetName,
         roles,
-        profile:
-          preset.orchestration === undefined
-            ? base.profile
-            : parseOrchestrationProfile(preset.orchestration.profile, `preset ${presetName}`),
         plugins: base.plugins,
       };
     }
-    case "profile":
-      return {
-        ...base,
-        preset: base.preset,
-        profile: parseOrchestrationProfile(action.profile, "profile"),
-      };
     case "role-set":
       return {
-        ...base,
-        preset: base.preset,
+        ...baseRecord,
+        preset: baseRecord.preset,
         roles: {
-          ...base.roles,
+          ...baseRecord.roles,
           [normalizeRoleId(action.roleId)]: parseModelSelection(action.model).normalized,
         },
       };
     case "role-unset": {
       const roleId = normalizeRoleId(action.roleId);
-      const { [roleId]: _removed, ...remaining } = base.roles;
-      return { ...base, preset: base.preset, roles: remaining };
+      const { [roleId]: _removed, ...remaining } = baseRecord.roles;
+      return { ...baseRecord, preset: baseRecord.preset, roles: remaining };
     }
     case "plugin":
       return {
-        ...base,
-        preset: base.preset,
+        ...baseRecord,
+        preset: baseRecord.preset,
         plugins: {
-          ...base.plugins,
+          ...baseRecord.plugins,
           [assertToggleName(action.plugin)]: action.enabled,
         },
       };
     case "pull-defaults":
       // Handled before apply; unreachable here.
-      return base;
+      return baseRecord;
   }
 }
 
@@ -243,7 +234,7 @@ export function describeFamilySettings(settings: FamilySettings): string[] {
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([roleId, model]) => `${roleId}=${model}`);
   lines.push(roles.length === 0 ? "roles: (none)" : `roles: ${roles.join(", ")}`);
-  lines.push(`profile: ${settings.profile}`);
+  if (settings.profile !== undefined) lines.push(`profile: ${settings.profile}`);
   const plugins = Object.entries(settings.plugins)
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([name, enabled]) => `${name}=${enabled ? "on" : "off"}`);
@@ -285,12 +276,7 @@ const sessionArg = {
 
 const presetArg = {
   type: "string" as const,
-  description: "Apply a configured preset's roles and profile to the family.",
-};
-
-const profileArg = {
-  type: "string" as const,
-  description: "Set the orchestration profile (e.g. single-session, orchestrated).",
+  description: "Apply a configured preset's roles to the family.",
 };
 
 const roleArg = {
@@ -321,7 +307,6 @@ const sessionSet = defineCommand({
   args: {
     session: sessionArg,
     preset: presetArg,
-    profile: profileArg,
     role: roleArg,
     plugin: pluginArg,
     "pull-defaults": pullDefaultsArg,
@@ -331,9 +316,6 @@ const sessionSet = defineCommand({
     const actions: SessionSettingsAction[] = [];
     if (typeof args.preset === "string" && args.preset.trim().length > 0) {
       actions.push({ kind: "preset", name: args.preset });
-    }
-    if (typeof args.profile === "string" && args.profile.trim().length > 0) {
-      actions.push({ kind: "profile", profile: args.profile });
     }
     if (typeof args.role === "string" && args.role.trim().length > 0) {
       const raw = args.role.trim();
@@ -373,9 +355,7 @@ const sessionSet = defineCommand({
       actions.push({ kind: "pull-defaults" });
     }
     if (actions.length === 0) {
-      throw new Error(
-        "nothing to set; pass --preset, --profile, --role, --plugin, or --pull-defaults",
-      );
+      throw new Error("nothing to set; pass --preset, --role, --plugin, or --pull-defaults");
     }
     if (actions.length > 1) {
       throw new Error("pass exactly one settings action per invocation");

@@ -3,7 +3,7 @@
 // START_MODULE_CONTRACT
 //   PURPOSE: Native OpenCode host compatibility diagnostics and source-aware installation inspection.
 //   SCOPE: opencode --version execution and native supported-window comparison, installation-state inspection across native OpenCode `plugins`/`agents`/`skills` and vvoc config files with modelIntent role-reference resolution, read-only managed prompt/skill drift, duplicate skills-root, and deprecated permission-action warnings, strict/effective layered-scope inspection with config-source attribution, and write-result formatting for CLI output.
-//   DEPENDS: [node:path, src/lib/config-layers.ts, src/lib/model-roles.ts, src/lib/orchestration.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts, src/lib/package.ts, src/lib/opencode/shared-utils.ts, src/lib/opencode/paths.ts, src/lib/opencode/plugin-registration.ts]
+//   DEPENDS: [node:path, src/lib/config-layers.ts, src/lib/model-roles.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts, src/lib/package.ts, src/lib/opencode/shared-utils.ts, src/lib/opencode/paths.ts, src/lib/opencode/plugin-registration.ts]
 //   LINKS: [M-CLI-CONFIG, M-ORCHESTRATION-PROFILES]
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
@@ -37,7 +37,6 @@ import {
   type RawOpenCodeModelIntent,
 } from "../config-layers.js";
 import { BUILTIN_ROLE_NAMES, ROLE_REFERENCE_PREFIX } from "../model-roles.js";
-import { resolveOrchestrationPolicy, type OrchestrationProfile } from "../orchestration.js";
 import {
   createDefaultVvocConfig,
   parseVersionedVvocConfigText,
@@ -138,9 +137,6 @@ export type InstallationInspection = {
   };
   secretsRedaction: {
     config?: SecretsRedactionConfig;
-  };
-  orchestration: {
-    profile?: OrchestrationProfile;
   };
   roles: {
     assignments: Array<{ roleId: string; model: string; builtIn: boolean }>;
@@ -521,9 +517,6 @@ export async function inspectInstallation(
     secretsRedaction: {
       config: vvocConfig?.secretsRedaction,
     },
-    orchestration: {
-      profile: vvocConfig ? resolveOrchestrationPolicy(vvocConfig).profile : undefined,
-    },
     roles: {
       assignments: roleAssignments,
       unresolvedReferences: unresolvedRoleReferences,
@@ -593,13 +586,6 @@ export async function inspectInstallationForScope(options: {
   const inspection = await inspectInstallation(scopedPaths, { runtime });
   return {
     ...inspection,
-    orchestration: {
-      profile:
-        inspection.orchestration.profile ??
-        (vvocSource.kind === "default"
-          ? resolveOrchestrationPolicy(createDefaultVvocConfig()).profile
-          : undefined),
-    },
     scope: options.scope,
     opencodeSource,
     vvocSource,

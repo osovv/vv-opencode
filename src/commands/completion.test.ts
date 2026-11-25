@@ -2,7 +2,7 @@
 // VERSION: 0.4.14
 // START_MODULE_CONTRACT
 //   PURPOSE: Tests for M-CLI-COMPLETION - shell completion generation.
-//   SCOPE: Bash, zsh, and fish completion generation including orchestration commands/profiles, patch-provider presets, preset names, and role flows.
+//   SCOPE: Bash, zsh, and fish completion generation including retired-surface absence, patch-provider presets, preset names, and role flows.
 //   DEPENDS: [bun:test, src/commands/completion.ts]
 //   LINKS: [M-CLI-COMPLETION, V-M-CLI-COMPLETION]
 //   ROLE: TEST
@@ -30,7 +30,6 @@ test("generateBashCompletion - contains vvoc command", () => {
   expect(output).toContain("role");
   expect(output).toContain("completion");
   expect(output).toContain("config");
-  expect(output).toContain("orchestration");
   expect(output).toContain("patch-provider");
   expect(output).toContain("preset");
   expect(output).toContain("plugin");
@@ -47,7 +46,6 @@ test("generateZshCompletion - contains vvoc command", () => {
   expect(output).toContain("vvoc");
   expect(output).toContain("role");
   expect(output).toContain("config");
-  expect(output).toContain("orchestration");
   expect(output).toContain("patch-provider");
   expect(output).toContain("preset");
   expect(output).toContain("plugin");
@@ -66,7 +64,6 @@ test("generateFishCompletion - contains vvoc command", () => {
   expect(output).toContain("role");
   expect(output).toContain("completion");
   expect(output).toContain("config");
-  expect(output).toContain("orchestration");
   expect(output).toContain("patch-provider");
   expect(output).toContain("preset");
   expect(output).toContain("plugin");
@@ -86,7 +83,7 @@ test("generateBashCompletion - contains config subcommand", () => {
 test("generateBashCompletion - top-level commands match CLI", () => {
   const output = generateBashCompletion();
   expect(output).toContain(
-    'local commands="completion config doctor guardian init install launch orchestration patch-provider preset plugin role status sync upgrade version"',
+    'local commands="completion config doctor guardian init install launch patch-provider preset plugin role status sync upgrade version"',
   );
 });
 
@@ -99,7 +96,6 @@ test("generateFishCompletion - handles nested subcommands", () => {
   const output = generateFishCompletion();
   expect(output).toContain("__fish_seen_subcommand_from role");
   expect(output).toContain("__fish_seen_subcommand_from config");
-  expect(output).toContain("__fish_seen_subcommand_from orchestration");
   expect(output).toContain("__fish_seen_subcommand_from patch-provider");
   expect(output).toContain("__fish_seen_subcommand_from preset");
   expect(output).toContain("__fish_seen_subcommand_from plugin");
@@ -174,22 +170,14 @@ test("completion scripts - omit every retired osovv preset", () => {
   }
 });
 
-test("completion scripts - contain orchestration commands and profile values", () => {
-  const bash = generateBashCompletion();
-  const zsh = generateZshCompletion();
-  const fish = generateFishCompletion();
-
-  expect(bash).toContain("_vvoc_orchestration_commands");
-  expect(bash).toContain("orchestration:set");
-  expect(bash).toContain('local commands="show set"');
-  expect(bash).toContain('local commands="single-session balanced orchestrated delegated"');
-
-  expect(zsh).toContain("_vvoc_orchestration_cmds");
-  expect(zsh).toContain("show set");
-  expect(zsh).toContain("single-session balanced orchestrated delegated");
-
-  expect(fish).toContain("__vvoc_orchestration_cmds");
-  expect(fish).toContain("__vvoc_orchestration_profiles");
-  expect(fish).toContain("echo show set");
-  expect(fish).toContain("echo single-session balanced orchestrated delegated");
+test("completion scripts - never expose orchestration commands or profile values", () => {
+  for (const output of [
+    generateBashCompletion(),
+    generateZshCompletion(),
+    generateFishCompletion(),
+  ]) {
+    expect(output).not.toContain("orchestration");
+    expect(output).not.toContain("single-session");
+    expect(output).not.toContain("orchestrated");
+  }
 });

@@ -53,7 +53,7 @@ import { validateWorkflowToolResult } from "./workflow/results.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadManagedSkillTemplate, type ManagedSkillName } from "../lib/managed-skills.js";
-import { resolveOrchestrationPolicy } from "../lib/orchestration.js";
+import { policyForRecordedProfile } from "../lib/orchestration.js";
 
 const SESSION = "session-workflow-execution";
 const WORKSPACE = "/tmp/vvoc-workflow-execution";
@@ -2359,9 +2359,9 @@ describe("instruction scenario audit", () => {
   });
 
   test("profile policies carry source and authority guidance without leaking other profiles", () => {
-    const delegated = resolveOrchestrationPolicy({
-      orchestration: { profile: "delegated" },
-    }).controllerSystemContext.replace(/\s+/g, " ");
+    const delegated = (
+      policyForRecordedProfile("delegated")?.controllerSystemContext ?? ""
+    ).replace(/\s+/g, " ");
     expect(delegated).toContain(
       "work_checkpoint register accepts only its supported approved native package",
     );
@@ -2369,9 +2369,9 @@ describe("instruction scenario audit", () => {
       "provided plan or conversation-scoped run registers through work_item_open",
     );
     expect(delegated).toContain("recorded advance authority");
-    const single = resolveOrchestrationPolicy({
-      orchestration: { profile: "single-session" },
-    }).controllerSystemContext.replace(/\s+/g, " ");
+    const single = (
+      policyForRecordedProfile("single-session")?.controllerSystemContext ?? ""
+    ).replace(/\s+/g, " ");
     expect(single).not.toContain("work_item_open with an execution descriptor");
   });
 

@@ -75,7 +75,6 @@
         <M-CLI-INIT />
         <M-CLI-UPGRADE />
         <M-ORCHESTRATION-PROFILES />
-        <M-CLI-ORCHESTRATION />
         <DF-PLUGIN-INSTALL />
         <DF-CONFIG-SYNC />
         <DF-LAYERED-CONFIG />

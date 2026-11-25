@@ -2,9 +2,9 @@
 // VERSION: 0.5.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Define the canonical built-in vvoc preset registry from a single internal source of truth.
-//   SCOPE: Built-in preset name ordering, role and orchestration definitions, and built-in preset-name detection.
-//   DEPENDS: [src/lib/orchestration.ts]
-//   LINKS: M-VVOC-PRESET-REGISTRY, M-ORCHESTRATION-PROFILES, M-CLI-CONFIG, M-CLI-PRESET, M-CLI-COMPLETION
+//   SCOPE: Built-in preset name ordering, role definitions, and built-in preset-name detection; presets never select execution behavior.
+//   DEPENDS: [none]
+//   LINKS: M-VVOC-PRESET-REGISTRY, M-CLI-CONFIG, M-CLI-PRESET, M-CLI-COMPLETION
 //   ROLE: RUNTIME
 //   MAP_MODE: EXPORTS
 // END_MODULE_CONTRACT
@@ -17,15 +17,12 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [direct fix - Routed the fast role to openai/gpt-6-luna#low in vv-codex, vv-osovv-ds, vv-osovv-mimo, vv-osovv-zai, vv-osovv-qwen, vv-astra-solo, and vv-astra-workers, replacing the GPT-5.6 Luna entry.]
+//   LAST_CHANGE: [C-REMOVE-SESSION-ORCHESTRATION-PROFILES T-002 - Presets declare role assignments only; orchestration profiles are no longer part of any built-in preset.]
 // END_CHANGE_SUMMARY
-
-import type { OrchestrationConfig } from "./orchestration.js";
 
 type BuiltinVvocPresetDefinition = {
   description: string;
   agents: Record<string, string>;
-  orchestration: OrchestrationConfig;
 };
 
 export const BUILTIN_VVOC_PRESET_REGISTRY = {
@@ -37,7 +34,6 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
       smart: "openai/gpt-5.6-sol#xhigh",
       reviewer: "openai/gpt-5.6-sol#xhigh",
     },
-    orchestration: { profile: "single-session" },
   },
   "vv-zai": {
     description: "Starter ZAI role assignments for built-in vvoc roles.",
@@ -47,7 +43,6 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
       smart: "zai-coding-plan/glm-5.3#max",
       reviewer: "zai-coding-plan/glm-5.3#max",
     },
-    orchestration: { profile: "balanced" },
   },
   "vv-deepseek": {
     description: "Starter DeepSeek role assignments for built-in vvoc roles.",
@@ -57,7 +52,6 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
       smart: "deepseek/deepseek-flash#max",
       reviewer: "deepseek/deepseek-flash#max",
     },
-    orchestration: { profile: "balanced" },
   },
   "vv-alibaba": {
     description: "Starter Alibaba token plan role assignments for built-in vvoc roles.",
@@ -67,7 +61,6 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
       smart: "alibaba-token-plan/qwen3.8-max#xhigh",
       reviewer: "alibaba-token-plan/glm-5.2",
     },
-    orchestration: { profile: "single-session" },
   },
   "vv-osovv-ds": {
     description:
@@ -78,7 +71,6 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
       smart: "deepseek/deepseek-flash#max",
       reviewer: "zai-coding-plan/glm-5.3#max",
     },
-    orchestration: { profile: "single-session" },
   },
   "vv-osovv-mimo": {
     description:
@@ -89,7 +81,6 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
       smart: "xiaomi/mimo-v2.6-flash#thinking",
       reviewer: "zai-coding-plan/glm-5.3#max",
     },
-    orchestration: { profile: "single-session" },
   },
   "vv-osovv-zai": {
     description: "Personal osovv stack with GLM-5.3 smart (mimo + openai + zai).",
@@ -99,7 +90,6 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
       smart: "zai-coding-plan/glm-5.3#max",
       reviewer: "zai-coding-plan/glm-5.3#max",
     },
-    orchestration: { profile: "single-session" },
   },
   "vv-osovv-qwen": {
     description: "Personal osovv stack with qwen3.8 smart (mimo + openai + qwen + zai).",
@@ -109,7 +99,6 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
       smart: "alibaba-token-plan/qwen3.8-max#xhigh",
       reviewer: "zai-coding-plan/glm-5.3#max",
     },
-    orchestration: { profile: "delegated" },
   },
   "vv-astra-solo": {
     description: "Astra-smart solo stack with MiMo default, Luna fast, and GLM-5.3 review.",
@@ -119,7 +108,6 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
       smart: "openai/gpt-6-astra#max",
       reviewer: "zai-coding-plan/glm-5.3#high",
     },
-    orchestration: { profile: "single-session" },
   },
   "vv-astra-workers": {
     description: "Astra-architecture delegated stack with MiMo Flash workers and GLM-5.3 review.",
@@ -129,7 +117,6 @@ export const BUILTIN_VVOC_PRESET_REGISTRY = {
       smart: "openai/gpt-6-astra#max",
       reviewer: "zai-coding-plan/glm-5.3#high",
     },
-    orchestration: { profile: "delegated" },
   },
 } as const satisfies Record<string, BuiltinVvocPresetDefinition>;
 

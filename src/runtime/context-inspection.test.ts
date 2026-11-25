@@ -394,6 +394,34 @@ describe("context inspection handler", () => {
     expect(serialized).not.toContain("leak");
   });
 
+  test("accepts a family settings record without a profile", async () => {
+    const capture = baseCapture();
+    const settings = capture.settings as Record<string, unknown>;
+    delete settings.profile;
+    const handler = createContextInspectionHandler(
+      makeContext({ toolList: async () => [] }),
+      makeRuntime({ policy: async () => capture }),
+    );
+    const result = await handler({ sessionID: "ses_1" });
+    expect(result.policy).toMatchObject({ status: "available", scope: "family" });
+  });
+
+  test("still rejects an empty-string profile as an invalid capture", async () => {
+    const capture = baseCapture();
+    const settings = capture.settings as Record<string, unknown>;
+    settings.profile = "";
+    const handler = createContextInspectionHandler(
+      makeContext({ toolList: async () => [] }),
+      makeRuntime({ policy: async () => capture }),
+    );
+    const result = await handler({ sessionID: "ses_1" });
+    expect(result.policy).toEqual({
+      status: "unavailable",
+      scope: "family",
+      error: "policy_capture_invalid",
+    });
+  });
+
   test("treats an arbitrary capture object as invalid, never as enabled defaults", async () => {
     const handler = createContextInspectionHandler(
       makeContext({}),
