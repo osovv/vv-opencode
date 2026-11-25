@@ -1,3 +1,12 @@
+## 2.9.0 (2026-11-25)
+
+### Summary
+
+Version 2.9.0 removes session-wide orchestration profiles (single-session, balanced, orchestrated, and delegated) as a public CLI, config, preset, and session-settings choice, so execution behavior is now driven by the request or selected plan instead of a session-wide policy that could also shift the cached request prefix. Legacy vvoc.json files carrying root or per-preset orchestration sections are migrated by `vvoc sync`, which removes those sections from both project and global configs with a timestamped backup and a change report before strict validation, while other documents that still contain orchestration now fail loudly. Families without a recorded profile receive a stable `work_policy_default` section in the managed controller prompt, legacy families keep their frozen tail policy, the `vvoc orchestration` command and `/vv-settings` profile action are gone, and `/context` now accepts profile-less records. This is a breaking change for anyone relying on the removed profiles or the deleted command.
+
+* fix(orchestration): close review findings on migration coverage and projections ([28d7769](https://github.com/osovv/vv-opencode/commit/28d7769))
+* feat(orchestration)!: remove session-wide orchestration profiles ([77145bd](https://github.com/osovv/vv-opencode/commit/77145bd))
+
 ## 2.8.0 (2026-11-24)
 
 ### Summary
