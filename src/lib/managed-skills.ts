@@ -1,8 +1,8 @@
 // FILE: src/lib/managed-skills.ts
 // VERSION: 0.5.3
 // START_MODULE_CONTRACT
-//   PURPOSE: Describe vvoc-managed OpenCode skills and load them from bundled templates or scoped vvoc config roots.
-//   SCOPE: Managed skill names, skill file path resolution, bundled template loading, reference file discovery, and project/global skill lookup.
+//   PURPOSE: Describe vvoc-managed OpenCode skills and load them from bundled templates (skill documents, references, and script files) or scoped vvoc config roots.
+//   SCOPE: Managed skill names, skill file path resolution, bundled template loading, reference and script file discovery, and project/global skill lookup.
 //   DEPENDS: [node:fs/promises, node:path, node:url, src/lib/vvoc-paths.ts]
 //   LINKS: M-CLI-MANAGED-SKILLS
 //   ROLE: RUNTIME
@@ -16,11 +16,13 @@
 //   loadManagedSkillTemplate - Loads the bundled skill template for a managed skill.
 //   loadManagedSkillReference - Loads a bundled reference file for a managed skill.
 //   listManagedSkillReferenceNames - Lists reference file names for a managed skill.
+//   loadManagedSkillScript - Loads a bundled script file for a managed skill.
+//   listManagedSkillScriptNames - Lists script file names for a managed skill.
 //   loadManagedSkillText - Loads a managed skill from project or global vvoc config and errors if neither exists.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [DIRECT-FIX - Rename the bundled design guidance skill to vv-ui-design-principles so its UI scope is explicit next to GRACE change-design artifacts.]
+//   LAST_CHANGE: [C-BUNDLE-SESSION-HISTORY-SKILL - Register vvoc-project-session-history and add template-side script listing/loading so managed skills can ship executable files alongside references.]
 // END_CHANGE_SUMMARY
 
 import { readdir, readFile } from "node:fs/promises";
@@ -39,6 +41,7 @@ export const MANAGED_SKILL_NAMES = [
   "vv-write-for-agents",
   "vv-ui-design-principles",
   "vvoc-usage-analytics",
+  "vvoc-project-session-history",
 ] as const;
 
 export type ManagedSkillName = (typeof MANAGED_SKILL_NAMES)[number];
@@ -67,6 +70,30 @@ export async function listManagedSkillReferenceNames(name: ManagedSkillName): Pr
   const refDirUrl = new URL(`../../templates/skills/${name}/references/`, import.meta.url);
   try {
     const entries = await readdir(refDirUrl, { withFileTypes: true });
+    return entries.filter((entry) => entry.isFile()).map((entry) => entry.name);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
+}
+
+export async function loadManagedSkillScript(
+  name: ManagedSkillName,
+  scriptFileName: string,
+): Promise<string> {
+  const assetUrl = new URL(
+    `../../templates/skills/${name}/scripts/${scriptFileName}`,
+    import.meta.url,
+  );
+  return readFile(assetUrl, "utf8");
+}
+
+export async function listManagedSkillScriptNames(name: ManagedSkillName): Promise<string[]> {
+  const scriptDirUrl = new URL(`../../templates/skills/${name}/scripts/`, import.meta.url);
+  try {
+    const entries = await readdir(scriptDirUrl, { withFileTypes: true });
     return entries.filter((entry) => entry.isFile()).map((entry) => entry.name);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {

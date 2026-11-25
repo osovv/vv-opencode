@@ -2,7 +2,7 @@
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
 //   PURPOSE: Native OpenCode host compatibility diagnostics and source-aware installation inspection.
-//   SCOPE: opencode --version execution and native supported-window comparison, installation-state inspection across native OpenCode `plugins`/`agents`/`skills` and vvoc config files with modelIntent role-reference resolution, read-only managed prompt/skill drift, duplicate skills-root, and deprecated permission-action warnings, strict/effective layered-scope inspection with config-source attribution, and write-result formatting for CLI output.
+//   SCOPE: opencode --version execution and native supported-window comparison, installation-state inspection across native OpenCode `plugins`/`agents`/`skills` and vvoc config files with modelIntent role-reference resolution, read-only managed prompt/skill/script drift, duplicate skills-root, and deprecated permission-action warnings, strict/effective layered-scope inspection with config-source attribution, and write-result formatting for CLI output.
 //   DEPENDS: [node:path, src/lib/config-layers.ts, src/lib/model-roles.ts, src/lib/vvoc-config.ts, src/lib/vvoc-paths.ts, src/lib/package.ts, src/lib/opencode/shared-utils.ts, src/lib/opencode/paths.ts, src/lib/opencode/plugin-registration.ts]
 //   LINKS: [M-CLI-CONFIG, M-ORCHESTRATION-PROFILES]
 //   ROLE: RUNTIME
@@ -21,7 +21,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-PROMPT-SYNC-DOCTOR-ARCHIVE T-003 - Added read-only warnings for stale managed agent prompts and skills, duplicate skills roots, and deprecated permission actions while preserving existing problem semantics.]
+//   LAST_CHANGE: [C-BUNDLE-SESSION-HISTORY-SKILL T-004 - Extended the managed-skill staleness inspection to script files with the same warning shape as references, so stale installed scripts surface in doctor output.]
 // END_CHANGE_SUMMARY
 
 import { comparePluginPins } from "./cli-plugin-registration.js";
@@ -54,7 +54,9 @@ import {
   MANAGED_SKILL_NAMES,
   getManagedSkillFilePath,
   listManagedSkillReferenceNames,
+  listManagedSkillScriptNames,
   loadManagedSkillReference,
+  loadManagedSkillScript,
   loadManagedSkillTemplate,
 } from "../managed-skills.js";
 import {
@@ -345,6 +347,17 @@ async function collectInstallationWarnings(
       if (refText !== refTemplate) {
         warnings.push(
           `managed skill reference ${refPath} differs from the shipped template; run vvoc sync or vvoc sync --force`,
+        );
+      }
+    }
+    for (const scriptName of await listManagedSkillScriptNames(skillName)) {
+      const scriptPath = join(paths.managedSkillsDirPath, skillName, "scripts", scriptName);
+      const scriptText = await readOptionalText(scriptPath);
+      if (scriptText === undefined) continue;
+      const scriptTemplate = await loadManagedSkillScript(skillName, scriptName);
+      if (scriptText !== scriptTemplate) {
+        warnings.push(
+          `managed skill script ${scriptPath} differs from the shipped template; run vvoc sync or vvoc sync --force`,
         );
       }
     }

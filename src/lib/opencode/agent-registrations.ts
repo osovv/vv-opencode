@@ -1,8 +1,8 @@
 // FILE: src/lib/opencode/agent-registrations.ts
 // VERSION: 2.0.0
 // START_MODULE_CONTRACT
-//   PURPOSE: Conservative vvoc-managed native OpenCode agent markdown, managed skills registration, and managed agent model IO.
-//   SCOPE: Native `default_agent`/`skills` config registration, real-path skills-root deduplication, native discovered agent markdown generation with native frontmatter, managed prompt/skill file install and sync with managed-marker guards, legacy inline `{file:...}` managed prompt reconciliation, the OpenCode skills symlink, and read/write of managed agent model overrides. Generic model/default-model/provider overrides live in model-overrides.ts.
+//   PURPOSE: Conservative vvoc-managed native OpenCode agent markdown, managed skills registration including script files, and managed agent model IO.
+//   SCOPE: Native `default_agent`/`skills` config registration, real-path skills-root deduplication, native discovered agent markdown generation with native frontmatter, managed prompt/skill file and script install and sync with managed-marker guards (scripts gated only by the parent skill's skip state, mirroring references), legacy inline `{file:...}` managed prompt reconciliation, the OpenCode skills symlink, and read/write of managed agent model overrides. Generic model/default-model/provider overrides live in model-overrides.ts.
 //   DEPENDS: [jsonc-parser, node:fs/promises, node:path, src/lib/managed-agents.ts, src/lib/managed-skills.ts, src/lib/model-roles.ts, src/lib/opencode/shared-utils.ts, src/lib/opencode/paths.ts]
 //   LINKS: [M-CLI-CONFIG, M-CLI-MANAGED-AGENTS, M-CLI-MANAGED-SKILLS]
 //   ROLE: RUNTIME
@@ -27,7 +27,7 @@
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-PROMPT-SYNC-DOCTOR-ARCHIVE T-002/T-004 - Reconciled legacy inline managed {file:...} prompt bodies during install/sync, reported user-owned inline sources, and deduplicated skills roots by real path while preserving first-occurrence order.]
+//   LAST_CHANGE: [C-BUNDLE-SESSION-HISTORY-SKILL T-003 - Added flat scripts/ delivery for managed skills: syncManagedSkillScripts mirrors the references contract (content comparison, parent-skip gating) and is wired into install and sync for skills that ship script files.]
 // END_CHANGE_SUMMARY
 
 import { applyEdits, format, modify } from "jsonc-parser";
@@ -50,7 +50,9 @@ import {
   type ManagedSkillName,
   getManagedSkillFilePath,
   listManagedSkillReferenceNames,
+  listManagedSkillScriptNames,
   loadManagedSkillReference,
+  loadManagedSkillScript,
   loadManagedSkillTemplate,
 } from "../managed-skills.js";
 import { isRoleReference } from "../model-roles.js";
@@ -644,6 +646,8 @@ export async function installManagedSkillFiles(
     }
     const refResults = await syncManagedSkillReferences(paths.managedSkillsDirPath, skillName);
     results.push(...refResults);
+    const scriptResults = await syncManagedSkillScripts(paths.managedSkillsDirPath, skillName);
+    results.push(...scriptResults);
   }
 
   return results;
@@ -659,10 +663,12 @@ export async function syncManagedSkillFiles(
   for (const skillName of MANAGED_SKILL_NAMES) {
     const skillResult = await syncManagedSkill(paths, skillName, options);
     results.push(skillResult);
-    // Only sync references when the parent skill was not skipped (user-owned/custom)
+    // Only sync references and scripts when the parent skill was not skipped (user-owned/custom)
     if (skillResult.action !== "skipped") {
       const refResults = await syncManagedSkillReferences(paths.managedSkillsDirPath, skillName);
       results.push(...refResults);
+      const scriptResults = await syncManagedSkillScripts(paths.managedSkillsDirPath, skillName);
+      results.push(...scriptResults);
     }
   }
 
@@ -985,6 +991,29 @@ async function syncManagedSkillReferences(
   for (const refName of referenceNames) {
     const templateContent = await loadManagedSkillReference(skillName, refName);
     const targetPath = join(skillsDirPath, skillName, "references", refName);
+    const currentContent = await readOptionalText(targetPath);
+    if (currentContent === templateContent) {
+      results.push({ action: "kept", path: targetPath });
+      continue;
+    }
+    await writeText(targetPath, templateContent);
+    results.push({
+      action: currentContent ? "updated" : "created",
+      path: targetPath,
+    });
+  }
+  return results;
+}
+
+async function syncManagedSkillScripts(
+  skillsDirPath: string,
+  skillName: ManagedSkillName,
+): Promise<WriteResult[]> {
+  const results: WriteResult[] = [];
+  const scriptNames = await listManagedSkillScriptNames(skillName);
+  for (const scriptName of scriptNames) {
+    const templateContent = await loadManagedSkillScript(skillName, scriptName);
+    const targetPath = join(skillsDirPath, skillName, "scripts", scriptName);
     const currentContent = await readOptionalText(targetPath);
     if (currentContent === templateContent) {
       results.push({ action: "kept", path: targetPath });
