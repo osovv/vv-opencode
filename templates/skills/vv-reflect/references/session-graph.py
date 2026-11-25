@@ -7,10 +7,15 @@ signals (errors, retries, heavy tool use, test invocations) plus a short message
 tail per node. `--archive` switches to a streaming machine-wide aggregate over
 many sessions, with filters and JSON/Markdown output.
 
-The current schema stores tool entries in `session_message`; the legacy `part`
-table is a subset of those calls (the same callID appears in both). Read both
-only by unioning on the call id, with `session_message` winning; never sum the
-two tables. The extractor never writes to the database or the repository.
+The current schema stores message parts in three places by era: inline
+`session_message` content, the legacy `part` table (a subset of the same call
+ids), and — after OpenCode's 2026-11-25 storage migration — `session_part`
+rows for messages whose inline content is empty. Read tool entries only by
+unioning on the call id, with `session_message` winning, the legacy `part`
+table next, and `session_part` filling absent ids; never sum the stores.
+Message text follows the same precedence: inline content first, `session_part`
+text parts when inline is empty. The extractor never writes to the database
+or the repository.
 
 Invocation examples:
 
@@ -262,7 +267,7 @@ def session_messages(
     return list(
         connection.execute(
             """
-            SELECT seq, type, time_created, data
+            SELECT id, seq, type, time_created, data
             FROM session_message
             WHERE session_id = ?
             ORDER BY seq
@@ -272,7 +277,31 @@ def session_messages(
     )
 
 
-def tool_entries(messages: list[sqlite3.Row]) -> list[dict[str, Any]]:
+def session_parts(
+    connection: sqlite3.Connection, session_id: str
+) -> dict[str, list[dict[str, Any]]]:
+    """Post-migration parts for one session, grouped by message id in ordinal order."""
+    if "session_part" not in table_names(connection):
+        return {}
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in connection.execute(
+        """
+        SELECT message_id, ordinal, data
+        FROM session_part
+        WHERE session_id = ?
+        ORDER BY message_id, ordinal
+        """,
+        (session_id,),
+    ):
+        data = load_json(row["data"])
+        if isinstance(data, dict):
+            grouped[str(row["message_id"])].append(data)
+    return grouped
+
+
+def tool_entries(
+    messages: list[sqlite3.Row], parts: dict[str, list[dict[str, Any]]]
+) -> list[dict[str, Any]]:
     tools: list[dict[str, Any]] = []
     for row in messages:
         if row["type"] != "assistant":
@@ -281,21 +310,28 @@ def tool_entries(messages: list[sqlite3.Row]) -> list[dict[str, Any]]:
         if not isinstance(data, dict):
             continue
         content = data.get("content")
-        if not isinstance(content, list):
-            continue
-        for entry in content:
-            if isinstance(entry, dict) and entry.get("type") == "tool":
+        if isinstance(content, list) and content:
+            # Inline content wins; post-migration rows persist content=[].
+            entries = [entry for entry in content if isinstance(entry, dict)]
+        else:
+            entries = parts.get(str(row["id"]), [])
+        for entry in entries:
+            if entry.get("type") == "tool":
                 tools.append(entry)
     return tools
 
 
-def tool_stats(messages: list[sqlite3.Row], top: int) -> dict[str, Any]:
+def tool_stats(
+    messages: list[sqlite3.Row],
+    parts: dict[str, list[dict[str, Any]]],
+    top: int,
+) -> dict[str, Any]:
     per_tool: dict[str, int] = {}
     repeats: dict[tuple[str, str], int] = {}
     errors = 0
     tool_calls = 0
     test_runs = 0
-    for entry in tool_entries(messages):
+    for entry in tool_entries(messages, parts):
         tool_calls += 1
         name = str(entry.get("name") or "unknown")
         per_tool[name] = per_tool.get(name, 0) + 1
@@ -347,9 +383,13 @@ def collect_files(value: Any, found: list[str]) -> None:
             collect_files(value[key], found)
 
 
-def changed_files(messages: list[sqlite3.Row], row: sqlite3.Row) -> list[str]:
+def changed_files(
+    messages: list[sqlite3.Row],
+    parts: dict[str, list[dict[str, Any]]],
+    row: sqlite3.Row,
+) -> list[str]:
     found: list[str] = []
-    for entry in tool_entries(messages):
+    for entry in tool_entries(messages, parts):
         name = str(entry.get("name") or "")
         if name not in MUTATING_TOOLS:
             continue
@@ -372,13 +412,16 @@ def message_tail(
     session_id: str,
     limit: int,
     chars: int,
+    parts: dict[str, list[dict[str, Any]]] | None = None,
 ) -> list[dict[str, Any]]:
     if limit <= 0:
         return []
+    if parts is None:
+        parts = session_parts(connection, session_id)
     rows = list(
         connection.execute(
             """
-            SELECT seq, type, time_created, data
+            SELECT id, seq, type, time_created, data
             FROM session_message
             WHERE session_id = ? AND type IN ('user', 'assistant')
             ORDER BY seq DESC
@@ -398,12 +441,17 @@ def message_tail(
             role = "user"
         else:
             content = data.get("content")
-            parts = [
+            if isinstance(content, list) and content:
+                # Inline content wins; post-migration rows persist content=[].
+                entries = [entry for entry in content if isinstance(entry, dict)]
+            else:
+                entries = parts.get(str(row["id"]), [])
+            parts_text = [
                 entry.get("text", "")
-                for entry in content
-                if isinstance(entry, dict) and entry.get("type") == "text"
-            ] if isinstance(content, list) else []
-            text = "\n".join(part for part in parts if part)
+                for entry in entries
+                if entry.get("type") == "text"
+            ]
+            text = "\n".join(part for part in parts_text if part)
             role = "assistant"
         text = text.strip()
         if not text:
@@ -430,7 +478,8 @@ def build_node(
         return None
     counter[0] += 1
     messages = session_messages(connection, row["id"])
-    stats = tool_stats(messages, args.top_tools)
+    parts = session_parts(connection, row["id"])
+    stats = tool_stats(messages, parts, args.top_tools)
     signals = {
         "has_errors": stats["errors"] > 0,
         "heavy_tool_use": stats["tool_calls"] >= HEAVY_TOOL_CALLS,
@@ -455,8 +504,10 @@ def build_node(
         "tokens_output": row["tokens_output"] or 0,
         "signals": signals,
         "stats": stats,
-        "files": changed_files(messages, row)[:20],
-        "tail": message_tail(connection, row["id"], args.tail_messages, args.message_chars),
+        "files": changed_files(messages, parts, row)[:20],
+        "tail": message_tail(
+            connection, row["id"], args.tail_messages, args.message_chars, parts
+        ),
         "children": [],
         "children_truncated": 0,
         "truncated": False,
@@ -766,6 +817,37 @@ def archive_calls(
                 "input": tool_input(entry),
                 "time": tool_time(entry, row["time_created"]),
                 "error": tool_error_text(entry),
+            }
+
+    # Post-migration tool parts live in session_part for assistant rows with
+    # empty inline content; they fill only call ids absent from the stores
+    # above so the session_message-wins precedence is preserved.
+    if "session_part" in tables:
+        for row in connection.execute(
+            """
+            SELECT session_id, time_created, data
+            FROM session_part
+            WHERE type = 'tool'
+            ORDER BY time_created
+            """
+        ):
+            session_id = str(row["session_id"])
+            if session_id not in sessions:
+                continue
+            data = load_json(row["data"])
+            if not isinstance(data, dict):
+                continue
+            call_id = data.get("id")
+            if not call_id or str(call_id) in calls:
+                continue
+            calls[str(call_id)] = {
+                "id": str(call_id),
+                "session_id": session_id,
+                "name": tool_name(data),
+                "status": tool_status(data),
+                "input": tool_input(data),
+                "time": tool_time(data, row["time_created"]),
+                "error": tool_error_text(data),
             }
     return calls
 

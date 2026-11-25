@@ -6,7 +6,7 @@
 //     default newest-top-level and newest-matched fallback), subagent-tree recursion, tool
 //     friction signals, changed-file semantics, message tails, and the depth/max-nodes
 //     truncation markers.
-//   SCOPE: Deterministic instruction-contract coverage for the shipped Python extractor, including archive aggregation filters, legacy part union/deduplication, and JSON/Markdown output; skipped when python3 is unavailable on PATH.
+//   SCOPE: Deterministic instruction-contract coverage for the shipped Python extractor, including archive aggregation filters, legacy part union/deduplication, post-migration session_part extraction with call-id union precedence, and JSON/Markdown output; skipped when python3 is unavailable on PATH.
 //   DEPENDS: [bun:test, bun:sqlite, node:child_process, node:fs, node:os, node:path, node:url]
 //   LINKS: [M-CLI-MANAGED-SKILLS, V-M-CLI-MANAGED-SKILLS]
 //   ROLE: TEST
@@ -24,13 +24,14 @@
 //   toolWithId - Builds a synthetic tool entry with an explicit call id.
 //   insertMessage - Inserts one synthetic session_message row.
 //   buildFixture - Creates a temp DB with the 2.x schema and a root/child/older-root tree.
+//   buildPostMigrationFixture - Creates a temp DB with post-migration session_part rows and an inline twin session.
 //   runExtractorRaw - Runs the extractor against the fixture and returns raw stdout.
 //   runExtractor - Runs the extractor and parses its JSON output.
 //   pythonTest - test or test.skip depending on python3 availability.
 // END_MODULE_MAP
 //
 // START_CHANGE_SUMMARY
-//   LAST_CHANGE: [C-WORKFLOW-PROMPT-SYNC-DOCTOR-ARCHIVE T-005 - Added archive aggregation, filters, legacy part union/deduplication, determinism, and JSON/Markdown output coverage.]
+//   LAST_CHANGE: [C-REFLECT-SESSION-PART-EXTRACTOR T-002 - Added post-migration fixtures: tree-mode tool stats, files, and tails joined from session_part with reasoning excluded, and archive call counting unioned by call id so shared ids count once with session_message winning.]
 // END_CHANGE_SUMMARY
 
 import { Database } from "bun:sqlite";
@@ -138,6 +139,126 @@ function buildFixture(): { dir: string; dbPath: string } {
       tool("shell", "error", { command: "vitest run" }),
       { type: "text", text: "child done" },
     ],
+  });
+  db.close();
+  return { dir, dbPath };
+}
+
+function buildPostMigrationFixture(): { dir: string; dbPath: string } {
+  const dir = mkdtempSync(join(tmpdir(), "vvoc-session-graph-pm-"));
+  const dbPath = join(dir, "opencode.db");
+  const db = new Database(dbPath);
+  db.run("CREATE TABLE project (id TEXT PRIMARY KEY, worktree TEXT NOT NULL)");
+  db.run(
+    "CREATE TABLE session_v2 (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, parent_id TEXT, slug TEXT, directory TEXT, title TEXT, version TEXT, agent TEXT, cost REAL, tokens_input INTEGER, tokens_output INTEGER, time_created INTEGER, time_updated INTEGER, summary_diffs TEXT)",
+  );
+  db.run(
+    "CREATE TABLE session_message (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, type TEXT NOT NULL, seq INTEGER NOT NULL, time_created INTEGER, time_updated INTEGER, data TEXT NOT NULL)",
+  );
+  db.run(
+    "CREATE TABLE session_part (message_id TEXT, session_id TEXT, ordinal INTEGER, type TEXT, call_id TEXT, time_created INTEGER, time_updated INTEGER, data TEXT)",
+  );
+  db.run("INSERT INTO project (id, worktree) VALUES ('p1', ?)", [dir]);
+  db.run(
+    "INSERT INTO session_v2 (id, project_id, parent_id, directory, title, version, agent, cost, tokens_input, tokens_output, time_created, time_updated, summary_diffs) VALUES ('pm','p1',NULL,?, 'Post migration session','2.4.1','vv-controller',0,0,0,1795595487958,1795600000000,NULL)",
+    [dir],
+  );
+  db.run(
+    "INSERT INTO session_v2 (id, project_id, parent_id, directory, title, version, agent, cost, tokens_input, tokens_output, time_created, time_updated, summary_diffs) VALUES ('pm2','p1',NULL,?, 'Inline twin session','2.4.1','vv-controller',0,0,0,1795595487958,1795600000001,NULL)",
+    [dir],
+  );
+  insertMessage(db, "pm", 1, "user", { text: "post-migration user prompt" });
+  // Post-migration assistant rows persist content=[]; parts live in session_part.
+  insertMessage(db, "pm", 2, "assistant", { content: [] });
+  const insertPart = (ordinal: number, type: string, data: Record<string, unknown>): void => {
+    db.query(
+      "INSERT INTO session_part (message_id, session_id, ordinal, type, call_id, time_created, time_updated, data) VALUES (?,?,?,?,?,?,?,?)",
+    ).run(
+      "m-pm-2",
+      "pm",
+      ordinal,
+      type,
+      null,
+      2000 + ordinal,
+      2000 + ordinal,
+      JSON.stringify(data),
+    );
+  };
+  insertPart(0, "reasoning", { type: "reasoning", text: "SECRET_PM_REASONING" });
+  insertPart(1, "text", { type: "text", text: "post-migration assistant answer" });
+  insertPart(2, "tool", {
+    type: "tool",
+    id: "call-pm-shell-1",
+    name: "shell",
+    state: { status: "completed", input: { command: "bun test src/lib/session-graph.test.ts" } },
+  });
+  insertPart(3, "tool", {
+    type: "tool",
+    id: "call-pm-edit-1",
+    name: "edit",
+    state: {
+      status: "completed",
+      input: { oldString: "x", newString: "y", path: join(dir, "src", "pm-edited.ts") },
+    },
+  });
+  insertPart(4, "tool", {
+    type: "tool",
+    id: "call-pm-read-1",
+    name: "read",
+    state: { status: "completed", input: { path: join(dir, "src", "pm-read-only.ts") } },
+  });
+  insertPart(5, "tool", {
+    type: "tool",
+    id: "call-pm-fail-1",
+    name: "grep",
+    state: { status: "error", input: { pattern: "zzz" } },
+  });
+  // The inline twin carries the shell call id again — with a different status
+  // than its session_part twin, so the archive test discriminates which
+  // store's entry wins the call-id union — plus one fresh call.
+  insertMessage(db, "pm2", 1, "assistant", {
+    content: [
+      toolWithId("call-pm-shell-1", "shell", "error", { command: "bun test" }),
+      tool("grep", "error", { pattern: "yyy" }),
+    ],
+  });
+  // The transition session keeps BOTH inline content and session_part rows
+  // under one message id: inline content must win, so the part-only write
+  // tool and part-only text never surface.
+  db.run(
+    "INSERT INTO session_v2 (id, project_id, parent_id, directory, title, version, agent, cost, tokens_input, tokens_output, time_created, time_updated, summary_diffs) VALUES ('pm3','p1',NULL,?, 'Transition era session','2.4.1','vv-controller',0,0,0,1795595487958,1795600000002,NULL)",
+    [dir],
+  );
+  insertMessage(db, "pm3", 1, "assistant", {
+    content: [
+      toolWithId("call-pm3-shell-1", "shell", "completed", { command: "bun test" }),
+      { type: "text", text: "transition inline text" },
+    ],
+  });
+  const insertPm3Part = (ordinal: number, type: string, data: Record<string, unknown>): void => {
+    db.query(
+      "INSERT INTO session_part (message_id, session_id, ordinal, type, call_id, time_created, time_updated, data) VALUES (?,?,?,?,?,?,?,?)",
+    ).run(
+      "m-pm3-1",
+      "pm3",
+      ordinal,
+      type,
+      null,
+      3000 + ordinal,
+      3000 + ordinal,
+      JSON.stringify(data),
+    );
+  };
+  insertPm3Part(0, "reasoning", { type: "reasoning", text: "SECRET_PM3_REASONING" });
+  insertPm3Part(1, "text", { type: "text", text: "transition part text must not surface" });
+  insertPm3Part(2, "tool", {
+    type: "tool",
+    id: "call-pm3-write-1",
+    name: "write",
+    state: {
+      status: "completed",
+      input: { content: "x", path: join(dir, "src", "pm3-part-only.ts") },
+    },
   });
   db.close();
   return { dir, dbPath };
@@ -414,6 +535,84 @@ pythonTest("archive output is deterministic and writes json plus markdown", () =
 
     const markdown = runExtractorRaw(dbPath, dir, ["--archive", "--format", "md"]);
     expect(markdown).toContain("| Tool | Calls | Errors | Rate | Sessions |");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+pythonTest("extracts post-migration sessions whose parts live in session_part", () => {
+  const { dir, dbPath } = buildPostMigrationFixture();
+  try {
+    const payload = runExtractor(dbPath, dir, ["--session", "pm"]);
+    const tree = payload.tree as {
+      stats: Record<string, unknown>;
+      files: string[];
+      tail: Array<{ role: string; text: string }>;
+    };
+    const stats = tree.stats;
+
+    expect(stats.tool_calls).toBe(4);
+    expect(stats.errors).toBe(1);
+    expect(stats.test_runs).toBe(1);
+    expect(Object.keys(stats.per_tool as Record<string, number>)).toContain("edit");
+    // Only the mutating edit contributes files; the read does not.
+    expect(tree.files).toEqual([join(dir, "src", "pm-edited.ts")]);
+    expect(tree.files.join(" ")).not.toContain("pm-read-only.ts");
+    // The tail joins assistant text from session_part text parts; reasoning
+    // never reaches the tail.
+    expect(tree.tail.map((m) => m.role)).toEqual(["user", "assistant"]);
+    expect(tree.tail[1].text).toContain("post-migration assistant answer");
+    expect(JSON.stringify(payload)).not.toContain("SECRET_PM_REASONING");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+pythonTest("archive counts session_part calls once per call id", () => {
+  const { dir, dbPath } = buildPostMigrationFixture();
+  try {
+    const payload = runExtractor(dbPath, dir, ["--archive", "--top", "5"]);
+    const totals = payload.totals as Record<string, number>;
+
+    // pm contributes four session_part calls; pm2 contributes its two inline
+    // calls minus the shared shell id already counted for pm; pm3 contributes
+    // its inline shell and its part-only write as distinct ids — seven total,
+    // proving the union by call id instead of a sum across stores.
+    expect(totals.calls).toBe(7);
+    expect(totals.sessions).toBe(3);
+    expect(totals.errors).toBe(3);
+    const tools = payload.tools as Array<{ name: string; calls: number; errors: number }>;
+    const shell = tools.find((t) => t.name === "shell");
+    // pm's session_part shell and pm3's inline shell are distinct ids; the
+    // shared pm/pm2 id counts once.
+    expect(shell?.calls).toBe(2);
+    // The inline twin carries the shared id with status "error" while its
+    // session_part twin is "completed": the inline entry must win the union.
+    expect(shell?.errors).toBe(1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+pythonTest("transition rows keep inline content and ignore their session_part twins", () => {
+  const { dir, dbPath } = buildPostMigrationFixture();
+  try {
+    const payload = runExtractor(dbPath, dir, ["--session", "pm3"]);
+    const tree = payload.tree as {
+      stats: Record<string, unknown>;
+      files: string[];
+      tail: Array<{ role: string; text: string }>;
+    };
+
+    // Only the inline shell counts; the part-only write tool must not.
+    expect(tree.stats.tool_calls).toBe(1);
+    expect(Object.keys(tree.stats.per_tool as Record<string, number>)).toEqual(["shell"]);
+    expect(tree.files).toEqual([]);
+    expect(JSON.stringify(payload)).not.toContain("pm3-part-only.ts");
+    // The tail uses the inline text; the part-only text never surfaces.
+    expect(tree.tail.map((m) => m.role)).toEqual(["assistant"]);
+    expect(tree.tail[0].text).toContain("transition inline text");
+    expect(JSON.stringify(payload)).not.toContain("transition part text must not surface");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
