@@ -1,3 +1,17 @@
+## 2.10.0 (2026-11-27)
+
+### Summary
+
+Version 2.10.0 bundles a new managed skill, vvoc-project-session-history, which recaps recent project work from OpenCode's local session database, and adds flat scripts/ delivery support so the skill's extractor is installed and kept up to date during install and sync. Both that extractor and the vv-reflect session-graph pre-pass now read the post-migration session_part store, restoring assistant messages, changed-file lists, and tool/file counts for the newest sessions instead of reporting empty recaps, while inline content still wins so older and transition-era sessions stay unchanged. The session-history skill's routing description was rewritten into a single clear English trigger line with the usage-analytics exclusion, and new tests pin archive call-id precedence and inline-wins behavior. A workflow fix (issue #43) releases a checkpoint reviewer binding that is provably dead after a transport-level launch failure, so a stuck review slot can be relaunched instead of blocking verify, recover, and start forever, while live and completed reviews still reject relaunches as before.
+
+* test(vv-reflect): pin archive precedence and tree inline-wins with discriminating fixtures ([a02515c](https://github.com/osovv/vv-opencode/commit/a02515c)), closes [#64](https://github.com/osovv/vv-opencode/issues/64)
+* fix(managed-skills): read session_part so new sessions keep assistant messages ([4e088b3](https://github.com/osovv/vv-opencode/commit/4e088b3))
+* fix(managed-skills): reduce the session-history description to pure routing triggers ([501e73c](https://github.com/osovv/vv-opencode/commit/501e73c))
+* fix(managed-skills): rewrite the session-history skill description, drop Russian text ([413bc4a](https://github.com/osovv/vv-opencode/commit/413bc4a))
+* fix(vv-reflect): read session_part so reflection sees post-migration sessions ([2b7fe2a](https://github.com/osovv/vv-opencode/commit/2b7fe2a))
+* fix(workflow): release a provably dead checkpoint reviewer binding ([c62d5c0](https://github.com/osovv/vv-opencode/commit/c62d5c0)), closes [#43](https://github.com/osovv/vv-opencode/issues/43)
+* feat(managed-skills): bundle project-session recap skill with scripts/ delivery ([8181b0d](https://github.com/osovv/vv-opencode/commit/8181b0d))
+
 ## 2.9.0 (2026-11-25)
 
 ### Summary
